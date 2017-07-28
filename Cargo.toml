@@ -1,0 +1,6 @@
+[package]
+name = "rustynes"
+version = "0.1.0"
+authors = ["Nicholas Flynt <thegamefreak0134@gmail.com>"]
+
+[dependencies]
