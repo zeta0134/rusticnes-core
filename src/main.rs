@@ -1,3 +1,5 @@
+mod cpu;
+
 use std::error::Error;
 use std::io::Read;
 use std::fs::File;
@@ -40,5 +42,5 @@ fn main() {
     println!("PRG RAM: {0}", nes_header.prg_ram_size);
     println!("Mapper: {0}", nes_header.mapper_number);
 
-    
+
 }
