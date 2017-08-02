@@ -18,6 +18,7 @@ struct Registers {
 
 // Initial reference implementation based on http://obelisk.me.uk/6502/reference.html
 
+// OPCODES
 fn overflow(a: u8, b: u8, result: u8) -> bool {
     return (((!(a ^ b)) & (a ^ result)) & 0x80) != 0
 }
@@ -45,3 +46,55 @@ fn asl(registers: &mut Registers, data: u8) -> u8 {
     registers.flags.negative = data & 0x80 != 0;
     return data;
 }
+
+// Branch if Carry Clear
+fn bcc(registers: &mut Registers, offset: u8) {
+    if (!(registers.flags.carry)) {
+        registers.pc = registers.pc.wrapping_add(offset as u16);
+    }
+}
+
+// Branch if Carry Set
+fn bcs(registers: &mut Registers, offset: u8) {
+    if (registers.flags.carry) {
+        registers.pc = registers.pc.wrapping_add(offset as u16);
+    }
+}
+
+// Branch if Equal
+fn beq(registers: &mut Registers, offset: u8) {
+    if (registers.flags.zero) {
+        registers.pc = registers.pc.wrapping_add(offset as u16);
+    }
+}
+
+// Branch if Not Equal
+fn bne(registers: &mut Registers, offset: u8) {
+    if (!(registers.flags.zero)) {
+        registers.pc = registers.pc.wrapping_add(offset as u16);
+    }
+}
+
+// Branch if Negative
+fn bmi(registers: &mut Registers, offset: u8) {
+    if (registers.flags.negative) {
+        registers.pc = registers.pc.wrapping_add(offset as u16);
+    }
+}
+
+// Branch if Positive
+fn bpl(registers: &mut Registers, offset: u8) {
+    if (!(registers.flags.negative)) {
+        registers.pc = registers.pc.wrapping_add(offset as u16);
+    }
+}
+
+// Bit Test
+fn bit(registers: &mut Registers, data: u8) {
+    let result: u8 = registers.a & data;
+    registers.flags.zero = result == 0;
+    registers.flags.overflow = result & 0x40 != 0;
+    registers.flags.negative = result & 0x80 != 0;
+}
+
+// Addressing Modes
