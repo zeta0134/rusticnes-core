@@ -18,6 +18,28 @@ struct Registers {
 
 // Initial reference implementation based on http://obelisk.me.uk/6502/reference.html
 
+// Memory Utilities
+fn push(registers: &mut Registers, memory: &mut [u8], data: u8) {
+    memory[registers.s as usize] = data;
+    registers.s = registers.s.wrapping_sub(1);
+}
+
+fn pop(registers: &mut Registers, memory: &[u8]) -> u8 {
+    registers.s = registers.s.wrapping_add(1);
+    return memory[registers.s as usize];
+}
+
+fn status_as_byte(registers: &mut Registers, s_flag: bool) -> u8 {
+    return (registers.flags.carry     as u8 +
+            (registers.flags.zero      as u8) << 1 +
+            (registers.flags.interrupt as u8) << 2 +
+            (registers.flags.decimal   as u8) << 3 +
+            (s_flag                    as u8) << 4 +
+            (1u8                            ) << 5 + // always set
+            (registers.flags.overflow  as u8) << 6 +
+            (registers.flags.negative  as u8) << 7)
+}
+
 // OPCODES
 fn overflow(a: u8, b: u8, result: u8) -> bool {
     return (((!(a ^ b)) & (a ^ result)) & 0x80) != 0
@@ -89,6 +111,20 @@ fn bpl(registers: &mut Registers, offset: u8) {
     }
 }
 
+// Branch if Overflow Clear
+fn bvc(registers: &mut Registers, offset: u8) {
+    if (!(registers.flags.overflow)) {
+        registers.pc = registers.pc.wrapping_add(offset as u16);
+    }
+}
+
+// Branch if Overflow Set
+fn bvs(registers: &mut Registers, offset: u8) {
+    if (registers.flags.overflow) {
+        registers.pc = registers.pc.wrapping_add(offset as u16);
+    }
+}
+
 // Bit Test
 fn bit(registers: &mut Registers, data: u8) {
     let result: u8 = registers.a & data;
@@ -97,4 +133,19 @@ fn bit(registers: &mut Registers, data: u8) {
     registers.flags.negative = result & 0x80 != 0;
 }
 
-// Addressing Modes
+fn brk(registers: &mut Registers, memory: &mut [u8]) {
+    // Push PC and processor status to stack
+    let pc_high = (registers.pc & 0xFF00 >> 8) as u8;
+    let pc_low =  (registers.pc & 0x00FF) as u8;
+    push(registers, memory, pc_high);
+    push(registers, memory, pc_low);
+    let status_byte = status_as_byte(registers, true);
+    push(registers, memory, status_byte);
+    // Set PC to interrupt vector at FFFE/FFFF
+    registers.pc = memory[0xFFFE] as u16 + ((memory[0xFFFF] as u16) << 8);
+}
+
+
+
+
+// ADDRESSING

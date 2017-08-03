@@ -42,5 +42,9 @@ fn main() {
     println!("PRG RAM: {0}", nes_header.prg_ram_size);
     println!("Mapper: {0}", nes_header.mapper_number);
 
-
+    let data: u8 = 255;
+    let offset: i8 = data as i8;
+    let mut address: u16 = 100;
+    address = address.wrapping_add(offset as u16);
+    println!("TEST - Adjusted Address: {0}", address);
 }
