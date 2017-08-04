@@ -1,19 +1,19 @@
-struct Flags {
-    carry: bool,
-    zero: bool,
-    interrupts_disabled: bool,
-    decimal: bool,
-    overflow: bool,
-    negative: bool,
+pub struct Flags {
+    pub carry: bool,
+    pub zero: bool,
+    pub decimal: bool,
+    pub interrupts_disabled: bool,
+    pub overflow: bool,
+    pub negative: bool,
 }
 
-struct Registers {
-    a: u8,
-    x: u8,
-    y: u8,
-    pc: u16,
-    s: u8,
-    flags: Flags,
+pub struct Registers {
+    pub a: u8,
+    pub x: u8,
+    pub y: u8,
+    pub pc: u16,
+    pub s: u8,
+    pub flags: Flags,
 }
 
 // Initial reference implementation based on http://obelisk.me.uk/6502/reference.html
@@ -538,7 +538,7 @@ fn indirect_indexed_y(registers: &mut Registers, memory: &mut [u8]) -> usize {
     return address as usize;
 }
 
-fn process_instruction(registers: &mut Registers, memory: &mut [u8]) {
+pub fn process_instruction(registers: &mut Registers, memory: &mut [u8]) {
     let opcode = memory[registers.pc as usize];
     registers.pc = registers.pc.wrapping_add(1);
 
