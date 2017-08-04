@@ -1,3 +1,5 @@
+extern crate pancurses;
+
 mod cpu;
 
 use std::error::Error;
@@ -35,23 +37,32 @@ impl Default for NesHeader {
     }
 }
 
-fn print_program_state(registers: &cpu::Registers, memory: &[u8]) {
-    println!("A: {:X} X: {:X} Y: {:X} ", registers.a, registers.x, registers.y);
-    println!("PC: {:X} S: {:X}", registers.pc, registers.s);
-    println!("nv  dzic");
-    println!("{:b}{:b}  {:b}{:b}{:b}{:b}",
+fn print_program_state(window: &mut pancurses::Window, registers: &cpu::Registers, memory: &[u8]) {
+    window.printw(&format!("A: 0x{:02X} X: 0x{:02X} Y: 0x{:02X}\n", registers.a, registers.x, registers.y));
+    window.printw(&format!("PC: 0x{:02X} S: 0x{:02X}\n", registers.pc, registers.s));
+    window.printw(&format!("Flags: nv  dzic\n"));
+    window.printw(&format!("       {:b}{:b}  {:b}{:b}{:b}{:b}\n",
         registers.flags.negative as u8,
         registers.flags.overflow as u8,
         registers.flags.decimal as u8,
         registers.flags.zero as u8,
         registers.flags.interrupts_disabled as u8,
         registers.flags.carry as u8,
-    );
+    ));
+    window.printw("\nMemory @ Program Counter\n");
+    // print out the next 8 bytes or so from the program counter
+    let mut pc = registers.pc;
+    for i in 1 .. 8 {
+        window.printw(&format!("0x{:04X}: 0x{:02X}\n", pc, memory[pc as usize]));
+        pc = pc.wrapping_add(1);
+    }
 }
 
 fn main() {
-    println!("Hello, world!");
-    println!("Attempting to read mario.nes header");
+    let mut window = pancurses::initscr();
+
+    window.printw("Hello, world!");
+    window.printw("Attempting to read mario.nes header");
 
     let mut file = match File::open("mario.nes") {
         Err(why) => panic!("Couldn't open mario.nes: {}", why.description()),
@@ -61,11 +72,11 @@ fn main() {
     // Read the whole damn thing?
     match file.read_to_end(&mut cartridge) {
         Err(why) => panic!("Couldn't read data: {}", why.description()),
-        Ok(bytes_read) => println!("Data read successfully: {}", bytes_read),
+        Ok(bytes_read) => window.printw(&format!("Data read successfully: {}", bytes_read)),
     };
 
     // See if that worked
-    println!("Magic Header: {0} {1} {2} 0x{3:X}", cartridge[0] as char, cartridge[1] as char, cartridge[2] as char, cartridge[3]);
+    window.printw(&format!("Magic Header: {0} {1} {2} 0x{3:X}", cartridge[0] as char, cartridge[1] as char, cartridge[2] as char, cartridge[3]));
 
     // Okay, now create an NES struct and massage the data into it
     let mut nes_header: NesHeader = NesHeader {
@@ -76,10 +87,10 @@ fn main() {
         ..Default::default()
     };
 
-    println!("PRG ROM: {0}", nes_header.prg_rom_size);
-    println!("CHR ROM: {0}", nes_header.chr_rom_size);
-    println!("PRG RAM: {0}", nes_header.prg_ram_size);
-    println!("Mapper: {0}", nes_header.mapper_number);
+    window.printw(&format!("PRG ROM: {0}", nes_header.prg_rom_size));
+    window.printw(&format!("CHR ROM: {0}", nes_header.chr_rom_size));
+    window.printw(&format!("PRG RAM: {0}", nes_header.prg_ram_size));
+    window.printw(&format!("Mapper: {0}", nes_header.mapper_number));
 
     if cartridge[6] & 0x08 != 0 {
         nes_header.four_screen_mirroring = true;
@@ -137,11 +148,17 @@ fn main() {
     registers.pc = pc_low as u16 + ((pc_high as u16) << 8);
 
     // Initialized? Let's go!
-    print_program_state(&registers, &memory);
-    for i in 1 .. 10 {
+    let mut exit: bool = false;
+    while(!exit) {
+        window.clear();
+        print_program_state(&mut window, &registers, &memory);
+        window.refresh();
+        let input = window.getch();
+        if input == Some(pancurses::Input::Character('q')) {
+            exit = true;
+        }
         cpu::process_instruction(&mut registers, &mut memory);
-        print_program_state(&registers, &memory);
     }
 
-
+    pancurses::endwin();
 }
