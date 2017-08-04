@@ -1,3 +1,5 @@
+use memory::CpuMemory;
+
 pub struct Flags {
     pub carry: bool,
     pub zero: bool,
@@ -19,14 +21,14 @@ pub struct Registers {
 // Initial reference implementation based on http://obelisk.me.uk/6502/reference.html
 
 // Memory Utilities
-fn push(registers: &mut Registers, memory: &mut [u8], data: u8) {
-    memory[registers.s as usize] = data;
+fn push(registers: &mut Registers, memory: &mut CpuMemory, data: u8) {
+    memory[registers.s as u16] = data;
     registers.s = registers.s.wrapping_sub(1);
 }
 
-fn pop(registers: &mut Registers, memory: &[u8]) -> u8 {
+fn pop(registers: &mut Registers, memory: &CpuMemory) -> u8 {
     registers.s = registers.s.wrapping_add(1);
-    return memory[registers.s as usize];
+    return memory[registers.s as u16];
 }
 
 fn status_as_byte(registers: &mut Registers, s_flag: bool) -> u8 {
@@ -143,7 +145,7 @@ fn bit(registers: &mut Registers, data: u8) {
     registers.flags.negative = result & 0x80 != 0;
 }
 
-fn brk(registers: &mut Registers, memory: &mut [u8]) {
+fn brk(registers: &mut Registers, memory: &mut CpuMemory) {
     // Push PC and processor status to stack
     let pc_high = (registers.pc & 0xFF00 >> 8) as u8;
     let pc_low =  (registers.pc & 0x00FF) as u8;
@@ -256,7 +258,7 @@ fn jmp(registers: &mut Registers, address: u16) {
 }
 
 // Jump to Subroutine
-fn jsr(registers: &mut Registers, memory: &mut[u8], address: u16) {
+fn jsr(registers: &mut Registers, memory: &mut CpuMemory, address: u16) {
     let return_address = registers.pc.wrapping_sub(1);
     let addr_high = (return_address & 0xFF00 >> 8) as u8;
     let addr_low =  (return_address & 0x00FF) as u8;
@@ -306,24 +308,24 @@ fn ora(registers: &mut Registers, data: u8) {
 }
 
 // Push Accumulator
-fn pha(registers: &mut Registers, memory: &mut [u8]) {
+fn pha(registers: &mut Registers, memory: &mut CpuMemory) {
     let a = registers.a;
     push(registers, memory, a);
 }
 
 // Push Processor Status
-fn php(registers: &mut Registers, memory: &mut [u8]) {
+fn php(registers: &mut Registers, memory: &mut CpuMemory) {
     let processor_status = status_as_byte(registers, false);
     push(registers, memory, processor_status);
 }
 
 // Pull Accumulator
-fn pla(registers: &mut Registers, memory: &mut [u8]) {
+fn pla(registers: &mut Registers, memory: &mut CpuMemory) {
     registers.a = pop(registers, memory);
 }
 
 // Pull Procesor Status
-fn plp(registers: &mut Registers, memory: &mut [u8]) {
+fn plp(registers: &mut Registers, memory: &mut CpuMemory) {
     let processor_status = pop(registers, memory);
     set_status_from_byte(registers, processor_status);
 }
@@ -349,7 +351,7 @@ fn ror(registers: &mut Registers, data: u8) -> u8 {
 }
 
 // Return from Interrupt
-fn rti(registers: &mut Registers, memory: &mut [u8]) {
+fn rti(registers: &mut Registers, memory: &mut CpuMemory) {
     let status_byte = pop(registers, memory);
     set_status_from_byte(registers, status_byte);
     let pc_low = pop(registers, memory) as u16;
@@ -359,7 +361,7 @@ fn rti(registers: &mut Registers, memory: &mut [u8]) {
 }
 
 // Return from Subroutine
-fn rts(registers: &mut Registers, memory: &mut [u8]) {
+fn rts(registers: &mut Registers, memory: &mut CpuMemory) {
     let pc_low = pop(registers, memory) as u16;
     let pc_high = pop(registers, memory) as u16;
     let pc = (pc_high << 8) + pc_low;
@@ -448,98 +450,98 @@ fn undefined() {
 }
 
 // Addressing Modes
-fn immediate(registers: &mut Registers) -> usize {
+fn immediate(registers: &mut Registers) -> u16 {
     let address = registers.pc;
     registers.pc = registers.pc.wrapping_add(1);
-    return address as usize;
+    return address as u16;
 }
 
-fn zero_page(registers: &mut Registers, memory: &mut [u8]) -> usize {
-    let offset = memory[registers.pc as usize];
+fn zero_page(registers: &mut Registers, memory: &mut CpuMemory) -> u16 {
+    let offset = memory[registers.pc];
     registers.pc = registers.pc.wrapping_add(1);
-    return offset as usize;
+    return offset as u16;
 }
 
-fn zero_x(registers: &mut Registers, memory: &mut [u8]) -> usize {
-    let offset = memory[registers.pc as usize].wrapping_add(registers.x);
+fn zero_x(registers: &mut Registers, memory: &mut  CpuMemory) -> u16 {
+    let offset = memory[registers.pc].wrapping_add(registers.x);
     registers.pc = registers.pc.wrapping_add(1);
-    return offset as usize;
+    return offset as u16;
 }
 
-fn zero_y(registers: &mut Registers, memory: &mut [u8]) -> usize {
-    let offset = memory[registers.pc as usize].wrapping_add(registers.y);
+fn zero_y(registers: &mut Registers, memory: &mut CpuMemory) -> u16 {
+    let offset = memory[registers.pc].wrapping_add(registers.y);
     registers.pc = registers.pc.wrapping_add(1);
-    return offset as usize;
+    return offset as u16;
 }
 
-fn absolute(registers: &mut Registers, memory: &mut [u8]) -> usize {
-    let address_low = memory[registers.pc as usize];
+fn absolute(registers: &mut Registers, memory: &mut CpuMemory) -> u16 {
+    let address_low = memory[registers.pc];
     registers.pc = registers.pc.wrapping_add(1);
-    let address_high = memory[registers.pc as usize];
+    let address_high = memory[registers.pc];
     registers.pc = registers.pc.wrapping_add(1);
     let address = ((address_high as u16) << 8) + (address_low as u16);
-    return address as usize;
+    return address as u16;
 }
 
-fn absolute_x(registers: &mut Registers, memory: &mut [u8]) -> usize {
-    let address_low = memory[registers.pc as usize];
+fn absolute_x(registers: &mut Registers, memory: &mut  CpuMemory) -> u16 {
+    let address_low = memory[registers.pc];
     registers.pc = registers.pc.wrapping_add(1);
-    let address_high = memory[registers.pc as usize];
+    let address_high = memory[registers.pc];
     registers.pc = registers.pc.wrapping_add(1);
     let mut address = ((address_high as u16) << 8) + (address_low as u16);
     address = address.wrapping_add(registers.x as u16);
-    return address as usize;
+    return address as u16;
 }
 
-fn absolute_y(registers: &mut Registers, memory: &mut [u8]) -> usize {
-    let address_low = memory[registers.pc as usize];
+fn absolute_y(registers: &mut Registers, memory: &mut  CpuMemory) -> u16 {
+    let address_low = memory[registers.pc];
     registers.pc = registers.pc.wrapping_add(1);
-    let address_high = memory[registers.pc as usize];
+    let address_high = memory[registers.pc];
     registers.pc = registers.pc.wrapping_add(1);
     let mut address = ((address_high as u16) << 8) + (address_low as u16);
     address = address.wrapping_add(registers.y as u16);
-    return address as usize;
+    return address as u16;
 }
 
 // Only used by jump
-fn indirect(registers: &mut Registers, memory: &mut [u8]) -> usize {
-    let indirect_low = memory[registers.pc as usize];
+fn indirect(registers: &mut Registers, memory: &mut CpuMemory) -> u16 {
+    let indirect_low = memory[registers.pc];
     registers.pc = registers.pc.wrapping_add(1);
-    let indirect_high = memory[registers.pc as usize];
+    let indirect_high = memory[registers.pc];
     registers.pc = registers.pc.wrapping_add(1);
     let mut indirect_address = ((indirect_high as u16) << 8) + (indirect_low as u16);
 
-    let address_low = memory[indirect_address as usize];
+    let address_low = memory[indirect_address];
     indirect_address = indirect_address.wrapping_add(1);
-    let address_high = memory[indirect_address as usize];
+    let address_high = memory[indirect_address];
     let address = ((address_high as u16) << 8) + (address_low as u16);
 
-    return address as usize;
+    return address as u16;
 }
 
-fn indexed_indirect_x(registers: &mut Registers, memory: &mut [u8]) -> usize {
-    let mut table_address = memory[registers.pc as usize].wrapping_add(registers.x);
+fn indexed_indirect_x(registers: &mut Registers, memory: &mut  CpuMemory) -> u16 {
+    let mut table_address = memory[registers.pc as u16].wrapping_add(registers.x);
     registers.pc = registers.pc.wrapping_add(1);
-    let address_low = memory[table_address as usize];
+    let address_low = memory[table_address as u16];
     table_address = table_address.wrapping_add(1);
-    let address_high = memory[table_address as usize];
+    let address_high = memory[table_address as u16];
     let address = ((address_high as u16) << 8) + (address_low as u16);
-    return address as usize;
+    return address as u16;
 }
 
-fn indirect_indexed_y(registers: &mut Registers, memory: &mut [u8]) -> usize {
-    let mut offset = memory[registers.pc as usize];
+fn indirect_indexed_y(registers: &mut Registers, memory: &mut CpuMemory) -> u16 {
+    let mut offset = memory[registers.pc as u16];
     registers.pc = registers.pc.wrapping_add(1);
-    let address_low = memory[offset as usize];
+    let address_low = memory[offset as u16];
     offset = offset.wrapping_add(1);
-    let address_high = memory[offset as usize];
+    let address_high = memory[offset as u16];
     let mut address = ((address_high as u16) << 8) + (address_low as u16);
     address = address.wrapping_add(registers.y as u16);
-    return address as usize;
+    return address as u16;
 }
 
-pub fn process_instruction(registers: &mut Registers, memory: &mut [u8]) {
-    let opcode = memory[registers.pc as usize];
+pub fn process_instruction(registers: &mut Registers, memory: &mut CpuMemory) {
+    let opcode = memory[registers.pc];
     registers.pc = registers.pc.wrapping_add(1);
 
     match opcode {
