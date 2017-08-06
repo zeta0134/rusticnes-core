@@ -161,6 +161,7 @@ impl CpuMemory {
             0x2000 ... 0x3FFF => {
                 // PPU
                 let ppu_reg = address & 0x7;
+                println!("PPU Register Read: {}", ppu_reg);
                 match ppu_reg {
                     // PPUCTRL, PPUMASK, OAMADDR | PPUSCROLL | PPUADDR (Write Only)
                     0 | 1 | 3 | 5 | 6 => {
@@ -169,9 +170,11 @@ impl CpuMemory {
                     // PPUSTATUS
                     2 => {
                         if side_effects {
+                            println!("Status Register Read: {}", self.ppu_status);
                             self.ppu_select_scroll_y = false;
                             self.ppu_select_low = false;
-                            self.ppu_latch = self.ppu_status & 0xE0 + self.ppu_latch & 0x1F;
+                            self.ppu_latch = (self.ppu_status & 0xE0) + (self.ppu_latch & 0x1F);
+                            self.ppu_status = self.ppu_status & 0x7F; // Clear VBlank bit
                             return self.ppu_latch;
                         } else {
                             return self.ppu_status & 0xE0 + self.ppu_latch & 0x1F;

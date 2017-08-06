@@ -2,6 +2,7 @@ extern crate pancurses;
 
 mod cpu;
 mod memory;
+mod ppu;
 
 use std::error::Error;
 use std::io::Read;
@@ -152,6 +153,7 @@ fn main() {
 
     // Initialized? Let's go!
     let mut exit: bool = false;
+    let mut cycles: u32 = 0;
     while !exit {
         window.clear();
         print_program_state(&mut window, &registers, &mut memory);
@@ -161,6 +163,12 @@ fn main() {
             exit = true;
         }
         cpu::process_instruction(&mut registers, &mut memory);
+        ppu::update(&mut memory, cycles);
+        cycles = cycles + 4;
+        ppu::update(&mut memory, cycles);
+        cycles = cycles + 4;
+        ppu::update(&mut memory, cycles);
+        cycles = cycles + 4;
     }
 
     pancurses::endwin();
