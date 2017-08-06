@@ -40,7 +40,7 @@ impl Default for NesHeader {
     }
 }
 
-fn print_program_state(window: &mut pancurses::Window, registers: &cpu::Registers, memory: &CpuMemory) {
+fn print_program_state(window: &mut pancurses::Window, registers: &cpu::Registers, memory: &mut CpuMemory) {
     window.printw(&format!("A: 0x{:02X} X: 0x{:02X} Y: 0x{:02X}\n", registers.a, registers.x, registers.y));
     window.printw(&format!("PC: 0x{:02X} S: 0x{:02X}\n", registers.pc, registers.s));
     window.printw(&format!("Flags: nv  dzic\n"));
@@ -56,7 +56,7 @@ fn print_program_state(window: &mut pancurses::Window, registers: &cpu::Register
     // print out the next 8 bytes or so from the program counter
     let mut pc = registers.pc;
     for i in 1 .. 8 {
-        window.printw(&format!("0x{:04X}: 0x{:02X}\n", pc, memory[pc]));
+        window.printw(&format!("0x{:04X}: 0x{:02X}\n", pc, memory.passively_read_byte(pc)));
         pc = pc.wrapping_add(1);
     }
 }
@@ -118,7 +118,7 @@ fn main() {
     let chr_rom = &cartridge[offset .. (offset + chr_rom_size as usize)];
     offset = offset + chr_rom_size;
 
-    let mut memory = CpuMemory {raw: [0u8; 0x10000]};
+    let mut memory = CpuMemory::new();
     let mut registers = cpu::Registers {
         a: 0,
         x: 0,
@@ -137,7 +137,7 @@ fn main() {
 
     // Initialize main memory (this is only valid for very simple games)
     for i in 0 .. 32768 - 1 {
-        memory[0x8000 + i] = prg_rom[i as usize];
+        memory.cart_rom[i] = prg_rom[i];
     }
 
     // Initialize CPU register state for power-up sequence
@@ -146,15 +146,15 @@ fn main() {
     registers.x = 0;
     registers.s = 0xFD;
 
-    let pc_low = memory[0xFFFC];
-    let pc_high = memory[0xFFFD];
+    let pc_low = memory.read_byte(0xFFFC);
+    let pc_high = memory.read_byte(0xFFFD);
     registers.pc = pc_low as u16 + ((pc_high as u16) << 8);
 
     // Initialized? Let's go!
     let mut exit: bool = false;
     while !exit {
         window.clear();
-        print_program_state(&mut window, &registers, &memory);
+        print_program_state(&mut window, &registers, &mut memory);
         window.refresh();
         let input = window.getch();
         if input == Some(pancurses::Input::Character('q')) {

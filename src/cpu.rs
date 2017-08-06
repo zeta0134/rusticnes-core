@@ -22,13 +22,13 @@ pub struct Registers {
 
 // Memory Utilities
 fn push(registers: &mut Registers, memory: &mut CpuMemory, data: u8) {
-    memory[registers.s as u16] = data;
+    memory.write_byte(registers.s as u16, data);
     registers.s = registers.s.wrapping_sub(1);
 }
 
-fn pop(registers: &mut Registers, memory: &CpuMemory) -> u8 {
+fn pop(registers: &mut Registers, memory: &mut CpuMemory) -> u8 {
     registers.s = registers.s.wrapping_add(1);
-    return memory[registers.s as u16];
+    return memory.read_byte(registers.s as u16);
 }
 
 fn status_as_byte(registers: &mut Registers, s_flag: bool) -> u8 {
@@ -154,7 +154,7 @@ fn brk(registers: &mut Registers, memory: &mut CpuMemory) {
     let status_byte = status_as_byte(registers, true);
     push(registers, memory, status_byte);
     // Set PC to interrupt vector at FFFE/FFFF
-    registers.pc = memory[0xFFFE] as u16 + ((memory[0xFFFF] as u16) << 8);
+    registers.pc = memory.read_byte(0xFFFE) as u16 + ((memory.read_byte(0xFFFF) as u16) << 8);
 }
 
 // Clear carry flag
@@ -457,36 +457,36 @@ fn immediate(registers: &mut Registers) -> u16 {
 }
 
 fn zero_page(registers: &mut Registers, memory: &mut CpuMemory) -> u16 {
-    let offset = memory[registers.pc];
+    let offset = memory.read_byte(registers.pc);
     registers.pc = registers.pc.wrapping_add(1);
     return offset as u16;
 }
 
 fn zero_x(registers: &mut Registers, memory: &mut  CpuMemory) -> u16 {
-    let offset = memory[registers.pc].wrapping_add(registers.x);
+    let offset = memory.read_byte(registers.pc).wrapping_add(registers.x);
     registers.pc = registers.pc.wrapping_add(1);
     return offset as u16;
 }
 
 fn zero_y(registers: &mut Registers, memory: &mut CpuMemory) -> u16 {
-    let offset = memory[registers.pc].wrapping_add(registers.y);
+    let offset = memory.read_byte(registers.pc).wrapping_add(registers.y);
     registers.pc = registers.pc.wrapping_add(1);
     return offset as u16;
 }
 
 fn absolute(registers: &mut Registers, memory: &mut CpuMemory) -> u16 {
-    let address_low = memory[registers.pc];
+    let address_low = memory.read_byte(registers.pc);
     registers.pc = registers.pc.wrapping_add(1);
-    let address_high = memory[registers.pc];
+    let address_high = memory.read_byte(registers.pc);
     registers.pc = registers.pc.wrapping_add(1);
     let address = ((address_high as u16) << 8) + (address_low as u16);
     return address as u16;
 }
 
 fn absolute_x(registers: &mut Registers, memory: &mut  CpuMemory) -> u16 {
-    let address_low = memory[registers.pc];
+    let address_low =memory.read_byte(registers.pc);
     registers.pc = registers.pc.wrapping_add(1);
-    let address_high = memory[registers.pc];
+    let address_high = memory.read_byte(registers.pc);
     registers.pc = registers.pc.wrapping_add(1);
     let mut address = ((address_high as u16) << 8) + (address_low as u16);
     address = address.wrapping_add(registers.x as u16);
@@ -494,9 +494,9 @@ fn absolute_x(registers: &mut Registers, memory: &mut  CpuMemory) -> u16 {
 }
 
 fn absolute_y(registers: &mut Registers, memory: &mut  CpuMemory) -> u16 {
-    let address_low = memory[registers.pc];
+    let address_low = memory.read_byte(registers.pc);
     registers.pc = registers.pc.wrapping_add(1);
-    let address_high = memory[registers.pc];
+    let address_high = memory.read_byte(registers.pc);
     registers.pc = registers.pc.wrapping_add(1);
     let mut address = ((address_high as u16) << 8) + (address_low as u16);
     address = address.wrapping_add(registers.y as u16);
@@ -505,96 +505,96 @@ fn absolute_y(registers: &mut Registers, memory: &mut  CpuMemory) -> u16 {
 
 // Only used by jump
 fn indirect(registers: &mut Registers, memory: &mut CpuMemory) -> u16 {
-    let indirect_low = memory[registers.pc];
+    let indirect_low = memory.read_byte(registers.pc);
     registers.pc = registers.pc.wrapping_add(1);
-    let indirect_high = memory[registers.pc];
+    let indirect_high = memory.read_byte(registers.pc);
     registers.pc = registers.pc.wrapping_add(1);
     let mut indirect_address = ((indirect_high as u16) << 8) + (indirect_low as u16);
 
-    let address_low = memory[indirect_address];
+    let address_low = memory.read_byte(indirect_address);
     indirect_address = indirect_address.wrapping_add(1);
-    let address_high = memory[indirect_address];
+    let address_high = memory.read_byte(indirect_address);
     let address = ((address_high as u16) << 8) + (address_low as u16);
 
     return address as u16;
 }
 
 fn indexed_indirect_x(registers: &mut Registers, memory: &mut  CpuMemory) -> u16 {
-    let mut table_address = memory[registers.pc as u16].wrapping_add(registers.x);
+    let mut table_address = memory.read_byte(registers.pc).wrapping_add(registers.x);
     registers.pc = registers.pc.wrapping_add(1);
-    let address_low = memory[table_address as u16];
+    let address_low = memory.read_byte(table_address as u16);
     table_address = table_address.wrapping_add(1);
-    let address_high = memory[table_address as u16];
+    let address_high = memory.read_byte(table_address as u16);
     let address = ((address_high as u16) << 8) + (address_low as u16);
     return address as u16;
 }
 
 fn indirect_indexed_y(registers: &mut Registers, memory: &mut CpuMemory) -> u16 {
-    let mut offset = memory[registers.pc as u16];
+    let mut offset = memory.read_byte(registers.pc);
     registers.pc = registers.pc.wrapping_add(1);
-    let address_low = memory[offset as u16];
+    let address_low = memory.read_byte(offset as u16);
     offset = offset.wrapping_add(1);
-    let address_high = memory[offset as u16];
+    let address_high = memory.read_byte(offset as u16);
     let mut address = ((address_high as u16) << 8) + (address_low as u16);
     address = address.wrapping_add(registers.y as u16);
     return address as u16;
 }
 
 pub fn process_instruction(registers: &mut Registers, memory: &mut CpuMemory) {
-    let opcode = memory[registers.pc];
+    let opcode = memory.read_byte(registers.pc);
     registers.pc = registers.pc.wrapping_add(1);
 
     match opcode {
         // Add with Carry
         0x69 => { let address = immediate(registers);
-                  adc(registers, memory[address])
+                  adc(registers, memory.read_byte(address))
         },
         0x65 => { let address = zero_page(registers, memory);
-                  adc(registers, memory[address])
+                  adc(registers, memory.read_byte(address))
         },
         0x75 => { let address = zero_x(registers, memory);
-                  adc(registers, memory[address])
+                  adc(registers, memory.read_byte(address))
         },
         0x6D => { let address = absolute(registers, memory);
-                  adc(registers, memory[address])
+                  adc(registers, memory.read_byte(address))
         },
         0x7D => { let address = absolute_x(registers, memory);
-                  adc(registers, memory[address])
+                  adc(registers, memory.read_byte(address))
         },
         0x79 => { let address = absolute_y(registers, memory);
-                  adc(registers, memory[address])
+                  adc(registers, memory.read_byte(address))
         },
         0x61 => { let address = indexed_indirect_x(registers, memory);
-                  adc(registers, memory[address])
+                  adc(registers, memory.read_byte(address))
         },
         0x71 => { let address = indirect_indexed_y(registers, memory);
-                  adc(registers, memory[address])
+                  adc(registers, memory.read_byte(address))
         },
 
         // Logical AND
         0x29 => { let address = immediate(registers);
-                  and(registers, memory[address])
+                  and(registers, memory.read_byte(address))
         },
         0x25 => { let address = zero_page(registers, memory);
-                  and(registers, memory[address])
+                  and(registers, memory.read_byte(address))
         },
         0x35 => { let address = zero_x(registers, memory);
-                  and(registers, memory[address])
+                  and(registers, memory.read_byte(address))
         },
         0x2D => { let address = absolute(registers, memory);
-                  and(registers, memory[address])
+                  and(registers, memory.read_byte(address))
         },
         0x3D => { let address = absolute_x(registers, memory);
-                  and(registers, memory[address])
+                  and(registers, memory.read_byte(address))
         },
         0x39 => { let address = absolute_y(registers, memory);
-                  and(registers, memory[address])
+                  and(registers, memory.read_byte(address))
         },
         0x21 => { let address = indexed_indirect_x(registers, memory);
-                  and(registers, memory[address])
+                  and(registers, memory.read_byte(address))
         },
         0x31 => { let address = indirect_indexed_y(registers, memory);
-                  and(registers, memory[address])
+                  and(registers, memory.read_byte(address))
         },
 
         // Arithmetic Shift Left
@@ -602,50 +602,54 @@ pub fn process_instruction(registers: &mut Registers, memory: &mut CpuMemory) {
                   registers.a = asl(registers, value)
         },
         0x06 => { let address = zero_page(registers, memory);
-                  memory[address] = asl(registers, memory[address])
+                  let result = asl(registers, memory.read_byte(address));
+                  memory.write_byte(address, result);
         },
         0x16 => { let address = zero_x(registers, memory);
-                  memory[address] = asl(registers, memory[address])
+                  let result = asl(registers, memory.read_byte(address));
+                  memory.write_byte(address, result);
         },
         0x0E => { let address = absolute(registers, memory);
-                  memory[address] = asl(registers, memory[address])
+                  let result = asl(registers, memory.read_byte(address));
+                  memory.write_byte(address, result);
         },
         0x1E => { let address = absolute_x(registers, memory);
-                  memory[address] = asl(registers, memory[address])
+                  let result = asl(registers, memory.read_byte(address));
+                  memory.write_byte(address, result);
         },
 
         // Branching
         0x90 => { let address = immediate(registers);
-                  bcc(registers, memory[address] as i8)
+                  bcc(registers, memory.read_byte(address) as i8)
         },
         0xB0 => { let address = immediate(registers);
-                  bcs(registers, memory[address] as i8)
+                  bcs(registers, memory.read_byte(address) as i8)
         },
         0xF0 => { let address = immediate(registers);
-                  beq(registers, memory[address] as i8)
+                  beq(registers, memory.read_byte(address) as i8)
         },
         0x30 => { let address = immediate(registers);
-                  bmi(registers, memory[address] as i8)
+                  bmi(registers, memory.read_byte(address) as i8)
         },
         0xD0 => { let address = immediate(registers);
-                  bne(registers, memory[address] as i8)
+                  bne(registers, memory.read_byte(address) as i8)
         },
         0x10 => { let address = immediate(registers);
-                  bpl(registers, memory[address] as i8)
+                  bpl(registers, memory.read_byte(address) as i8)
         },
         0x50 => { let address = immediate(registers);
-                  bvc(registers, memory[address] as i8)
+                  bvc(registers, memory.read_byte(address) as i8)
         },
         0x70 => { let address = immediate(registers);
-                  bvs(registers, memory[address] as i8)
+                  bvs(registers, memory.read_byte(address) as i8)
         },
 
         // Bit Test
         0x24 => { let address = zero_page(registers, memory);
-                  bit(registers, memory[address])
+                  bit(registers, memory.read_byte(address))
         },
         0x2C => { let address = absolute(registers, memory);
-                  bit(registers, memory[address])
+                  bit(registers, memory.read_byte(address))
         },
 
         // Break - Force Interrupt
@@ -659,106 +663,114 @@ pub fn process_instruction(registers: &mut Registers, memory: &mut CpuMemory) {
 
         // Compare
         0xC9 => { let address = immediate(registers);
-                  cmp(registers, memory[address])
+                  cmp(registers, memory.read_byte(address))
         },
         0xC5 => { let address = zero_page(registers, memory);
-                  cmp(registers, memory[address])
+                  cmp(registers, memory.read_byte(address))
         },
         0xD5 => { let address = zero_x(registers, memory);
-                  cmp(registers, memory[address])
+                  cmp(registers, memory.read_byte(address))
         },
         0xCD => { let address = absolute(registers, memory);
-                  cmp(registers, memory[address])
+                  cmp(registers, memory.read_byte(address))
         },
         0xDD => { let address = absolute_x(registers, memory);
-                  cmp(registers, memory[address])
+                  cmp(registers, memory.read_byte(address))
         },
         0xD9 => { let address = absolute_y(registers, memory);
-                  cmp(registers, memory[address])
+                  cmp(registers, memory.read_byte(address))
         },
         0xC1 => { let address = indexed_indirect_x(registers, memory);
-                  cmp(registers, memory[address])
+                  cmp(registers, memory.read_byte(address))
         },
         0xD1 => { let address = indirect_indexed_y(registers, memory);
-                  cmp(registers, memory[address])
+                  cmp(registers, memory.read_byte(address))
         },
 
         // Compare X
         0xE0 => { let address = immediate(registers);
-                  cpx(registers, memory[address])
+                  cpx(registers, memory.read_byte(address))
         },
         0xE4 => { let address = zero_page(registers, memory);
-                  cpx(registers, memory[address])
+                  cpx(registers, memory.read_byte(address))
         },
         0xEC => { let address = absolute(registers, memory);
-                  cpx(registers, memory[address])
+                  cpx(registers, memory.read_byte(address))
         },
 
         // Compare Y
         0xC0 => { let address = immediate(registers);
-                  cpy(registers, memory[address])
+                  cpy(registers, memory.read_byte(address))
         },
         0xC4 => { let address = zero_page(registers, memory);
-                  cpy(registers, memory[address])
+                  cpy(registers, memory.read_byte(address))
         },
         0xCC => { let address = absolute(registers, memory);
-                  cpy(registers, memory[address])
+                  cpy(registers, memory.read_byte(address))
         },
 
         // Decrement
         0xC6 => { let address = zero_page(registers, memory);
-                  memory[address] = dec(registers, memory[address])
+                  let result = dec(registers, memory.read_byte(address));
+                  memory.write_byte(address, result);
         },
         0xD6 => { let address = zero_x(registers, memory);
-                  memory[address] = dec(registers, memory[address])
+                  let result = dec(registers, memory.read_byte(address));
+                  memory.write_byte(address, result);
         },
         0xCE => { let address = absolute(registers, memory);
-                  memory[address] = dec(registers, memory[address])
+                  let result = dec(registers, memory.read_byte(address));
+                  memory.write_byte(address, result);
         },
         0xDE => { let address = absolute_x(registers, memory);
-                  memory[address] = dec(registers, memory[address])
+                  let result = dec(registers, memory.read_byte(address));
+                  memory.write_byte(address, result);
         },
         0xCA => dex(registers),
         0x88 => dey(registers),
 
         // Logical Exclusive OR
         0x49 => { let address = immediate(registers);
-                  eor(registers, memory[address])
+                  eor(registers, memory.read_byte(address))
         },
         0x45 => { let address = zero_page(registers, memory);
-                  eor(registers, memory[address])
+                  eor(registers, memory.read_byte(address))
         },
         0x55 => { let address = zero_x(registers, memory);
-                  eor(registers, memory[address])
+                  eor(registers, memory.read_byte(address))
         },
         0x4D => { let address = absolute(registers, memory);
-                  eor(registers, memory[address])
+                  eor(registers, memory.read_byte(address))
         },
         0x5D => { let address = absolute_x(registers, memory);
-                  eor(registers, memory[address])
+                  eor(registers, memory.read_byte(address))
         },
         0x59 => { let address = absolute_y(registers, memory);
-                  eor(registers, memory[address])
+                  eor(registers, memory.read_byte(address))
         },
         0x41 => { let address = indexed_indirect_x(registers, memory);
-                  eor(registers, memory[address])
+                  eor(registers, memory.read_byte(address))
         },
         0x51 => { let address = indirect_indexed_y(registers, memory);
-                  eor(registers, memory[address])
+                  eor(registers, memory.read_byte(address))
         },
 
         // Increment
         0xE6 => { let address = zero_page(registers, memory);
-                  memory[address] = inc(registers, memory[address])
+                  let result = inc(registers, memory.read_byte(address));
+                  memory.write_byte(address, result);
         },
         0xF6 => { let address = zero_x(registers, memory);
-                  memory[address] = inc(registers, memory[address])
+                  let result = inc(registers, memory.read_byte(address));
+                  memory.write_byte(address, result);
         },
         0xEE => { let address = absolute(registers, memory);
-                  memory[address] = inc(registers, memory[address])
+                  let result = inc(registers, memory.read_byte(address));
+                  memory.write_byte(address, result);
         },
         0xFE => { let address = absolute_x(registers, memory);
-                  memory[address] = inc(registers, memory[address])
+                  let result = inc(registers, memory.read_byte(address));
+                  memory.write_byte(address, result);
         },
         0xE8 => inx(registers),
         0xC8 => iny(registers),
@@ -778,62 +790,62 @@ pub fn process_instruction(registers: &mut Registers, memory: &mut CpuMemory) {
 
         // Load Accumulator
         0xA9 => { let address = immediate(registers);
-                  lda(registers, memory[address])
+                  lda(registers, memory.read_byte(address))
         },
         0xA5 => { let address = zero_page(registers, memory);
-                  lda(registers, memory[address])
+                  lda(registers, memory.read_byte(address))
         },
         0xB5 => { let address = zero_x(registers, memory);
-                  lda(registers, memory[address])
+                  lda(registers, memory.read_byte(address))
         },
         0xAD => { let address = absolute(registers, memory);
-                  lda(registers, memory[address])
+                  lda(registers, memory.read_byte(address))
         },
         0xBD => { let address = absolute_x(registers, memory);
-                  lda(registers, memory[address])
+                  lda(registers, memory.read_byte(address))
         },
         0xB9 => { let address = absolute_y(registers, memory);
-                  lda(registers, memory[address])
+                  lda(registers, memory.read_byte(address))
         },
         0xA1 => { let address = indexed_indirect_x(registers, memory);
-                  lda(registers, memory[address])
+                  lda(registers, memory.read_byte(address))
         },
         0xB1 => { let address = indirect_indexed_y(registers, memory);
-                  lda(registers, memory[address])
+                  lda(registers, memory.read_byte(address))
         },
 
         // Load X
         0xA2 => { let address = immediate(registers);
-                  ldx(registers, memory[address])
+                  ldx(registers, memory.read_byte(address))
         },
         0xA6 => { let address = zero_page(registers, memory);
-                  ldx(registers, memory[address])
+                  ldx(registers, memory.read_byte(address))
         },
         0xB6 => { let address = zero_y(registers, memory);
-                  ldx(registers, memory[address])
+                  ldx(registers, memory.read_byte(address))
         },
         0xAE => { let address = absolute(registers, memory);
-                  ldx(registers, memory[address])
+                  ldx(registers, memory.read_byte(address))
         },
         0xBE => { let address = absolute_y(registers, memory);
-                  ldx(registers, memory[address])
+                  ldx(registers, memory.read_byte(address))
         },
 
         // Load Y
         0xA0 => { let address = immediate(registers);
-                  ldy(registers, memory[address])
+                  ldy(registers, memory.read_byte(address))
         },
         0xA4 => { let address = zero_page(registers, memory);
-                  ldy(registers, memory[address])
+                  ldy(registers, memory.read_byte(address))
         },
         0xB4 => { let address = zero_x(registers, memory);
-                  ldy(registers, memory[address])
+                  ldy(registers, memory.read_byte(address))
         },
         0xAC => { let address = absolute(registers, memory);
-                  ldy(registers, memory[address])
+                  ldy(registers, memory.read_byte(address))
         },
         0xBC => { let address = absolute_x(registers, memory);
-                  ldy(registers, memory[address])
+                  ldy(registers, memory.read_byte(address))
         },
 
         // Logical Shift Right
@@ -841,16 +853,20 @@ pub fn process_instruction(registers: &mut Registers, memory: &mut CpuMemory) {
                   registers.a = lsr(registers, value)
         },
         0x46 => { let address = zero_page(registers, memory);
-                  memory[address] = lsr(registers, memory[address])
+                  let result = lsr(registers, memory.read_byte(address));
+                  memory.write_byte(address, result);
         },
         0x56 => { let address = zero_x(registers, memory);
-                  memory[address] = lsr(registers, memory[address])
+                  let result = lsr(registers, memory.read_byte(address));
+                  memory.write_byte(address, result);
         },
         0x4E => { let address = absolute(registers, memory);
-                  memory[address] = lsr(registers, memory[address])
+                  let result = lsr(registers, memory.read_byte(address));
+                  memory.write_byte(address, result);
         },
         0x5E => { let address = absolute_x(registers, memory);
-                  memory[address] = lsr(registers, memory[address])
+                  let result = lsr(registers, memory.read_byte(address));
+                  memory.write_byte(address, result);
         },
 
         // NOP!
@@ -858,28 +874,28 @@ pub fn process_instruction(registers: &mut Registers, memory: &mut CpuMemory) {
 
         // Logical Inclusive OR
         0x09 => { let address = immediate(registers);
-                  ora(registers, memory[address])
+                  ora(registers, memory.read_byte(address))
         },
         0x05 => { let address = zero_page(registers, memory);
-                  ora(registers, memory[address])
+                  ora(registers, memory.read_byte(address))
         },
         0x15 => { let address = zero_x(registers, memory);
-                  ora(registers, memory[address])
+                  ora(registers, memory.read_byte(address))
         },
         0x0D => { let address = absolute(registers, memory);
-                  ora(registers, memory[address])
+                  ora(registers, memory.read_byte(address))
         },
         0x1D => { let address = absolute_x(registers, memory);
-                  ora(registers, memory[address])
+                  ora(registers, memory.read_byte(address))
         },
         0x19 => { let address = absolute_y(registers, memory);
-                  ora(registers, memory[address])
+                  ora(registers, memory.read_byte(address))
         },
         0x01 => { let address = indexed_indirect_x(registers, memory);
-                  ora(registers, memory[address])
+                  ora(registers, memory.read_byte(address))
         },
         0x11 => { let address = indirect_indexed_y(registers, memory);
-                  ora(registers, memory[address])
+                  ora(registers, memory.read_byte(address))
         },
 
         // Push and Pop
@@ -893,16 +909,20 @@ pub fn process_instruction(registers: &mut Registers, memory: &mut CpuMemory) {
                   registers.a = rol(registers, value)
         },
         0x26 => { let address = zero_page(registers, memory);
-                  memory[address] = rol(registers, memory[address])
+                  let result = rol(registers, memory.read_byte(address));
+                  memory.write_byte(address, result);
         },
         0x36 => { let address = zero_x(registers, memory);
-                  memory[address] = rol(registers, memory[address])
+                  let result = rol(registers, memory.read_byte(address));
+                  memory.write_byte(address, result);
         },
         0x2E => { let address = absolute(registers, memory);
-                  memory[address] = rol(registers, memory[address])
+                  let result = rol(registers, memory.read_byte(address));
+                  memory.write_byte(address, result);
         },
         0x3E => { let address = absolute_x(registers, memory);
-                  memory[address] = rol(registers, memory[address])
+                  let result = rol(registers, memory.read_byte(address));
+                  memory.write_byte(address, result);
         },
 
         // Rotate Right
@@ -910,16 +930,20 @@ pub fn process_instruction(registers: &mut Registers, memory: &mut CpuMemory) {
                   registers.a = ror(registers, value)
         },
         0x66 => { let address = zero_page(registers, memory);
-                  memory[address] = ror(registers, memory[address])
+                  let result = ror(registers, memory.read_byte(address));
+                  memory.write_byte(address, result);
         },
         0x76 => { let address = zero_x(registers, memory);
-                  memory[address] = ror(registers, memory[address])
+                  let result = ror(registers, memory.read_byte(address));
+                  memory.write_byte(address, result);
         },
         0x6E => { let address = absolute(registers, memory);
-                  memory[address] = ror(registers, memory[address])
+                  let result = ror(registers, memory.read_byte(address));
+                  memory.write_byte(address, result);
         },
         0x7E => { let address = absolute_x(registers, memory);
-                  memory[address] = ror(registers, memory[address])
+                  let result = ror(registers, memory.read_byte(address));
+                  memory.write_byte(address, result);
         },
 
         // Returns
@@ -928,28 +952,28 @@ pub fn process_instruction(registers: &mut Registers, memory: &mut CpuMemory) {
 
         // Subtract with Carry
         0xE9 => { let address = immediate(registers);
-                  sbc(registers, memory[address])
+                  sbc(registers, memory.read_byte(address))
         },
         0xE5 => { let address = zero_page(registers, memory);
-                  sbc(registers, memory[address])
+                  sbc(registers, memory.read_byte(address))
         },
         0xF5 => { let address = zero_x(registers, memory);
-                  sbc(registers, memory[address])
+                  sbc(registers, memory.read_byte(address))
         },
         0xED => { let address = absolute(registers, memory);
-                  sbc(registers, memory[address])
+                  sbc(registers, memory.read_byte(address))
         },
         0xFD => { let address = absolute_x(registers, memory);
-                  sbc(registers, memory[address])
+                  sbc(registers, memory.read_byte(address))
         },
         0xF9 => { let address = absolute_y(registers, memory);
-                  sbc(registers, memory[address])
+                  sbc(registers, memory.read_byte(address))
         },
         0xE1 => { let address = indexed_indirect_x(registers, memory);
-                  sbc(registers, memory[address])
+                  sbc(registers, memory.read_byte(address))
         },
         0xF1 => { let address = indirect_indexed_y(registers, memory);
-                  sbc(registers, memory[address])
+                  sbc(registers, memory.read_byte(address))
         },
 
         // Set Flags
@@ -959,47 +983,60 @@ pub fn process_instruction(registers: &mut Registers, memory: &mut CpuMemory) {
 
         // Store Accumulator
         0x85 => { let address = zero_page(registers, memory);
-                  memory[address] = sta(registers)
+                  let result = sta(registers);
+                  memory.write_byte(address, result);
         },
         0x95 => { let address = zero_x(registers, memory);
-                  memory[address] = sta(registers)
+                  let result = sta(registers);
+                  memory.write_byte(address, result);
         },
         0x8D => { let address = absolute(registers, memory);
-                  memory[address] = sta(registers)
+                  let result = sta(registers);
+                  memory.write_byte(address, result);
         },
         0x9D => { let address = absolute_x(registers, memory);
-                  memory[address] = sta(registers)
+                  let result = sta(registers);
+                  memory.write_byte(address, result);
         },
         0x99 => { let address = absolute_y(registers, memory);
-                  memory[address] = sta(registers)
+                  let result = sta(registers);
+                  memory.write_byte(address, result);
         },
         0x81 => { let address = indexed_indirect_x(registers, memory);
-                  memory[address] = sta(registers)
+                  let result = sta(registers);
+                  memory.write_byte(address, result);
         },
         0x91 => { let address = indirect_indexed_y(registers, memory);
-                  memory[address] = sta(registers)
+                  let result = sta(registers);
+                  memory.write_byte(address, result);
         },
 
         // Store X
         0x86 => { let address = zero_page(registers, memory);
-                  memory[address] = stx(registers)
+                  let result = stx(registers);
+                  memory.write_byte(address, result);
         },
         0x96 => { let address = zero_y(registers, memory);
-                  memory[address] = stx(registers)
+                  let result = stx(registers);
+                  memory.write_byte(address, result);
         },
         0x8E => { let address = absolute(registers, memory);
-                  memory[address] = stx(registers)
+                  let result = stx(registers);
+                  memory.write_byte(address, result);
         },
 
         // Store Y
         0x84 => { let address = zero_page(registers, memory);
-                  memory[address] = sty(registers)
+                  let result = sty(registers);
+                  memory.write_byte(address, result);
         },
         0x94 => { let address = zero_x(registers, memory);
-                  memory[address] = sty(registers)
+                  let result = sty(registers);
+                  memory.write_byte(address, result);
         },
         0x8C => { let address = absolute(registers, memory);
-                  memory[address] = sty(registers)
+                  let result = sty(registers);
+                  memory.write_byte(address, result);
         },
 
         0xAA => tax(registers),
