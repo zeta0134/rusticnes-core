@@ -1,4 +1,7 @@
 extern crate pancurses;
+extern crate piston_window;
+
+use piston_window::*;
 
 mod cpu;
 mod memory;
@@ -41,11 +44,11 @@ impl Default for NesHeader {
     }
 }
 
-fn print_program_state(window: &mut pancurses::Window, registers: &cpu::Registers, memory: &mut CpuMemory) {
-    window.printw(&format!("A: 0x{:02X} X: 0x{:02X} Y: 0x{:02X}\n", registers.a, registers.x, registers.y));
-    window.printw(&format!("PC: 0x{:02X} S: 0x{:02X}\n", registers.pc, registers.s));
-    window.printw(&format!("Flags: nv  dzic\n"));
-    window.printw(&format!("       {:b}{:b}  {:b}{:b}{:b}{:b}\n",
+fn print_program_state(console: &mut pancurses::Window, registers: &cpu::Registers, memory: &mut CpuMemory) {
+    console.printw(&format!("A: 0x{:02X} X: 0x{:02X} Y: 0x{:02X}\n", registers.a, registers.x, registers.y));
+    console.printw(&format!("PC: 0x{:02X} S: 0x{:02X}\n", registers.pc, registers.s));
+    console.printw(&format!("Flags: nv  dzic\n"));
+    console.printw(&format!("       {:b}{:b}  {:b}{:b}{:b}{:b}\n",
         registers.flags.negative as u8,
         registers.flags.overflow as u8,
         registers.flags.decimal as u8,
@@ -53,20 +56,23 @@ fn print_program_state(window: &mut pancurses::Window, registers: &cpu::Register
         registers.flags.interrupts_disabled as u8,
         registers.flags.carry as u8,
     ));
-    window.printw("\nMemory @ Program Counter\n");
+    console.printw("\nMemory @ Program Counter\n");
     // print out the next 8 bytes or so from the program counter
     let mut pc = registers.pc;
     for i in 1 .. 8 {
-        window.printw(&format!("0x{:04X}: 0x{:02X}\n", pc, memory.passively_read_byte(pc)));
+        console.printw(&format!("0x{:04X}: 0x{:02X}\n", pc, memory.passively_read_byte(pc)));
         pc = pc.wrapping_add(1);
     }
 }
 
 fn main() {
-    let mut window = pancurses::initscr();
+    let mut console = pancurses::initscr();
 
-    window.printw("Hello, world!");
-    window.printw("Attempting to read mario.nes header");
+    let mut window: PistonWindow = WindowSettings::new("RusticNES", [1024, 768])
+    .exit_on_esc(true).opengl(OpenGL::V2_1).build().unwrap();
+
+    console.printw("Hello, world!");
+    console.printw("Attempting to read mario.nes header");
 
     let mut file = match File::open("mario.nes") {
         Err(why) => panic!("Couldn't open mario.nes: {}", why.description()),
@@ -76,11 +82,11 @@ fn main() {
     // Read the whole damn thing?
     match file.read_to_end(&mut cartridge) {
         Err(why) => panic!("Couldn't read data: {}", why.description()),
-        Ok(bytes_read) => window.printw(&format!("Data read successfully: {}", bytes_read)),
+        Ok(bytes_read) => console.printw(&format!("Data read successfully: {}", bytes_read)),
     };
 
     // See if that worked
-    window.printw(&format!("Magic Header: {0} {1} {2} 0x{3:X}", cartridge[0] as char, cartridge[1] as char, cartridge[2] as char, cartridge[3]));
+    console.printw(&format!("Magic Header: {0} {1} {2} 0x{3:X}", cartridge[0] as char, cartridge[1] as char, cartridge[2] as char, cartridge[3]));
 
     // Okay, now create an NES struct and massage the data into it
     let mut nes_header: NesHeader = NesHeader {
@@ -91,10 +97,10 @@ fn main() {
         ..Default::default()
     };
 
-    window.printw(&format!("PRG ROM: {0}", nes_header.prg_rom_size));
-    window.printw(&format!("CHR ROM: {0}", nes_header.chr_rom_size));
-    window.printw(&format!("PRG RAM: {0}", nes_header.prg_ram_size));
-    window.printw(&format!("Mapper: {0}", nes_header.mapper_number));
+    console.printw(&format!("PRG ROM: {0}", nes_header.prg_rom_size));
+    console.printw(&format!("CHR ROM: {0}", nes_header.chr_rom_size));
+    console.printw(&format!("PRG RAM: {0}", nes_header.prg_ram_size));
+    console.printw(&format!("Mapper: {0}", nes_header.mapper_number));
 
     if cartridge[6] & 0x08 != 0 {
         nes_header.four_screen_mirroring = true;
@@ -154,21 +160,31 @@ fn main() {
     // Initialized? Let's go!
     let mut exit: bool = false;
     let mut cycles: u32 = 0;
-    while !exit {
-        window.clear();
-        print_program_state(&mut window, &registers, &mut memory);
-        window.refresh();
-        let input = window.getch();
-        if input == Some(pancurses::Input::Character('q')) {
-            exit = true;
-        }
-        cpu::process_instruction(&mut registers, &mut memory);
-        ppu::update(&mut memory, cycles);
-        cycles = cycles + 4;
-        ppu::update(&mut memory, cycles);
-        cycles = cycles + 4;
-        ppu::update(&mut memory, cycles);
-        cycles = cycles + 4;
+
+    //while !exit {
+    while let Some(event) = window.next() {
+        window.draw_2d(&event, |context, graphics| {
+            console.clear();
+            print_program_state(&mut console, &registers, &mut memory);
+            console.refresh();
+            //let input = console.getch();
+            //if input == Some(pancurses::Input::Character('q')) {
+            //    exit = true;
+            //}
+            cpu::process_instruction(&mut registers, &mut memory);
+            ppu::update(&mut memory, cycles);
+            cycles = cycles + 4;
+            ppu::update(&mut memory, cycles);
+            cycles = cycles + 4;
+            ppu::update(&mut memory, cycles);
+            cycles = cycles + 4;
+
+            clear([1.0; 4], graphics);
+            rectangle([0.0, 0.1, 8.0, 1.0],
+                      [10.0, 20.0, 100.0, 120.0],
+                      context.transform,
+                      graphics);
+        });
     }
 
     pancurses::endwin();
