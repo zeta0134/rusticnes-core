@@ -4,5 +4,6 @@ version = "0.1.0"
 authors = ["Nicholas Flynt <thegamefreak0134@gmail.com>"]
 
 [dependencies]
+image = "*"
 pancurses = "0.9"
 piston_window = "0.69.0"

@@ -1,3 +1,4 @@
+extern crate image;
 extern crate pancurses;
 extern crate piston_window;
 
@@ -10,6 +11,9 @@ mod ppu;
 use std::error::Error;
 use std::io::Read;
 use std::fs::File;
+
+use image::ImageBuffer;
+use image::Rgba;
 
 use memory::CpuMemory;
 
@@ -69,7 +73,7 @@ fn main() {
     let mut console = pancurses::initscr();
 
     let mut window: PistonWindow = WindowSettings::new("RusticNES", [1024, 768])
-    .exit_on_esc(true).opengl(OpenGL::V2_1).build().unwrap();
+    .exit_on_esc(true).build().unwrap();
 
     console.printw("Hello, world!");
     console.printw("Attempting to read mario.nes header");
@@ -161,8 +165,18 @@ fn main() {
     let mut exit: bool = false;
     let mut cycles: u32 = 0;
 
+    let mut buffer = ImageBuffer::new(320, 240);
+    let mut texture = Texture::from_image(
+        &mut window.factory,
+        &buffer,
+        &TextureSettings::new()
+    ).unwrap();
+
+    let mut thingy = 0;
+
     //while !exit {
     while let Some(event) = window.next() {
+        texture.update(&mut window.encoder, &buffer);
         window.draw_2d(&event, |context, graphics| {
             console.clear();
             print_program_state(&mut console, &registers, &mut memory);
@@ -179,11 +193,19 @@ fn main() {
             ppu::update(&mut memory, cycles);
             cycles = cycles + 4;
 
-            clear([1.0; 4], graphics);
-            rectangle([0.0, 0.1, 8.0, 1.0],
-                      [10.0, 20.0, 100.0, 120.0],
-                      context.transform,
-                      graphics);
+            clear([0.8; 4], graphics);
+
+            for x in 0 .. 320 {
+                for y in 0 .. 240 {
+                    buffer.put_pixel(x, y, Rgba { data: [
+                        (x + thingy & 0xFF) as u8,
+                        (y + thingy & 0xFF) as u8,
+                        ((x + y + thingy) & 0xFF) as u8,
+                        255] });
+                }
+            }
+            image(&texture, context.transform, graphics);
+            thingy = thingy + 1;
         });
     }
 
