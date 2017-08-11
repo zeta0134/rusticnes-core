@@ -22,13 +22,13 @@ pub struct Registers {
 
 // Memory Utilities
 fn push(registers: &mut Registers, memory: &mut CpuMemory, data: u8) {
-    memory.write_byte(registers.s as u16, data);
+    memory.write_byte((registers.s as u16) + 0x0100, data);
     registers.s = registers.s.wrapping_sub(1);
 }
 
 fn pop(registers: &mut Registers, memory: &mut CpuMemory) -> u8 {
     registers.s = registers.s.wrapping_add(1);
-    return memory.read_byte(registers.s as u16);
+    return memory.read_byte((registers.s as u16) + 0x0100);
 }
 
 fn status_as_byte(registers: &mut Registers, s_flag: bool) -> u8 {
