@@ -178,6 +178,18 @@ impl PpuState {
             self.process_scanline();
         }
     }
+
+    pub fn get_bg_tile(&mut self, tx: u8, ty: u8) -> u8 {
+        let mut address: u16 = 0x2000;
+        if tx > 31 {
+            address = address + 0x0400;
+        }
+        if ty > 29 {
+            address = address + 0x0800;
+        }
+        address = address + ((ty % 30) as u16) * 30 + ((tx & 0x1F) as u16);
+        return self.read_byte(address);
+    }
 }
 
 // Given a pattern and tile / pixel coordinates, decodes the palette index and returns it

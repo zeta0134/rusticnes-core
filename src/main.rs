@@ -69,6 +69,25 @@ fn generate_debug_chr_pattern(pattern: &[u8], buffer: &mut ImageBuffer<Rgba<u8>,
     }
 }
 
+fn generate_debug_nametables(ppu: &mut ppu::PpuState, buffer: &mut ImageBuffer<Rgba<u8>, Vec<u8>>) {
+    let debug_pallete: [u8; 4] = [255, 192, 128, 0];
+    for tx in 0 .. 63 {
+        for ty in 0 .. 59 {
+            let tile_index = ppu.get_bg_tile(tx, ty);
+            for px in 0 .. 8 {
+                for py in 0 .. 8 {
+                    let palette_index = ppu::decode_chr_pixel(&ppu.pattern_1, tile_index as u8, px as u8, py as u8);
+                    buffer.put_pixel(tx as u32 * 8 + px as u32, ty as u32 * 8 + py as u32, Rgba { data: [
+                        debug_pallete[palette_index as usize],
+                        debug_pallete[palette_index as usize],
+                        debug_pallete[palette_index as usize],
+                        255] });
+                }
+            }
+        }
+    }
+}
+
 fn print_program_state(console: &mut pancurses::Window, nes: &mut NesState) {
     let registers = nes.registers;
     console.printw(&format!("A: 0x{:02X} X: 0x{:02X} Y: 0x{:02X}\n", registers.a, registers.x, registers.y));
@@ -216,11 +235,28 @@ fn main() {
     let mut pattern_1_texture = Texture::from_image(&mut window.factory, &pattern_1_buffer,
         &texture_settings).unwrap();
 
+    let mut nametables_buffer = ImageBuffer::new(512, 480);
+    let mut nametables_texture = Texture::from_image(&mut window.factory, &nametables_buffer,
+        &texture_settings).unwrap();
+
     let mut thingy = 0;
 
     //while !exit {
     while let Some(event) = window.next() {
+        // Debug draw some junk
+        for x in 0 .. 256 {
+            for y in 0 .. 240 {
+                screen_buffer.put_pixel(x, y, Rgba { data: [
+                    (x + thingy & 0xFF) as u8,
+                    (y + thingy & 0xFF) as u8,
+                    ((x ^ y ^ thingy) & 0xFF) as u8,
+                    255] });
+            }
+        }
         screen_texture.update(&mut window.encoder, &screen_buffer);
+        generate_debug_nametables(&mut nes.ppu, &mut nametables_buffer);
+        nametables_texture.update(&mut window.encoder, &nametables_buffer);
+
         window.draw_2d(&event, |context, graphics| {
             console.clear();
             print_program_state(&mut console, &mut nes);
@@ -229,21 +265,12 @@ fn main() {
             //if input == Some(pancurses::Input::Character('q')) {
             //    exit = true;
             //}
+
             cpu::process_instruction(&mut nes);
             nes.ppu.run_to_cycle(cycles, &mut nes.memory);
             cycles = cycles + 12;
 
             clear([0.8; 4], graphics);
-
-            for x in 0 .. 256 {
-                for y in 0 .. 240 {
-                    screen_buffer.put_pixel(x, y, Rgba { data: [
-                        (x + thingy & 0xFF) as u8,
-                        (y + thingy & 0xFF) as u8,
-                        ((x ^ y ^ thingy) & 0xFF) as u8,
-                        255] });
-                }
-            }
             let base_transform = context.transform.scale(2.0, 2.0);
             let pal_transform = base_transform.trans(256.0, 0.0).scale(16.0, 16.0);
             image(&screen_texture, base_transform, graphics);
@@ -253,6 +280,10 @@ fn main() {
             let pattern_1_transform = base_transform.trans(256.0 + 128.0, 64.0);
             image(&pattern_0_texture, pattern_0_transform, graphics);
             image(&pattern_1_texture, pattern_1_transform, graphics);
+
+            let nametables_transform = base_transform.trans(256.0, 64.0 + 128.0);
+            image(&nametables_texture, nametables_transform, graphics);
+
             thingy = thingy + 1;
         });
     }
