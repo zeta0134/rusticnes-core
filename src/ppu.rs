@@ -6,6 +6,7 @@ use memory::CpuMemory;
 // and prototype stages.
 
 pub struct PpuState {
+    // PPU Memory (incl. cart CHR ROM for now)
     pub pattern_0: [u8; 0x1000],
     pub pattern_1: [u8; 0x1000],
     pub internal_vram: [u8; 0x800],
@@ -13,6 +14,26 @@ pub struct PpuState {
     pub palette: [u8; 0x20],
 
     pub v_mirroring: bool,
+
+    // Memory Mapped Registers
+    // PPU Registers
+    pub latch: u8,
+
+    pub control: u8,
+    pub mask: u8,
+    pub status: u8,
+    pub oam_addr: u8,
+
+    // Scrolling, which is implemented with a flip/flop register
+    pub select_scroll_y: bool,
+    pub scroll_x: u8,
+    pub scroll_y: u8,
+
+    // PPU Address, similar to scrolling, has a high / low component
+    pub select_low: bool,
+    pub current_addr: u16,
+
+    pub oam_dma_high: u8,
 
     // Internal
     pub current_scanline: u16,
@@ -36,6 +57,18 @@ impl PpuState {
            scanline_cycles: 0,
            last_cycle: 0,
            screen: [0u8; 256 * 240],
+
+           control: 0,
+           mask: 0,
+           status: 0,
+           oam_addr: 0,
+           select_scroll_y: false,
+           scroll_x: 0,
+           scroll_y: 0,
+           select_low: false,
+           current_addr: 0,
+           oam_dma_high: 0,
+           latch: 0,
        };
     }
 
@@ -112,6 +145,7 @@ impl PpuState {
         }
     }
 
+    // Return value: NMI interrupt happened this cycle
     pub fn process_scanline(&mut self) {
         let scanline = self.current_scanline;
         match scanline {
@@ -121,11 +155,13 @@ impl PpuState {
             // 240 does nothing
             241 => {
                 // VBlank! Set NMI flag here
+                self.status = (self.status & 0x7F) + 0x80; // Set VBlank bit
             },
             // 242 - 260 do nothing
             261 => {
                 // Set vertical scrolling registers, in preparation for new frame
                 // (Emulator: Draw actual frame here)
+                self.status = self.status & 0x7F; // Clear VBlank bit
             },
             _ => ()
         }
@@ -135,13 +171,12 @@ impl PpuState {
         let cycles_per_scanline = 341 * 4;
         self.scanline_cycles = cycles - self.last_cycle;
         self.last_cycle = cycles;
+        let nmi = false;
         while self.scanline_cycles > cycles_per_scanline {
             self.current_scanline.wrapping_add(1);
             self.scanline_cycles = self.scanline_cycles  - cycles_per_scanline;
             self.process_scanline();
         }
-        // Timing? Nah, just signal vblank every frame.
-        memory.ppu_status = (memory.ppu_status & 0x7F) + 0x80;
     }
 }
 

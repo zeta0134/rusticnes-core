@@ -11,6 +11,9 @@ pub struct Flags {
     pub interrupts_disabled: bool,
     pub overflow: bool,
     pub negative: bool,
+
+    // internal only
+    pub last_nmi: bool,
 }
 
 #[derive(Copy, Clone)]
@@ -38,6 +41,7 @@ impl Registers {
                 decimal: false,
                 overflow: false,
                 negative: false,
+                last_nmi: false,
             }
         }
     }
@@ -580,7 +584,33 @@ fn indirect_indexed_y(nes: &mut NesState) -> u16 {
     return address as u16;
 }
 
+pub fn nmi_signal(nes: &NesState) -> bool {
+    return ((nes.ppu.control & 0x80) & (nes.ppu.status & 0x80)) != 0;
+}
+
+pub fn service_nmi(nes: &mut NesState) {
+    // Push PC and processor status to stack
+    let pc_high = (nes.registers.pc & 0xFF00 >> 8) as u8;
+    let pc_low =  (nes.registers.pc & 0x00FF) as u8;
+    push(nes, pc_high);
+    push(nes, pc_low);
+    let status_byte = status_as_byte(&mut nes.registers, false);
+    push(nes, status_byte);
+    // Set PC to NMI interrupt vector at FFFA/FFFB
+    nes.registers.pc = read_byte(nes, 0xFFFA) as u16 + ((read_byte(nes, 0xFFFB) as u16) << 8);
+}
+
 pub fn process_instruction(nes: &mut NesState) {
+    // Are conditions ripe for an NMI? Then do that instead.
+    let current_nmi = nmi_signal(&nes);
+    let last_nmi = nes.registers.flags.last_nmi;
+    nes.registers.flags.last_nmi = current_nmi;
+    if current_nmi && !last_nmi {
+        service_nmi(nes);
+        nes.registers.flags.last_nmi = current_nmi;
+        return;
+    }
+
     let pc = nes.registers.pc;
     let opcode = read_byte(nes, pc);
     nes.registers.pc = nes.registers.pc.wrapping_add(1);
