@@ -144,3 +144,13 @@ impl PpuState {
         memory.ppu_status = (memory.ppu_status & 0x7F) + 0x80;
     }
 }
+
+// Given a pattern and tile / pixel coordinates, decodes the palette index and returns it
+// (Palette index will be between 0 .. 3)
+pub fn decode_chr_pixel(pattern: &[u8], tile: u8, pixel_x: u8, pixel_y: u8) -> u8 {
+    let low_addr = (tile as u16) * 16 + (pixel_y as u16);
+    let high_addr = low_addr + 8;
+    let low_bit = pattern[low_addr as usize] >> (7 - pixel_x) & 0x1;
+    let high_bit = pattern[high_addr as usize] >> (7 - pixel_x) & 0x1;
+    return (high_bit << 1) + low_bit;
+}

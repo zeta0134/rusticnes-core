@@ -50,6 +50,25 @@ impl Default for NesHeader {
     }
 }
 
+fn generate_debug_chr_pattern(pattern: &[u8], buffer: &mut ImageBuffer<Rgba<u8>, Vec<u8>>) {
+    let debug_pallete: [u8; 4] = [255, 192, 128, 0];
+    for x in 0 .. 16 {
+        for y in 0 .. 16 {
+            let tile = y * 16 + x;
+            for px in 0 .. 8 {
+                for py in 0 .. 8 {
+                    let palette_index = ppu::decode_chr_pixel(pattern, tile as u8, px as u8, py as u8);
+                    buffer.put_pixel(x * 8 + px, y * 8 + py, Rgba { data: [
+                        debug_pallete[palette_index as usize],
+                        debug_pallete[palette_index as usize],
+                        debug_pallete[palette_index as usize],
+                        255] });
+                }
+            }
+        }
+    }
+}
+
 fn print_program_state(console: &mut pancurses::Window, nes: &mut NesState) {
     let registers = nes.registers;
     console.printw(&format!("A: 0x{:02X} X: 0x{:02X} Y: 0x{:02X}\n", registers.a, registers.x, registers.y));
@@ -188,6 +207,15 @@ fn main() {
         &texture_settings
     ).unwrap();
 
+    let mut pattern_0_buffer = ImageBuffer::new(128, 128);
+    let mut pattern_1_buffer = ImageBuffer::new(128, 128);
+    generate_debug_chr_pattern(&nes.ppu.pattern_0, &mut pattern_0_buffer);
+    generate_debug_chr_pattern(&nes.ppu.pattern_1, &mut pattern_1_buffer);
+    let mut pattern_0_texture = Texture::from_image(&mut window.factory, &pattern_0_buffer,
+        &texture_settings).unwrap();
+    let mut pattern_1_texture = Texture::from_image(&mut window.factory, &pattern_1_buffer,
+        &texture_settings).unwrap();
+
     let mut thingy = 0;
 
     //while !exit {
@@ -220,6 +248,11 @@ fn main() {
             let pal_transform = base_transform.trans(256.0, 0.0).scale(16.0, 16.0);
             image(&screen_texture, base_transform, graphics);
             image(&pal_texture, pal_transform, graphics);
+
+            let pattern_0_transform = base_transform.trans(256.0, 64.0);
+            let pattern_1_transform = base_transform.trans(256.0 + 128.0, 64.0);
+            image(&pattern_0_texture, pattern_0_transform, graphics);
+            image(&pattern_1_texture, pattern_1_transform, graphics);
             thingy = thingy + 1;
         });
     }
