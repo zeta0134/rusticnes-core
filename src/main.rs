@@ -7,6 +7,7 @@ use piston_window::*;
 mod cpu;
 mod nes;
 mod memory;
+mod palettes;
 mod ppu;
 
 use std::error::Error;
@@ -158,18 +159,40 @@ fn main() {
     let mut exit: bool = false;
     let mut cycles: u32 = 0;
 
-    let mut buffer = ImageBuffer::new(320, 240);
-    let mut texture = Texture::from_image(
+    // "Screen"
+    let mut texture_settings = TextureSettings::new()
+        .min(texture::Filter::Nearest)
+        .mag(texture::Filter::Nearest);
+
+    let mut screen_buffer = ImageBuffer::new(256, 240);
+    let mut screen_texture = Texture::from_image(
         &mut window.factory,
-        &buffer,
-        &TextureSettings::new()
+        &screen_buffer,
+        &texture_settings
+    ).unwrap();
+
+    let mut pal_buffer = ImageBuffer::new(16, 32);
+    for i in 0 .. 63 {
+        let x = i % 16;
+        let y = i >> 4;
+        let index = (i * 3) as usize;
+        pal_buffer.put_pixel(x, y, Rgba { data: [
+            palettes::ntsc_pal[index],
+            palettes::ntsc_pal[index + 1],
+            palettes::ntsc_pal[index + 2],
+            255] });
+    }
+    let mut pal_texture = Texture::from_image(
+        &mut window.factory,
+        &pal_buffer,
+        &texture_settings
     ).unwrap();
 
     let mut thingy = 0;
 
     //while !exit {
     while let Some(event) = window.next() {
-        texture.update(&mut window.encoder, &buffer);
+        screen_texture.update(&mut window.encoder, &screen_buffer);
         window.draw_2d(&event, |context, graphics| {
             console.clear();
             print_program_state(&mut console, &mut nes);
@@ -184,16 +207,19 @@ fn main() {
 
             clear([0.8; 4], graphics);
 
-            for x in 0 .. 320 {
+            for x in 0 .. 256 {
                 for y in 0 .. 240 {
-                    buffer.put_pixel(x, y, Rgba { data: [
+                    screen_buffer.put_pixel(x, y, Rgba { data: [
                         (x + thingy & 0xFF) as u8,
                         (y + thingy & 0xFF) as u8,
-                        ((x + y + thingy) & 0xFF) as u8,
+                        ((x ^ y ^ thingy) & 0xFF) as u8,
                         255] });
                 }
             }
-            image(&texture, context.transform, graphics);
+            let base_transform = context.transform.scale(2.0, 2.0);
+            let pal_transform = base_transform.trans(256.0, 0.0).scale(16.0, 16.0);
+            image(&screen_texture, base_transform, graphics);
+            image(&pal_texture, pal_transform, graphics);
             thingy = thingy + 1;
         });
     }
