@@ -1,5 +1,9 @@
 use memory::CpuMemory;
+use memory::write_byte;
+use memory::read_byte;
+use nes::NesState;
 
+#[derive(Copy, Clone)]
 pub struct Flags {
     pub carry: bool,
     pub zero: bool,
@@ -9,6 +13,7 @@ pub struct Flags {
     pub negative: bool,
 }
 
+#[derive(Copy, Clone)]
 pub struct Registers {
     pub a: u8,
     pub x: u8,
@@ -18,17 +23,39 @@ pub struct Registers {
     pub flags: Flags,
 }
 
+impl Registers {
+    pub fn new() -> Registers {
+        return Registers {
+            a: 0,
+            x: 0,
+            y: 0,
+            pc: 0,
+            s: 0,
+            flags: Flags {
+                carry: false,
+                zero: false,
+                interrupts_disabled: false,
+                decimal: false,
+                overflow: false,
+                negative: false,
+            }
+        }
+    }
+}
+
 // Initial reference implementation based on http://obelisk.me.uk/6502/reference.html
 
 // Memory Utilities
-fn push(registers: &mut Registers, memory: &mut CpuMemory, data: u8) {
-    memory.write_byte((registers.s as u16) + 0x0100, data);
-    registers.s = registers.s.wrapping_sub(1);
+fn push(nes: &mut NesState, data: u8) {
+    let address = (nes.registers.s as u16) + 0x0100;
+    write_byte(nes, address, data);
+    nes.registers.s = nes.registers.s.wrapping_sub(1);
 }
 
-fn pop(registers: &mut Registers, memory: &mut CpuMemory) -> u8 {
-    registers.s = registers.s.wrapping_add(1);
-    return memory.read_byte((registers.s as u16) + 0x0100);
+fn pop(nes: &mut NesState) -> u8 {
+    nes.registers.s = nes.registers.s.wrapping_add(1);
+    let address = (nes.registers.s as u16) + 0x0100;
+    return read_byte(nes, address);
 }
 
 fn status_as_byte(registers: &mut Registers, s_flag: bool) -> u8 {
@@ -145,16 +172,16 @@ fn bit(registers: &mut Registers, data: u8) {
     registers.flags.negative = result & 0x80 != 0;
 }
 
-fn brk(registers: &mut Registers, memory: &mut CpuMemory) {
+fn brk(nes: &mut NesState) {
     // Push PC and processor status to stack
-    let pc_high = (registers.pc & 0xFF00 >> 8) as u8;
-    let pc_low =  (registers.pc & 0x00FF) as u8;
-    push(registers, memory, pc_high);
-    push(registers, memory, pc_low);
-    let status_byte = status_as_byte(registers, true);
-    push(registers, memory, status_byte);
+    let pc_high = (nes.registers.pc & 0xFF00 >> 8) as u8;
+    let pc_low =  (nes.registers.pc & 0x00FF) as u8;
+    push(nes, pc_high);
+    push(nes, pc_low);
+    let status_byte = status_as_byte(&mut nes.registers, true);
+    push(nes, status_byte);
     // Set PC to interrupt vector at FFFE/FFFF
-    registers.pc = memory.read_byte(0xFFFE) as u16 + ((memory.read_byte(0xFFFF) as u16) << 8);
+    nes.registers.pc = read_byte(nes, 0xFFFE) as u16 + ((read_byte(nes, 0xFFFF) as u16) << 8);
 }
 
 // Clear carry flag
@@ -258,13 +285,13 @@ fn jmp(registers: &mut Registers, address: u16) {
 }
 
 // Jump to Subroutine
-fn jsr(registers: &mut Registers, memory: &mut CpuMemory, address: u16) {
-    let return_address = registers.pc.wrapping_sub(1);
+fn jsr(nes: &mut NesState, address: u16) {
+    let return_address = nes.registers.pc.wrapping_sub(1);
     let addr_high = (return_address & 0xFF00 >> 8) as u8;
     let addr_low =  (return_address & 0x00FF) as u8;
-    push(registers, memory, addr_high);
-    push(registers, memory, addr_low);
-    registers.pc = address;
+    push(nes, addr_high);
+    push(nes, addr_low);
+    nes.registers.pc = address;
 }
 
 // Load Accumulator
@@ -308,26 +335,26 @@ fn ora(registers: &mut Registers, data: u8) {
 }
 
 // Push Accumulator
-fn pha(registers: &mut Registers, memory: &mut CpuMemory) {
-    let a = registers.a;
-    push(registers, memory, a);
+fn pha(nes: &mut NesState) {
+    let a = nes.registers.a;
+    push(nes, a);
 }
 
 // Push Processor Status
-fn php(registers: &mut Registers, memory: &mut CpuMemory) {
-    let processor_status = status_as_byte(registers, false);
-    push(registers, memory, processor_status);
+fn php(nes: &mut NesState) {
+    let processor_status = status_as_byte(&mut nes.registers, false);
+    push(nes, processor_status);
 }
 
 // Pull Accumulator
-fn pla(registers: &mut Registers, memory: &mut CpuMemory) {
-    registers.a = pop(registers, memory);
+fn pla(nes: &mut NesState) {
+    nes.registers.a = pop(nes);
 }
 
 // Pull Procesor Status
-fn plp(registers: &mut Registers, memory: &mut CpuMemory) {
-    let processor_status = pop(registers, memory);
-    set_status_from_byte(registers, processor_status);
+fn plp(nes: &mut NesState) {
+    let processor_status = pop(nes);
+    set_status_from_byte(&mut nes.registers, processor_status);
 }
 
 // Rotate left
@@ -351,21 +378,21 @@ fn ror(registers: &mut Registers, data: u8) -> u8 {
 }
 
 // Return from Interrupt
-fn rti(registers: &mut Registers, memory: &mut CpuMemory) {
-    let status_byte = pop(registers, memory);
-    set_status_from_byte(registers, status_byte);
-    let pc_low = pop(registers, memory) as u16;
-    let pc_high = pop(registers, memory) as u16;
+fn rti(nes: &mut NesState) {
+    let status_byte = pop(nes);
+    set_status_from_byte(&mut nes.registers, status_byte);
+    let pc_low = pop(nes) as u16;
+    let pc_high = pop(nes) as u16;
     let pc = (pc_high << 8) + pc_low;
-    registers.pc = pc;
+    nes.registers.pc = pc;
 }
 
 // Return from Subroutine
-fn rts(registers: &mut Registers, memory: &mut CpuMemory) {
-    let pc_low = pop(registers, memory) as u16;
-    let pc_high = pop(registers, memory) as u16;
+fn rts(nes: &mut NesState) {
+    let pc_low = pop(nes) as u16;
+    let pc_high = pop(nes) as u16;
     let pc = (pc_high << 8) + pc_low;
-    registers.pc = pc.wrapping_add(1);
+    nes.registers.pc = pc.wrapping_add(1);
 }
 
 // Subtract with Carry
@@ -456,595 +483,715 @@ fn immediate(registers: &mut Registers) -> u16 {
     return address as u16;
 }
 
-fn zero_page(registers: &mut Registers, memory: &mut CpuMemory) -> u16 {
-    let offset = memory.read_byte(registers.pc);
-    registers.pc = registers.pc.wrapping_add(1);
+fn zero_page(nes: &mut NesState) -> u16 {
+    let pc = nes.registers.pc;
+    let offset = read_byte(nes, pc);
+    nes.registers.pc = nes.registers.pc.wrapping_add(1);
     return offset as u16;
 }
 
-fn zero_x(registers: &mut Registers, memory: &mut  CpuMemory) -> u16 {
-    let offset = memory.read_byte(registers.pc).wrapping_add(registers.x);
-    registers.pc = registers.pc.wrapping_add(1);
+fn zero_x(nes: &mut NesState) -> u16 {
+    let pc = nes.registers.pc;
+    let offset = read_byte(nes, pc).wrapping_add(nes.registers.x);
+    nes.registers.pc = nes.registers.pc.wrapping_add(1);
     return offset as u16;
 }
 
-fn zero_y(registers: &mut Registers, memory: &mut CpuMemory) -> u16 {
-    let offset = memory.read_byte(registers.pc).wrapping_add(registers.y);
-    registers.pc = registers.pc.wrapping_add(1);
+fn zero_y(nes: &mut NesState) -> u16 {
+    let pc = nes.registers.pc;
+    let offset = read_byte(nes, pc).wrapping_add(nes.registers.y);
+    nes.registers.pc = nes.registers.pc.wrapping_add(1);
     return offset as u16;
 }
 
-fn absolute(registers: &mut Registers, memory: &mut CpuMemory) -> u16 {
-    let address_low = memory.read_byte(registers.pc);
-    registers.pc = registers.pc.wrapping_add(1);
-    let address_high = memory.read_byte(registers.pc);
-    registers.pc = registers.pc.wrapping_add(1);
+fn absolute(nes: &mut NesState) -> u16 {
+    let mut pc = nes.registers.pc;
+    let address_low = read_byte(nes, pc);
+    nes.registers.pc = nes.registers.pc.wrapping_add(1);
+    pc = nes.registers.pc;
+    let address_high = read_byte(nes, pc);
+    nes.registers.pc = nes.registers.pc.wrapping_add(1);
     let address = ((address_high as u16) << 8) + (address_low as u16);
     return address as u16;
 }
 
-fn absolute_x(registers: &mut Registers, memory: &mut  CpuMemory) -> u16 {
-    let address_low =memory.read_byte(registers.pc);
-    registers.pc = registers.pc.wrapping_add(1);
-    let address_high = memory.read_byte(registers.pc);
-    registers.pc = registers.pc.wrapping_add(1);
+fn absolute_x(nes: &mut NesState) -> u16 {
+    let mut pc = nes.registers.pc;
+    let address_low =read_byte(nes, pc);
+    nes.registers.pc = nes.registers.pc.wrapping_add(1);
+    pc = nes.registers.pc;
+    let address_high = read_byte(nes, pc);
+    nes.registers.pc = nes.registers.pc.wrapping_add(1);
     let mut address = ((address_high as u16) << 8) + (address_low as u16);
-    address = address.wrapping_add(registers.x as u16);
+    address = address.wrapping_add(nes.registers.x as u16);
     return address as u16;
 }
 
-fn absolute_y(registers: &mut Registers, memory: &mut  CpuMemory) -> u16 {
-    let address_low = memory.read_byte(registers.pc);
-    registers.pc = registers.pc.wrapping_add(1);
-    let address_high = memory.read_byte(registers.pc);
-    registers.pc = registers.pc.wrapping_add(1);
+fn absolute_y(nes: &mut NesState) -> u16 {
+    let mut pc = nes.registers.pc;
+    let address_low = read_byte(nes, pc);
+    nes.registers.pc = nes.registers.pc.wrapping_add(1);
+    pc = nes.registers.pc;
+    let address_high = read_byte(nes, pc);
+    nes.registers.pc = nes.registers.pc.wrapping_add(1);
     let mut address = ((address_high as u16) << 8) + (address_low as u16);
-    address = address.wrapping_add(registers.y as u16);
+    address = address.wrapping_add(nes.registers.y as u16);
     return address as u16;
 }
 
 // Only used by jump
-fn indirect(registers: &mut Registers, memory: &mut CpuMemory) -> u16 {
-    let indirect_low = memory.read_byte(registers.pc);
-    registers.pc = registers.pc.wrapping_add(1);
-    let indirect_high = memory.read_byte(registers.pc);
-    registers.pc = registers.pc.wrapping_add(1);
+fn indirect(nes: &mut NesState) -> u16 {
+    let mut pc = nes.registers.pc;
+    let indirect_low = read_byte(nes, pc);
+    nes.registers.pc = nes.registers.pc.wrapping_add(1);
+    pc = nes.registers.pc;
+    let indirect_high = read_byte(nes, pc);
+    nes.registers.pc = nes.registers.pc.wrapping_add(1);
     let mut indirect_address = ((indirect_high as u16) << 8) + (indirect_low as u16);
 
-    let address_low = memory.read_byte(indirect_address);
+    let address_low = read_byte(nes, indirect_address);
     indirect_address = indirect_address.wrapping_add(1);
-    let address_high = memory.read_byte(indirect_address);
+    let address_high = read_byte(nes, indirect_address);
     let address = ((address_high as u16) << 8) + (address_low as u16);
 
     return address as u16;
 }
 
-fn indexed_indirect_x(registers: &mut Registers, memory: &mut  CpuMemory) -> u16 {
-    let mut table_address = memory.read_byte(registers.pc).wrapping_add(registers.x);
-    registers.pc = registers.pc.wrapping_add(1);
-    let address_low = memory.read_byte(table_address as u16);
+fn indexed_indirect_x(nes: &mut NesState) -> u16 {
+    let pc = nes.registers.pc;
+    let mut table_address = read_byte(nes, pc).wrapping_add(nes.registers.x);
+    nes.registers.pc = nes.registers.pc.wrapping_add(1);
+    let address_low = read_byte(nes, table_address as u16);
     table_address = table_address.wrapping_add(1);
-    let address_high = memory.read_byte(table_address as u16);
+    let address_high = read_byte(nes, table_address as u16);
     let address = ((address_high as u16) << 8) + (address_low as u16);
     return address as u16;
 }
 
-fn indirect_indexed_y(registers: &mut Registers, memory: &mut CpuMemory) -> u16 {
-    let mut offset = memory.read_byte(registers.pc);
-    registers.pc = registers.pc.wrapping_add(1);
-    let address_low = memory.read_byte(offset as u16);
+fn indirect_indexed_y(nes: &mut NesState) -> u16 {
+    let pc = nes.registers.pc;
+    let mut offset = read_byte(nes, pc);
+    nes.registers.pc = nes.registers.pc.wrapping_add(1);
+    let address_low = read_byte(nes, offset as u16);
     offset = offset.wrapping_add(1);
-    let address_high = memory.read_byte(offset as u16);
+    let address_high = read_byte(nes, offset as u16);
     let mut address = ((address_high as u16) << 8) + (address_low as u16);
-    address = address.wrapping_add(registers.y as u16);
+    address = address.wrapping_add(nes.registers.y as u16);
     return address as u16;
 }
 
-pub fn process_instruction(registers: &mut Registers, memory: &mut CpuMemory) {
-    let opcode = memory.read_byte(registers.pc);
-    registers.pc = registers.pc.wrapping_add(1);
+pub fn process_instruction(nes: &mut NesState) {
+    let pc = nes.registers.pc;
+    let opcode = read_byte(nes, pc);
+    nes.registers.pc = nes.registers.pc.wrapping_add(1);
 
     match opcode {
         // Add with Carry
-        0x69 => { let address = immediate(registers);
-                  adc(registers, memory.read_byte(address))
+        0x69 => { let address = immediate(&mut nes.registers);
+                  let byte = read_byte(nes, address);
+                  adc(&mut nes.registers, byte)
         },
-        0x65 => { let address = zero_page(registers, memory);
-                  adc(registers, memory.read_byte(address))
+        0x65 => { let address = zero_page(nes);
+                  let byte = read_byte(nes, address);
+                  adc(&mut nes.registers, byte)
         },
-        0x75 => { let address = zero_x(registers, memory);
-                  adc(registers, memory.read_byte(address))
+        0x75 => { let address = zero_x(nes);
+                  let byte = read_byte(nes, address);
+                  adc(&mut nes.registers, byte)
         },
-        0x6D => { let address = absolute(registers, memory);
-                  adc(registers, memory.read_byte(address))
+        0x6D => { let address = absolute(nes);
+                  let byte = read_byte(nes, address);
+                  adc(&mut nes.registers, byte)
         },
-        0x7D => { let address = absolute_x(registers, memory);
-                  adc(registers, memory.read_byte(address))
+        0x7D => { let address = absolute_x(nes);
+                  let byte = read_byte(nes, address);
+                  adc(&mut nes.registers, byte)
         },
-        0x79 => { let address = absolute_y(registers, memory);
-                  adc(registers, memory.read_byte(address))
+        0x79 => { let address = absolute_y(nes);
+                  let byte = read_byte(nes, address);
+                  adc(&mut nes.registers, byte)
         },
-        0x61 => { let address = indexed_indirect_x(registers, memory);
-                  adc(registers, memory.read_byte(address))
+        0x61 => { let address = indexed_indirect_x(nes);
+                  let byte = read_byte(nes, address);
+                  adc(&mut nes.registers, byte)
         },
-        0x71 => { let address = indirect_indexed_y(registers, memory);
-                  adc(registers, memory.read_byte(address))
+        0x71 => { let address = indirect_indexed_y(nes);
+                  let byte = read_byte(nes, address);
+                  adc(&mut nes.registers, byte)
         },
 
         // Logical AND
-        0x29 => { let address = immediate(registers);
-                  and(registers, memory.read_byte(address))
+        0x29 => { let address = immediate(&mut nes.registers);
+                  let byte = read_byte(nes, address);
+                  and(&mut nes.registers, byte)
         },
-        0x25 => { let address = zero_page(registers, memory);
-                  and(registers, memory.read_byte(address))
+        0x25 => { let address = zero_page(nes);
+                  let byte = read_byte(nes, address);
+                  and(&mut nes.registers, byte)
         },
-        0x35 => { let address = zero_x(registers, memory);
-                  and(registers, memory.read_byte(address))
+        0x35 => { let address = zero_x(nes);
+                  let byte = read_byte(nes, address);
+                  and(&mut nes.registers, byte)
         },
-        0x2D => { let address = absolute(registers, memory);
-                  and(registers, memory.read_byte(address))
+        0x2D => { let address = absolute(nes);
+                  let byte = read_byte(nes, address);
+                  and(&mut nes.registers, byte)
         },
-        0x3D => { let address = absolute_x(registers, memory);
-                  and(registers, memory.read_byte(address))
+        0x3D => { let address = absolute_x(nes);
+                  let byte = read_byte(nes, address);
+                  and(&mut nes.registers, byte)
         },
-        0x39 => { let address = absolute_y(registers, memory);
-                  and(registers, memory.read_byte(address))
+        0x39 => { let address = absolute_y(nes);
+                  let byte = read_byte(nes, address);
+                  and(&mut nes.registers, byte)
         },
-        0x21 => { let address = indexed_indirect_x(registers, memory);
-                  and(registers, memory.read_byte(address))
+        0x21 => { let address = indexed_indirect_x(nes);
+                  let byte = read_byte(nes, address);
+                  and(&mut nes.registers, byte)
         },
-        0x31 => { let address = indirect_indexed_y(registers, memory);
-                  and(registers, memory.read_byte(address))
+        0x31 => { let address = indirect_indexed_y(nes);
+                  let byte = read_byte(nes, address);
+                  and(&mut nes.registers, byte)
         },
 
         // Arithmetic Shift Left
-        0x0A => { let value = registers.a;
-                  registers.a = asl(registers, value)
+        0x0A => { let value = nes.registers.a;
+                  nes.registers.a = asl(&mut nes.registers, value)
         },
-        0x06 => { let address = zero_page(registers, memory);
-                  let result = asl(registers, memory.read_byte(address));
-                  memory.write_byte(address, result);
+        0x06 => { let address = zero_page(nes);
+                  let byte = read_byte(nes, address);
+                  let result = asl(&mut nes.registers, byte);
+                  write_byte(nes, address, result);
         },
-        0x16 => { let address = zero_x(registers, memory);
-                  let result = asl(registers, memory.read_byte(address));
-                  memory.write_byte(address, result);
+        0x16 => { let address = zero_x(nes);
+                  let byte = read_byte(nes, address);
+                  let result = asl(&mut nes.registers, byte);
+                  write_byte(nes, address, result);
         },
-        0x0E => { let address = absolute(registers, memory);
-                  let result = asl(registers, memory.read_byte(address));
-                  memory.write_byte(address, result);
+        0x0E => { let address = absolute(nes);
+                  let byte = read_byte(nes, address);
+                  let result = asl(&mut nes.registers, byte);
+                  write_byte(nes, address, result);
         },
-        0x1E => { let address = absolute_x(registers, memory);
-                  let result = asl(registers, memory.read_byte(address));
-                  memory.write_byte(address, result);
+        0x1E => { let address = absolute_x(nes);
+                  let byte = read_byte(nes, address);
+                  let result = asl(&mut nes.registers, byte);
+                  write_byte(nes, address, result);
         },
 
         // Branching
-        0x90 => { let address = immediate(registers);
-                  bcc(registers, memory.read_byte(address) as i8)
+        0x90 => { let address = immediate(&mut nes.registers);
+                  let byte = read_byte(nes, address);
+                  bcc(&mut nes.registers, byte as i8)
         },
-        0xB0 => { let address = immediate(registers);
-                  bcs(registers, memory.read_byte(address) as i8)
+        0xB0 => { let address = immediate(&mut nes.registers);
+                  let byte = read_byte(nes, address);
+                  bcs(&mut nes.registers, byte as i8)
         },
-        0xF0 => { let address = immediate(registers);
-                  beq(registers, memory.read_byte(address) as i8)
+        0xF0 => { let address = immediate(&mut nes.registers);
+                  let byte = read_byte(nes, address);
+                  beq(&mut nes.registers, byte as i8)
         },
-        0x30 => { let address = immediate(registers);
-                  bmi(registers, memory.read_byte(address) as i8)
+        0x30 => { let address = immediate(&mut nes.registers);
+                  let byte = read_byte(nes, address);
+                  bmi(&mut nes.registers, byte as i8)
         },
-        0xD0 => { let address = immediate(registers);
-                  bne(registers, memory.read_byte(address) as i8)
+        0xD0 => { let address = immediate(&mut nes.registers);
+                  let byte = read_byte(nes, address);
+                  bne(&mut nes.registers, byte as i8)
         },
-        0x10 => { let address = immediate(registers);
-                  bpl(registers, memory.read_byte(address) as i8)
+        0x10 => { let address = immediate(&mut nes.registers);
+                  let byte = read_byte(nes, address);
+                  bpl(&mut nes.registers, byte as i8)
         },
-        0x50 => { let address = immediate(registers);
-                  bvc(registers, memory.read_byte(address) as i8)
+        0x50 => { let address = immediate(&mut nes.registers);
+                  let byte = read_byte(nes, address);
+                  bvc(&mut nes.registers, byte as i8)
         },
-        0x70 => { let address = immediate(registers);
-                  bvs(registers, memory.read_byte(address) as i8)
+        0x70 => { let address = immediate(&mut nes.registers);
+                  let byte = read_byte(nes, address);
+                  bvs(&mut nes.registers, byte as i8)
         },
 
         // Bit Test
-        0x24 => { let address = zero_page(registers, memory);
-                  bit(registers, memory.read_byte(address))
+        0x24 => { let address = zero_page(nes);
+                  let byte = read_byte(nes, address);
+                  bit(&mut nes.registers, byte)
         },
-        0x2C => { let address = absolute(registers, memory);
-                  bit(registers, memory.read_byte(address))
+        0x2C => { let address = absolute(nes);
+                  let byte = read_byte(nes, address);
+                  bit(&mut nes.registers, byte)
         },
 
         // Break - Force Interrupt
-        0x00 => brk(registers, memory),
+        0x00 => brk(nes),
 
         // Clear Flags
-        0x18 => clc(registers),
-        0xD8 => cld(registers),
-        0x58 => cli(registers),
-        0xB8 => clv(registers),
+        0x18 => clc(&mut nes.registers),
+        0xD8 => cld(&mut nes.registers),
+        0x58 => cli(&mut nes.registers),
+        0xB8 => clv(&mut nes.registers),
 
         // Compare
-        0xC9 => { let address = immediate(registers);
-                  cmp(registers, memory.read_byte(address))
+        0xC9 => { let address = immediate(&mut nes.registers);
+                  let byte = read_byte(nes, address);
+                  cmp(&mut nes.registers, byte)
         },
-        0xC5 => { let address = zero_page(registers, memory);
-                  cmp(registers, memory.read_byte(address))
+        0xC5 => { let address = zero_page(nes);
+                  let byte = read_byte(nes, address);
+                  cmp(&mut nes.registers, byte)
         },
-        0xD5 => { let address = zero_x(registers, memory);
-                  cmp(registers, memory.read_byte(address))
+        0xD5 => { let address = zero_x(nes);
+                  let byte = read_byte(nes, address);
+                  cmp(&mut nes.registers, byte)
         },
-        0xCD => { let address = absolute(registers, memory);
-                  cmp(registers, memory.read_byte(address))
+        0xCD => { let address = absolute(nes);
+                  let byte = read_byte(nes, address);
+                  cmp(&mut nes.registers, byte)
         },
-        0xDD => { let address = absolute_x(registers, memory);
-                  cmp(registers, memory.read_byte(address))
+        0xDD => { let address = absolute_x(nes);
+                  let byte = read_byte(nes, address);
+                  cmp(&mut nes.registers, byte)
         },
-        0xD9 => { let address = absolute_y(registers, memory);
-                  cmp(registers, memory.read_byte(address))
+        0xD9 => { let address = absolute_y(nes);
+                  let byte = read_byte(nes, address);
+                  cmp(&mut nes.registers, byte)
         },
-        0xC1 => { let address = indexed_indirect_x(registers, memory);
-                  cmp(registers, memory.read_byte(address))
+        0xC1 => { let address = indexed_indirect_x(nes);
+                  let byte = read_byte(nes, address);
+                  cmp(&mut nes.registers, byte)
         },
-        0xD1 => { let address = indirect_indexed_y(registers, memory);
-                  cmp(registers, memory.read_byte(address))
+        0xD1 => { let address = indirect_indexed_y(nes);
+                  let byte = read_byte(nes, address);
+                  cmp(&mut nes.registers, byte)
         },
 
         // Compare X
-        0xE0 => { let address = immediate(registers);
-                  cpx(registers, memory.read_byte(address))
+        0xE0 => { let address = immediate(&mut nes.registers);
+                  let byte = read_byte(nes, address);
+                  cpx(&mut nes.registers, byte)
         },
-        0xE4 => { let address = zero_page(registers, memory);
-                  cpx(registers, memory.read_byte(address))
+        0xE4 => { let address = zero_page(nes);
+                  let byte = read_byte(nes, address);
+                  cpx(&mut nes.registers, byte)
         },
-        0xEC => { let address = absolute(registers, memory);
-                  cpx(registers, memory.read_byte(address))
+        0xEC => { let address = absolute(nes);
+                  let byte = read_byte(nes, address);
+                  cpx(&mut nes.registers, byte)
         },
 
         // Compare Y
-        0xC0 => { let address = immediate(registers);
-                  cpy(registers, memory.read_byte(address))
+        0xC0 => { let address = immediate(&mut nes.registers);
+                  let byte = read_byte(nes, address);
+                  cpy(&mut nes.registers, byte)
         },
-        0xC4 => { let address = zero_page(registers, memory);
-                  cpy(registers, memory.read_byte(address))
+        0xC4 => { let address = zero_page(nes);
+                  let byte = read_byte(nes, address);
+                  cpy(&mut nes.registers, byte)
         },
-        0xCC => { let address = absolute(registers, memory);
-                  cpy(registers, memory.read_byte(address))
+        0xCC => { let address = absolute(nes);
+                  let byte = read_byte(nes, address);
+                  cpy(&mut nes.registers, byte)
         },
 
         // Decrement
-        0xC6 => { let address = zero_page(registers, memory);
-                  let result = dec(registers, memory.read_byte(address));
-                  memory.write_byte(address, result);
+        0xC6 => { let address = zero_page(nes);
+                  let byte = read_byte(nes, address);
+                  let result = dec(&mut nes.registers, byte);
+                  write_byte(nes, address, result);
         },
-        0xD6 => { let address = zero_x(registers, memory);
-                  let result = dec(registers, memory.read_byte(address));
-                  memory.write_byte(address, result);
+        0xD6 => { let address = zero_x(nes);
+                  let byte = read_byte(nes, address);
+                  let result = dec(&mut nes.registers, byte);
+                  write_byte(nes, address, result);
         },
-        0xCE => { let address = absolute(registers, memory);
-                  let result = dec(registers, memory.read_byte(address));
-                  memory.write_byte(address, result);
+        0xCE => { let address = absolute(nes);
+                  let byte = read_byte(nes, address);
+                  let result = dec(&mut nes.registers, byte);
+                  write_byte(nes, address, result);
         },
-        0xDE => { let address = absolute_x(registers, memory);
-                  let result = dec(registers, memory.read_byte(address));
-                  memory.write_byte(address, result);
+        0xDE => { let address = absolute_x(nes);
+                  let byte = read_byte(nes, address);
+                  let result = dec(&mut nes.registers, byte);
+                  write_byte(nes, address, result);
         },
-        0xCA => dex(registers),
-        0x88 => dey(registers),
+        0xCA => dex(&mut nes.registers),
+        0x88 => dey(&mut nes.registers),
 
         // Logical Exclusive OR
-        0x49 => { let address = immediate(registers);
-                  eor(registers, memory.read_byte(address))
+        0x49 => { let address = immediate(&mut nes.registers);
+                  let byte = read_byte(nes, address);
+                  eor(&mut nes.registers, byte)
         },
-        0x45 => { let address = zero_page(registers, memory);
-                  eor(registers, memory.read_byte(address))
+        0x45 => { let address = zero_page(nes);
+                  let byte = read_byte(nes, address);
+                  eor(&mut nes.registers, byte)
         },
-        0x55 => { let address = zero_x(registers, memory);
-                  eor(registers, memory.read_byte(address))
+        0x55 => { let address = zero_x(nes);
+                  let byte = read_byte(nes, address);
+                  eor(&mut nes.registers, byte)
         },
-        0x4D => { let address = absolute(registers, memory);
-                  eor(registers, memory.read_byte(address))
+        0x4D => { let address = absolute(nes);
+                  let byte = read_byte(nes, address);
+                  eor(&mut nes.registers, byte)
         },
-        0x5D => { let address = absolute_x(registers, memory);
-                  eor(registers, memory.read_byte(address))
+        0x5D => { let address = absolute_x(nes);
+                  let byte = read_byte(nes, address);
+                  eor(&mut nes.registers, byte)
         },
-        0x59 => { let address = absolute_y(registers, memory);
-                  eor(registers, memory.read_byte(address))
+        0x59 => { let address = absolute_y(nes);
+                  let byte = read_byte(nes, address);
+                  eor(&mut nes.registers, byte)
         },
-        0x41 => { let address = indexed_indirect_x(registers, memory);
-                  eor(registers, memory.read_byte(address))
+        0x41 => { let address = indexed_indirect_x(nes);
+                  let byte = read_byte(nes, address);
+                  eor(&mut nes.registers, byte)
         },
-        0x51 => { let address = indirect_indexed_y(registers, memory);
-                  eor(registers, memory.read_byte(address))
+        0x51 => { let address = indirect_indexed_y(nes);
+                  let byte = read_byte(nes, address);
+                  eor(&mut nes.registers, byte)
         },
 
         // Increment
-        0xE6 => { let address = zero_page(registers, memory);
-                  let result = inc(registers, memory.read_byte(address));
-                  memory.write_byte(address, result);
+        0xE6 => { let address = zero_page(nes);
+                  let byte = read_byte(nes, address);
+                  let result = inc(&mut nes.registers, byte);
+                  write_byte(nes, address, result);
         },
-        0xF6 => { let address = zero_x(registers, memory);
-                  let result = inc(registers, memory.read_byte(address));
-                  memory.write_byte(address, result);
+        0xF6 => { let address = zero_x(nes);
+                  let byte = read_byte(nes, address);
+                  let result = inc(&mut nes.registers, byte);
+                  write_byte(nes, address, result);
         },
-        0xEE => { let address = absolute(registers, memory);
-                  let result = inc(registers, memory.read_byte(address));
-                  memory.write_byte(address, result);
+        0xEE => { let address = absolute(nes);
+                  let byte = read_byte(nes, address);
+                  let result = inc(&mut nes.registers, byte);
+                  write_byte(nes, address, result);
         },
-        0xFE => { let address = absolute_x(registers, memory);
-                  let result = inc(registers, memory.read_byte(address));
-                  memory.write_byte(address, result);
+        0xFE => { let address = absolute_x(nes);
+                  let byte = read_byte(nes, address);
+                  let result = inc(&mut nes.registers, byte);
+                  write_byte(nes, address, result);
         },
-        0xE8 => inx(registers),
-        0xC8 => iny(registers),
+        0xE8 => inx(&mut nes.registers),
+        0xC8 => iny(&mut nes.registers),
 
         // Jump
-        0x4C => { let address = absolute(registers, memory);
-                  jmp(registers, address as u16)
+        0x4C => { let address = absolute(nes);
+                  jmp(&mut nes.registers, address as u16)
         },
-        0x6C => { let address = indirect(registers, memory);
-                  jmp(registers, address as u16)
+        0x6C => { let address = indirect(nes);
+                  jmp(&mut nes.registers, address as u16)
         },
 
         // Jump to Subroutine
-        0x20 => { let address = absolute(registers, memory);
-                  jsr(registers, memory, address as u16)
+        0x20 => { let address = absolute(nes);
+                  jsr(nes, address as u16)
         },
 
         // Load Accumulator
-        0xA9 => { let address = immediate(registers);
-                  lda(registers, memory.read_byte(address))
+        0xA9 => { let address = immediate(&mut nes.registers);
+                  let byte = read_byte(nes, address);
+                  lda(&mut nes.registers, byte)
         },
-        0xA5 => { let address = zero_page(registers, memory);
-                  lda(registers, memory.read_byte(address))
+        0xA5 => { let address = zero_page(nes);
+                  let byte = read_byte(nes, address);
+                  lda(&mut nes.registers, byte)
         },
-        0xB5 => { let address = zero_x(registers, memory);
-                  lda(registers, memory.read_byte(address))
+        0xB5 => { let address = zero_x(nes);
+                  let byte = read_byte(nes, address);
+                  lda(&mut nes.registers, byte)
         },
-        0xAD => { let address = absolute(registers, memory);
-                  lda(registers, memory.read_byte(address))
+        0xAD => { let address = absolute(nes);
+                  let byte = read_byte(nes, address);
+                  lda(&mut nes.registers, byte)
         },
-        0xBD => { let address = absolute_x(registers, memory);
-                  lda(registers, memory.read_byte(address))
+        0xBD => { let address = absolute_x(nes);
+                  let byte = read_byte(nes, address);
+                  lda(&mut nes.registers, byte)
         },
-        0xB9 => { let address = absolute_y(registers, memory);
-                  lda(registers, memory.read_byte(address))
+        0xB9 => { let address = absolute_y(nes);
+                  let byte = read_byte(nes, address);
+                  lda(&mut nes.registers, byte)
         },
-        0xA1 => { let address = indexed_indirect_x(registers, memory);
-                  lda(registers, memory.read_byte(address))
+        0xA1 => { let address = indexed_indirect_x(nes);
+                  let byte = read_byte(nes, address);
+                  lda(&mut nes.registers, byte)
         },
-        0xB1 => { let address = indirect_indexed_y(registers, memory);
-                  lda(registers, memory.read_byte(address))
+        0xB1 => { let address = indirect_indexed_y(nes);
+                  let byte = read_byte(nes, address);
+                  lda(&mut nes.registers, byte)
         },
 
         // Load X
-        0xA2 => { let address = immediate(registers);
-                  ldx(registers, memory.read_byte(address))
+        0xA2 => { let address = immediate(&mut nes.registers);
+                  let byte = read_byte(nes, address);
+                  ldx(&mut nes.registers, byte)
         },
-        0xA6 => { let address = zero_page(registers, memory);
-                  ldx(registers, memory.read_byte(address))
+        0xA6 => { let address = zero_page(nes);
+                  let byte = read_byte(nes, address);
+                  ldx(&mut nes.registers, byte)
         },
-        0xB6 => { let address = zero_y(registers, memory);
-                  ldx(registers, memory.read_byte(address))
+        0xB6 => { let address = zero_y(nes);
+                  let byte = read_byte(nes, address);
+                  ldx(&mut nes.registers, byte)
         },
-        0xAE => { let address = absolute(registers, memory);
-                  ldx(registers, memory.read_byte(address))
+        0xAE => { let address = absolute(nes);
+                  let byte = read_byte(nes, address);
+                  ldx(&mut nes.registers, byte)
         },
-        0xBE => { let address = absolute_y(registers, memory);
-                  ldx(registers, memory.read_byte(address))
+        0xBE => { let address = absolute_y(nes);
+                  let byte = read_byte(nes, address);
+                  ldx(&mut nes.registers, byte)
         },
 
         // Load Y
-        0xA0 => { let address = immediate(registers);
-                  ldy(registers, memory.read_byte(address))
+        0xA0 => { let address = immediate(&mut nes.registers);
+                  let byte = read_byte(nes, address);
+                  ldy(&mut nes.registers, byte)
         },
-        0xA4 => { let address = zero_page(registers, memory);
-                  ldy(registers, memory.read_byte(address))
+        0xA4 => { let address = zero_page(nes);
+                  let byte = read_byte(nes, address);
+                  ldy(&mut nes.registers, byte)
         },
-        0xB4 => { let address = zero_x(registers, memory);
-                  ldy(registers, memory.read_byte(address))
+        0xB4 => { let address = zero_x(nes);
+                  let byte = read_byte(nes, address);
+                  ldy(&mut nes.registers, byte)
         },
-        0xAC => { let address = absolute(registers, memory);
-                  ldy(registers, memory.read_byte(address))
+        0xAC => { let address = absolute(nes);
+                  let byte = read_byte(nes, address);
+                  ldy(&mut nes.registers, byte)
         },
-        0xBC => { let address = absolute_x(registers, memory);
-                  ldy(registers, memory.read_byte(address))
+        0xBC => { let address = absolute_x(nes);
+                  let byte = read_byte(nes, address);
+                  ldy(&mut nes.registers, byte)
         },
 
         // Logical Shift Right
-        0x4A => { let value = registers.a;
-                  registers.a = lsr(registers, value)
+        0x4A => { let value = nes.registers.a;
+                  nes.registers.a = lsr(&mut nes.registers, value)
         },
-        0x46 => { let address = zero_page(registers, memory);
-                  let result = lsr(registers, memory.read_byte(address));
-                  memory.write_byte(address, result);
+        0x46 => { let address = zero_page(nes);
+                  let byte = read_byte(nes, address);
+                  let result = lsr(&mut nes.registers, byte);
+                  write_byte(nes, address, result);
         },
-        0x56 => { let address = zero_x(registers, memory);
-                  let result = lsr(registers, memory.read_byte(address));
-                  memory.write_byte(address, result);
+        0x56 => { let address = zero_x(nes);
+                  let byte = read_byte(nes, address);
+                  let result = lsr(&mut nes.registers, byte);
+                  write_byte(nes, address, result);
         },
-        0x4E => { let address = absolute(registers, memory);
-                  let result = lsr(registers, memory.read_byte(address));
-                  memory.write_byte(address, result);
+        0x4E => { let address = absolute(nes);
+                  let byte = read_byte(nes, address);
+                  let result = lsr(&mut nes.registers, byte);
+                  write_byte(nes, address, result);
         },
-        0x5E => { let address = absolute_x(registers, memory);
-                  let result = lsr(registers, memory.read_byte(address));
-                  memory.write_byte(address, result);
+        0x5E => { let address = absolute_x(nes);
+                  let byte = read_byte(nes, address);
+                  let result = lsr(&mut nes.registers, byte);
+                  write_byte(nes, address, result);
         },
 
         // NOP!
         0xEA => nop(),
 
         // Logical Inclusive OR
-        0x09 => { let address = immediate(registers);
-                  ora(registers, memory.read_byte(address))
+        0x09 => { let address = immediate(&mut nes.registers);
+                  let byte = read_byte(nes, address);
+                  ora(&mut nes.registers, byte)
         },
-        0x05 => { let address = zero_page(registers, memory);
-                  ora(registers, memory.read_byte(address))
+        0x05 => { let address = zero_page(nes);
+                  let byte = read_byte(nes, address);
+                  ora(&mut nes.registers, byte)
         },
-        0x15 => { let address = zero_x(registers, memory);
-                  ora(registers, memory.read_byte(address))
+        0x15 => { let address = zero_x(nes);
+                  let byte = read_byte(nes, address);
+                  ora(&mut nes.registers, byte)
         },
-        0x0D => { let address = absolute(registers, memory);
-                  ora(registers, memory.read_byte(address))
+        0x0D => { let address = absolute(nes);
+                  let byte = read_byte(nes, address);
+                  ora(&mut nes.registers, byte)
         },
-        0x1D => { let address = absolute_x(registers, memory);
-                  ora(registers, memory.read_byte(address))
+        0x1D => { let address = absolute_x(nes);
+                  let byte = read_byte(nes, address);
+                  ora(&mut nes.registers, byte)
         },
-        0x19 => { let address = absolute_y(registers, memory);
-                  ora(registers, memory.read_byte(address))
+        0x19 => { let address = absolute_y(nes);
+                  let byte = read_byte(nes, address);
+                  ora(&mut nes.registers, byte)
         },
-        0x01 => { let address = indexed_indirect_x(registers, memory);
-                  ora(registers, memory.read_byte(address))
+        0x01 => { let address = indexed_indirect_x(nes);
+                  let byte = read_byte(nes, address);
+                  ora(&mut nes.registers, byte)
         },
-        0x11 => { let address = indirect_indexed_y(registers, memory);
-                  ora(registers, memory.read_byte(address))
+        0x11 => { let address = indirect_indexed_y(nes);
+                  let byte = read_byte(nes, address);
+                  ora(&mut nes.registers, byte)
         },
 
         // Push and Pop
-        0x48 => pha(registers, memory),
-        0x08 => php(registers, memory),
-        0x68 => pla(registers, memory),
-        0x28 => plp(registers, memory),
+        0x48 => pha(nes),
+        0x08 => php(nes),
+        0x68 => pla(nes),
+        0x28 => plp(nes),
 
         // Rotate Left
-        0x2A => { let value = registers.a;
-                  registers.a = rol(registers, value)
+        0x2A => { let value = nes.registers.a;
+                  nes.registers.a = rol(&mut nes.registers, value)
         },
-        0x26 => { let address = zero_page(registers, memory);
-                  let result = rol(registers, memory.read_byte(address));
-                  memory.write_byte(address, result);
+        0x26 => { let address = zero_page(nes);
+                  let byte = read_byte(nes, address);
+                  let result = rol(&mut nes.registers, byte);
+                  write_byte(nes, address, result);
         },
-        0x36 => { let address = zero_x(registers, memory);
-                  let result = rol(registers, memory.read_byte(address));
-                  memory.write_byte(address, result);
+        0x36 => { let address = zero_x(nes);
+                  let byte = read_byte(nes, address);
+                  let result = rol(&mut nes.registers, byte);
+                  write_byte(nes, address, result);
         },
-        0x2E => { let address = absolute(registers, memory);
-                  let result = rol(registers, memory.read_byte(address));
-                  memory.write_byte(address, result);
+        0x2E => { let address = absolute(nes);
+                  let byte = read_byte(nes, address);
+                  let result = rol(&mut nes.registers, byte);
+                  write_byte(nes, address, result);
         },
-        0x3E => { let address = absolute_x(registers, memory);
-                  let result = rol(registers, memory.read_byte(address));
-                  memory.write_byte(address, result);
+        0x3E => { let address = absolute_x(nes);
+                  let byte = read_byte(nes, address);
+                  let result = rol(&mut nes.registers, byte);
+                  write_byte(nes, address, result);
         },
 
         // Rotate Right
-        0x6A => { let value = registers.a;
-                  registers.a = ror(registers, value)
+        0x6A => { let value = nes.registers.a;
+                  nes.registers.a = ror(&mut nes.registers, value)
         },
-        0x66 => { let address = zero_page(registers, memory);
-                  let result = ror(registers, memory.read_byte(address));
-                  memory.write_byte(address, result);
+        0x66 => { let address = zero_page(nes);
+                  let byte = read_byte(nes, address);
+                  let result = ror(&mut nes.registers, byte);
+                  write_byte(nes, address, result);
         },
-        0x76 => { let address = zero_x(registers, memory);
-                  let result = ror(registers, memory.read_byte(address));
-                  memory.write_byte(address, result);
+        0x76 => { let address = zero_x(nes);
+                  let byte = read_byte(nes, address);
+                  let result = ror(&mut nes.registers, byte);
+                  write_byte(nes, address, result);
         },
-        0x6E => { let address = absolute(registers, memory);
-                  let result = ror(registers, memory.read_byte(address));
-                  memory.write_byte(address, result);
+        0x6E => { let address = absolute(nes);
+                  let byte = read_byte(nes, address);
+                  let result = ror(&mut nes.registers, byte);
+                  write_byte(nes, address, result);
         },
-        0x7E => { let address = absolute_x(registers, memory);
-                  let result = ror(registers, memory.read_byte(address));
-                  memory.write_byte(address, result);
+        0x7E => { let address = absolute_x(nes);
+                  let byte = read_byte(nes, address);
+                  let result = ror(&mut nes.registers, byte);
+                  write_byte(nes, address, result);
         },
 
         // Returns
-        0x40 => rti(registers, memory),
-        0x60 => rts(registers, memory),
+        0x40 => rti(nes),
+        0x60 => rts(nes),
 
         // Subtract with Carry
-        0xE9 => { let address = immediate(registers);
-                  sbc(registers, memory.read_byte(address))
+        0xE9 => { let address = immediate(&mut nes.registers);
+                  let byte = read_byte(nes, address);
+                  sbc(&mut nes.registers, byte)
         },
-        0xE5 => { let address = zero_page(registers, memory);
-                  sbc(registers, memory.read_byte(address))
+        0xE5 => { let address = zero_page(nes);
+                  let byte = read_byte(nes, address);
+                  sbc(&mut nes.registers, byte)
         },
-        0xF5 => { let address = zero_x(registers, memory);
-                  sbc(registers, memory.read_byte(address))
+        0xF5 => { let address = zero_x(nes);
+                  let byte = read_byte(nes, address);
+                  sbc(&mut nes.registers, byte)
         },
-        0xED => { let address = absolute(registers, memory);
-                  sbc(registers, memory.read_byte(address))
+        0xED => { let address = absolute(nes);
+                  let byte = read_byte(nes, address);
+                  sbc(&mut nes.registers, byte)
         },
-        0xFD => { let address = absolute_x(registers, memory);
-                  sbc(registers, memory.read_byte(address))
+        0xFD => { let address = absolute_x(nes);
+                  let byte = read_byte(nes, address);
+                  sbc(&mut nes.registers, byte)
         },
-        0xF9 => { let address = absolute_y(registers, memory);
-                  sbc(registers, memory.read_byte(address))
+        0xF9 => { let address = absolute_y(nes);
+                  let byte = read_byte(nes, address);
+                  sbc(&mut nes.registers, byte)
         },
-        0xE1 => { let address = indexed_indirect_x(registers, memory);
-                  sbc(registers, memory.read_byte(address))
+        0xE1 => { let address = indexed_indirect_x(nes);
+                  let byte = read_byte(nes, address);
+                  sbc(&mut nes.registers, byte)
         },
-        0xF1 => { let address = indirect_indexed_y(registers, memory);
-                  sbc(registers, memory.read_byte(address))
+        0xF1 => { let address = indirect_indexed_y(nes);
+                  let byte = read_byte(nes, address);
+                  sbc(&mut nes.registers, byte)
         },
 
         // Set Flags
-        0x38 => sec(registers),
-        0xF8 => sed(registers),
-        0x78 => sei(registers),
+        0x38 => sec(&mut nes.registers),
+        0xF8 => sed(&mut nes.registers),
+        0x78 => sei(&mut nes.registers),
 
         // Store Accumulator
-        0x85 => { let address = zero_page(registers, memory);
-                  let result = sta(registers);
-                  memory.write_byte(address, result);
+        0x85 => { let address = zero_page(nes);
+                  let result = sta(&mut nes.registers);
+                  write_byte(nes, address, result);
         },
-        0x95 => { let address = zero_x(registers, memory);
-                  let result = sta(registers);
-                  memory.write_byte(address, result);
+        0x95 => { let address = zero_x(nes);
+                  let result = sta(&mut nes.registers);
+                  write_byte(nes, address, result);
         },
-        0x8D => { let address = absolute(registers, memory);
-                  let result = sta(registers);
-                  memory.write_byte(address, result);
+        0x8D => { let address = absolute(nes);
+                  let result = sta(&mut nes.registers);
+                  write_byte(nes, address, result);
         },
-        0x9D => { let address = absolute_x(registers, memory);
-                  let result = sta(registers);
-                  memory.write_byte(address, result);
+        0x9D => { let address = absolute_x(nes);
+                  let result = sta(&mut nes.registers);
+                  write_byte(nes, address, result);
         },
-        0x99 => { let address = absolute_y(registers, memory);
-                  let result = sta(registers);
-                  memory.write_byte(address, result);
+        0x99 => { let address = absolute_y(nes);
+                  let result = sta(&mut nes.registers);
+                  write_byte(nes, address, result);
         },
-        0x81 => { let address = indexed_indirect_x(registers, memory);
-                  let result = sta(registers);
-                  memory.write_byte(address, result);
+        0x81 => { let address = indexed_indirect_x(nes);
+                  let result = sta(&mut nes.registers);
+                  write_byte(nes, address, result);
         },
-        0x91 => { let address = indirect_indexed_y(registers, memory);
-                  let result = sta(registers);
-                  memory.write_byte(address, result);
+        0x91 => { let address = indirect_indexed_y(nes);
+                  let result = sta(&mut nes.registers);
+                  write_byte(nes, address, result);
         },
 
         // Store X
-        0x86 => { let address = zero_page(registers, memory);
-                  let result = stx(registers);
-                  memory.write_byte(address, result);
+        0x86 => { let address = zero_page(nes);
+                  let result = stx(&mut nes.registers);
+                  write_byte(nes, address, result);
         },
-        0x96 => { let address = zero_y(registers, memory);
-                  let result = stx(registers);
-                  memory.write_byte(address, result);
+        0x96 => { let address = zero_y(nes);
+                  let result = stx(&mut nes.registers);
+                  write_byte(nes, address, result);
         },
-        0x8E => { let address = absolute(registers, memory);
-                  let result = stx(registers);
-                  memory.write_byte(address, result);
+        0x8E => { let address = absolute(nes);
+                  let result = stx(&mut nes.registers);
+                  write_byte(nes, address, result);
         },
 
         // Store Y
-        0x84 => { let address = zero_page(registers, memory);
-                  let result = sty(registers);
-                  memory.write_byte(address, result);
+        0x84 => { let address = zero_page(nes);
+                  let result = sty(&mut nes.registers);
+                  write_byte(nes, address, result);
         },
-        0x94 => { let address = zero_x(registers, memory);
-                  let result = sty(registers);
-                  memory.write_byte(address, result);
+        0x94 => { let address = zero_x(nes);
+                  let result = sty(&mut nes.registers);
+                  write_byte(nes, address, result);
         },
-        0x8C => { let address = absolute(registers, memory);
-                  let result = sty(registers);
-                  memory.write_byte(address, result);
+        0x8C => { let address = absolute(nes);
+                  let result = sty(&mut nes.registers);
+                  write_byte(nes, address, result);
         },
 
-        0xAA => tax(registers),
-        0xA8 => tay(registers),
-        0xBA => tsx(registers),
-        0x8A => txa(registers),
-        0x9A => txs(registers),
-        0x98 => tya(registers),
+        0xAA => tax(&mut nes.registers),
+        0xA8 => tay(&mut nes.registers),
+        0xBA => tsx(&mut nes.registers),
+        0x8A => txa(&mut nes.registers),
+        0x9A => txs(&mut nes.registers),
+        0x98 => tya(&mut nes.registers),
 
         // Undefined Weirdness
         _ => println!("Undefined opcode: {:X}", opcode)

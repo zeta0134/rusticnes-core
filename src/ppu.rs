@@ -1,6 +1,146 @@
+use nes::NesState;
 use memory::CpuMemory;
 
-pub fn update(memory: &mut CpuMemory, cycles: u32) {
-    // Timing? Nah, just signal vblank every frame.
-    memory.ppu_status = (memory.ppu_status & 0x7F) + 0x80;
+// Note: For basic testing purposes, this is scanline-accurate. This should
+// later be rewritten with cycle-accurate logic once we're past proof of concept
+// and prototype stages.
+
+pub struct PpuState {
+    pub pattern_0: [u8; 0x1000],
+    pub pattern_1: [u8; 0x1000],
+    pub internal_vram: [u8; 0x800],
+    pub oam: [u8; 0x100],
+    pub palette: [u8; 0x20],
+
+    pub v_mirroring: bool,
+
+    // Internal
+    pub current_scanline: u16,
+    pub scanline_cycles: u32,
+    pub last_cycle: u32,
+
+    // Framebuffer
+    pub screen: [u8; 256 * 240],
+}
+
+impl PpuState {
+    pub fn new() -> PpuState {
+        return PpuState {
+           pattern_0: [0u8; 0x1000],
+           pattern_1: [0u8; 0x1000],
+           internal_vram: [0u8; 0x800],
+           oam: [0u8; 0x100],
+           palette: [0u8; 0x20],
+           v_mirroring: false,
+           current_scanline: 0,
+           scanline_cycles: 0,
+           last_cycle: 0,
+           screen: [0u8; 256 * 240],
+       };
+    }
+
+    pub fn read_byte(&mut self, address: u16) -> u8 {
+        let masked_address = address & 0x3FFF;
+        match masked_address {
+            0x0000 ... 0x0FFF => return self.pattern_0[(masked_address & 0x1000) as usize],
+            0x1000 ... 0x1FFF => return self.pattern_1[(masked_address & 0x1000) as usize],
+            // Nametable 0
+            0x2000 ... 0x23FF => return self.internal_vram[(masked_address & 0x3FF) as usize],
+            // Nametable 1
+            0x2400 ... 0x27FF => {
+                if self.v_mirroring {
+                    return self.internal_vram[((masked_address & 0x3FF) + 0x400) as usize];
+                } else {
+                    return self.internal_vram[(masked_address & 0x3FF) as usize];
+                }
+            },
+            // Nametable 2
+            0x2800 ... 0x2BFF => {
+                if self.v_mirroring {
+                    return self.internal_vram[(masked_address & 0x3FF) as usize];
+                } else {
+                    return self.internal_vram[((masked_address & 0x3FF) + 0x400) as usize];
+                }
+            },
+            0x2C00 ... 0x2FFF => return self.internal_vram[((masked_address & 0x3FF) + 0x400) as usize],
+            0x3000 ... 0x3EFF => return self.read_byte(masked_address - 0x1000),
+            0x3F00 ... 0x3FFF => {
+                let mut palette_address = masked_address & 0x1F;
+                // Weird background masking
+                if palette_address & 0x13 == 0x10 {
+                    palette_address = palette_address - 0x10;
+                }
+                return self.palette[palette_address as usize];
+            },
+            _ => return 0
+        }
+    }
+    pub fn write_byte(&mut self, address: u16, data: u8) {
+        let masked_address = address & 0x3FFF;
+        match masked_address {
+            0x0000 ... 0x0FFF => self.pattern_0[(masked_address & 0x1000) as usize] = data,
+            0x1000 ... 0x1FFF => self.pattern_1[(masked_address & 0x1000) as usize] = data,
+            // Nametable 0
+            0x2000 ... 0x23FF => self.internal_vram[(masked_address & 0x3FF) as usize] = data,
+            // Nametable 1
+            0x2400 ... 0x27FF => {
+                if self.v_mirroring {
+                    self.internal_vram[((masked_address & 0x3FF) + 0x400) as usize] = data;
+                } else {
+                    self.internal_vram[(masked_address & 0x3FF) as usize] = data;
+                }
+            },
+            // Nametable 2
+            0x2800 ... 0x2BFF => {
+                if self.v_mirroring {
+                    self.internal_vram[(masked_address & 0x3FF) as usize] = data;
+                } else {
+                    self.internal_vram[((masked_address & 0x3FF) + 0x400) as usize] = data;
+                }
+            },
+            0x2C00 ... 0x2FFF => self.internal_vram[((masked_address & 0x3FF) + 0x400) as usize] = data,
+            0x3000 ... 0x3EFF => self.write_byte(masked_address - 0x1000, data),
+            0x3F00 ... 0x3FFF => {
+                let mut palette_address = masked_address & 0x1F;
+                // Weird background masking
+                if palette_address & 0x13 == 0x10 {
+                    palette_address = palette_address - 0x10;
+                }
+                self.palette[palette_address as usize] = data;
+            },
+            _ => () // Do nothing!
+        }
+    }
+
+    pub fn process_scanline(&mut self) {
+        let scanline = self.current_scanline;
+        match scanline {
+            0 ... 239 => {
+                // Visible scanline here
+            },
+            // 240 does nothing
+            241 => {
+                // VBlank! Set NMI flag here
+            },
+            // 242 - 260 do nothing
+            261 => {
+                // Set vertical scrolling registers, in preparation for new frame
+                // (Emulator: Draw actual frame here)
+            },
+            _ => ()
+        }
+    }
+
+    pub fn run_to_cycle(&mut self, cycles: u32, memory: &mut CpuMemory) {
+        let cycles_per_scanline = 341 * 4;
+        self.scanline_cycles = cycles - self.last_cycle;
+        self.last_cycle = cycles;
+        while self.scanline_cycles > cycles_per_scanline {
+            self.current_scanline.wrapping_add(1);
+            self.scanline_cycles = self.scanline_cycles  - cycles_per_scanline;
+            self.process_scanline();
+        }
+        // Timing? Nah, just signal vblank every frame.
+        memory.ppu_status = (memory.ppu_status & 0x7F) + 0x80;
+    }
 }

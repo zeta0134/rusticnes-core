@@ -5,6 +5,7 @@ extern crate piston_window;
 use piston_window::*;
 
 mod cpu;
+mod nes;
 mod memory;
 mod ppu;
 
@@ -15,7 +16,7 @@ use std::fs::File;
 use image::ImageBuffer;
 use image::Rgba;
 
-use memory::CpuMemory;
+use nes::NesState;
 
 struct NesHeader {
   prg_rom_size: u32,
@@ -48,7 +49,8 @@ impl Default for NesHeader {
     }
 }
 
-fn print_program_state(console: &mut pancurses::Window, registers: &cpu::Registers, memory: &mut CpuMemory) {
+fn print_program_state(console: &mut pancurses::Window, nes: &mut NesState) {
+    let registers = nes.registers;
     console.printw(&format!("A: 0x{:02X} X: 0x{:02X} Y: 0x{:02X}\n", registers.a, registers.x, registers.y));
     console.printw(&format!("PC: 0x{:02X} S: 0x{:02X}\n", registers.pc, registers.s));
     console.printw(&format!("Flags: nv  dzic\n"));
@@ -64,7 +66,7 @@ fn print_program_state(console: &mut pancurses::Window, registers: &cpu::Registe
     // print out the next 8 bytes or so from the program counter
     let mut pc = registers.pc;
     for i in 1 .. 8 {
-        console.printw(&format!("0x{:04X}: 0x{:02X}\n", pc, memory.passively_read_byte(pc)));
+        console.printw(&format!("0x{:04X}: 0x{:02X}\n", pc, memory::passively_read_byte(nes, pc)));
         pc = pc.wrapping_add(1);
     }
 }
@@ -129,37 +131,28 @@ fn main() {
     let chr_rom = &cartridge[offset .. (offset + chr_rom_size as usize)];
     offset = offset + chr_rom_size;
 
-    let mut memory = CpuMemory::new();
-    let mut registers = cpu::Registers {
-        a: 0,
-        x: 0,
-        y: 0,
-        pc: 0,
-        s: 0,
-        flags: cpu::Flags {
-            carry: false,
-            zero: false,
-            interrupts_disabled: false,
-            decimal: false,
-            overflow: false,
-            negative: false,
-        }
-    };
+    let mut nes = NesState::new();
 
     // Initialize main memory (this is only valid for very simple games)
     for i in 0 .. 32768 - 1 {
-        memory.cart_rom[i] = prg_rom[i];
+        nes.memory.cart_rom[i] = prg_rom[i];
+    }
+
+    // Initialize PPU CHR memory (again, only valid for simple mappers)
+    for i in 0 .. 0x1000 - 1 {
+        nes.ppu.pattern_0[i] = chr_rom[i];
+        nes.ppu.pattern_1[i] = chr_rom[0x1000 + i];
     }
 
     // Initialize CPU register state for power-up sequence
-    registers.a = 0;
-    registers.y = 0;
-    registers.x = 0;
-    registers.s = 0xFD;
+    nes.registers.a = 0;
+    nes.registers.y = 0;
+    nes.registers.x = 0;
+    nes.registers.s = 0xFD;
 
-    let pc_low = memory.read_byte(0xFFFC);
-    let pc_high = memory.read_byte(0xFFFD);
-    registers.pc = pc_low as u16 + ((pc_high as u16) << 8);
+    let pc_low = memory::read_byte(&mut nes, 0xFFFC);
+    let pc_high = memory::read_byte(&mut nes, 0xFFFD);
+    nes.registers.pc = pc_low as u16 + ((pc_high as u16) << 8);
 
     // Initialized? Let's go!
     let mut exit: bool = false;
@@ -179,19 +172,15 @@ fn main() {
         texture.update(&mut window.encoder, &buffer);
         window.draw_2d(&event, |context, graphics| {
             console.clear();
-            print_program_state(&mut console, &registers, &mut memory);
+            print_program_state(&mut console, &mut nes);
             console.refresh();
             //let input = console.getch();
             //if input == Some(pancurses::Input::Character('q')) {
             //    exit = true;
             //}
-            cpu::process_instruction(&mut registers, &mut memory);
-            ppu::update(&mut memory, cycles);
-            cycles = cycles + 4;
-            ppu::update(&mut memory, cycles);
-            cycles = cycles + 4;
-            ppu::update(&mut memory, cycles);
-            cycles = cycles + 4;
+            cpu::process_instruction(&mut nes);
+            nes.ppu.run_to_cycle(cycles, &mut nes.memory);
+            cycles = cycles + 12;
 
             clear([0.8; 4], graphics);
 
