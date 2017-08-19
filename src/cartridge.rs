@@ -64,6 +64,8 @@ pub fn print_header_info(header: NesHeader) {
     println!("Mapper: {0}", header.mapper_number);
 }
 
+use std::cmp;
+
 pub fn load_from_cartridge(nes: &mut NesState, header: NesHeader, cartridge: &Vec<u8>) {
     let mut offset = 16;
     let mut trainer = &cartridge[16..16]; //default to empty
@@ -80,8 +82,17 @@ pub fn load_from_cartridge(nes: &mut NesState, header: NesHeader, cartridge: &Ve
     offset = offset + chr_rom_size;
 
     // Initialize main memory (this is only valid for very simple games)
-    for i in 0 .. 32768 - 1 {
-        nes.memory.cart_rom[i] = prg_rom[i];
+    if prg_rom_size == 32768 {
+        for i in 0 .. prg_rom_size - 1 {
+            nes.memory.cart_rom[i] = prg_rom[i];
+        }
+    } else if prg_rom_size == 16384 {
+        for i in 0 .. prg_rom_size - 1 {
+            nes.memory.cart_rom[i] = prg_rom[i];
+            nes.memory.cart_rom[i + 16384] = prg_rom[i];
+        }
+    } else {
+        println!("UNSUPPORTED PRG SIZE! Will probably break.");
     }
 
     // Initialize PPU CHR memory (again, only valid for simple mappers)
