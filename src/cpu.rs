@@ -106,10 +106,10 @@ fn and(registers: &mut Registers, data: u8) {
 
 fn asl(registers: &mut Registers, data: u8) -> u8 {
     registers.flags.carry = data & 0x80 != 0;
-    registers.a = registers.a << 1;
-    registers.flags.zero = data == 0;
-    registers.flags.negative = data & 0x80 != 0;
-    return data;
+    let result = (data & 0x7F) << 1;
+    registers.flags.zero = result == 0;
+    registers.flags.negative = result & 0x80 != 0;
+    return result;
 }
 
 // Branch if Carry Clear

@@ -53,7 +53,7 @@ impl PpuState {
            internal_vram: [0u8; 0x800],
            oam: [0u8; 0x100],
            palette: [0u8; 0x20],
-           v_mirroring: false,
+           v_mirroring: true,
            current_frame: 0,
            current_scanline: 0,
            scanline_cycles: 0,
@@ -77,8 +77,8 @@ impl PpuState {
     pub fn read_byte(&mut self, address: u16) -> u8 {
         let masked_address = address & 0x3FFF;
         match masked_address {
-            0x0000 ... 0x0FFF => return self.pattern_0[(masked_address & 0x1000) as usize],
-            0x1000 ... 0x1FFF => return self.pattern_1[(masked_address & 0x1000) as usize],
+            0x0000 ... 0x0FFF => return self.pattern_0[(masked_address & 0x0FFF) as usize],
+            0x1000 ... 0x1FFF => return self.pattern_1[(masked_address & 0x0FFF) as usize],
             // Nametable 0
             0x2000 ... 0x23FF => return self.internal_vram[(masked_address & 0x3FF) as usize],
             // Nametable 1
@@ -113,8 +113,8 @@ impl PpuState {
     pub fn write_byte(&mut self, address: u16, data: u8) {
         let masked_address = address & 0x3FFF;
         match masked_address {
-            0x0000 ... 0x0FFF => self.pattern_0[(masked_address & 0x1000) as usize] = data,
-            0x1000 ... 0x1FFF => self.pattern_1[(masked_address & 0x1000) as usize] = data,
+            //0x0000 ... 0x0FFF => self.pattern_0[(masked_address & 0x0FFF) as usize] = data,
+            //0x1000 ... 0x1FFF => self.pattern_1[(masked_address & 0x0FFF) as usize] = data,
             // Nametable 0
             0x2000 ... 0x23FF => self.internal_vram[(masked_address & 0x3FF) as usize] = data,
             // Nametable 1
@@ -192,7 +192,7 @@ impl PpuState {
         if ty > 29 {
             address = address + 0x0800;
         }
-        address = address + ((ty % 30) as u16) * 30 + ((tx & 0x1F) as u16);
+        address = address + ((ty % 30) as u16) * 32 + ((tx % 0x1F) as u16);
         return self.read_byte(address);
     }
 }

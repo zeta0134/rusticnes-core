@@ -35,8 +35,10 @@ pub fn run_until_hblank(nes: &mut NesState) {
 }
 
 pub fn run_until_vblank(nes: &mut NesState) {
-    let old_frame = nes.ppu.current_frame;
-    while old_frame == nes.ppu.current_frame {
+    while nes.ppu.current_scanline == 242 {
+        step(nes);
+    }
+    while nes.ppu.current_scanline != 242 {
         step(nes);
     }
 }
