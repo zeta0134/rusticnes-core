@@ -1,10 +1,13 @@
 extern crate image;
-extern crate pancurses;
 extern crate piston_window;
 
 use piston_window::*;
+use piston_window::Button::Keyboard;
+use piston_window::Key;
 
+mod cartridge;
 mod cpu;
+mod debug;
 mod nes;
 mod memory;
 mod palettes;
@@ -19,105 +22,12 @@ use image::Rgba;
 
 use nes::NesState;
 
-struct NesHeader {
-  prg_rom_size: u32,
-  chr_rom_size: u32,
-  mapper_number: u8,
-  prg_ram_size: u32,
-
-  // Flags 6
-  horizontal_mirroring: bool,
-  vertical_mirroring: bool,
-  has_sram: bool,
-  trainer: bool,
-  four_screen_mirroring: bool,
-}
-
-impl Default for NesHeader {
-    fn default() -> NesHeader {
-        NesHeader {
-            prg_rom_size: 0,
-            chr_rom_size: 0,
-            mapper_number: 0,
-            prg_ram_size: 0,
-
-            horizontal_mirroring: false,
-            vertical_mirroring: false,
-            has_sram: false,
-            trainer: false,
-            four_screen_mirroring: false,
-        }
-    }
-}
-
-fn generate_debug_chr_pattern(pattern: &[u8], buffer: &mut ImageBuffer<Rgba<u8>, Vec<u8>>) {
-    let debug_pallete: [u8; 4] = [255, 192, 128, 0];
-    for x in 0 .. 16 {
-        for y in 0 .. 16 {
-            let tile = y * 16 + x;
-            for px in 0 .. 8 {
-                for py in 0 .. 8 {
-                    let palette_index = ppu::decode_chr_pixel(pattern, tile as u8, px as u8, py as u8);
-                    buffer.put_pixel(x * 8 + px, y * 8 + py, Rgba { data: [
-                        debug_pallete[palette_index as usize],
-                        debug_pallete[palette_index as usize],
-                        debug_pallete[palette_index as usize],
-                        255] });
-                }
-            }
-        }
-    }
-}
-
-fn generate_debug_nametables(ppu: &mut ppu::PpuState, buffer: &mut ImageBuffer<Rgba<u8>, Vec<u8>>) {
-    let debug_pallete: [u8; 4] = [255, 192, 128, 0];
-    for tx in 0 .. 63 {
-        for ty in 0 .. 59 {
-            let tile_index = ppu.get_bg_tile(tx, ty);
-            for px in 0 .. 8 {
-                for py in 0 .. 8 {
-                    let palette_index = ppu::decode_chr_pixel(&ppu.pattern_1, tile_index as u8, px as u8, py as u8);
-                    buffer.put_pixel(tx as u32 * 8 + px as u32, ty as u32 * 8 + py as u32, Rgba { data: [
-                        debug_pallete[palette_index as usize],
-                        debug_pallete[palette_index as usize],
-                        debug_pallete[palette_index as usize],
-                        255] });
-                }
-            }
-        }
-    }
-}
-
-fn print_program_state(console: &mut pancurses::Window, nes: &mut NesState) {
-    let registers = nes.registers;
-    console.printw(&format!("A: 0x{:02X} X: 0x{:02X} Y: 0x{:02X}\n", registers.a, registers.x, registers.y));
-    console.printw(&format!("PC: 0x{:02X} S: 0x{:02X}\n", registers.pc, registers.s));
-    console.printw(&format!("Flags: nv  dzic\n"));
-    console.printw(&format!("       {:b}{:b}  {:b}{:b}{:b}{:b}\n",
-        registers.flags.negative as u8,
-        registers.flags.overflow as u8,
-        registers.flags.decimal as u8,
-        registers.flags.zero as u8,
-        registers.flags.interrupts_disabled as u8,
-        registers.flags.carry as u8,
-    ));
-    console.printw("\nMemory @ Program Counter\n");
-    // print out the next 8 bytes or so from the program counter
-    let mut pc = registers.pc;
-    for i in 1 .. 8 {
-        console.printw(&format!("0x{:04X}: 0x{:02X}\n", pc, memory::passively_read_byte(nes, pc)));
-        pc = pc.wrapping_add(1);
-    }
-}
-
 fn main() {
-    let mut console = pancurses::initscr();
-
     let mut window: PistonWindow = WindowSettings::new("RusticNES", [1024, 768])
     .exit_on_esc(true).build().unwrap();
 
-    console.printw("Hello, world!");
-    console.printw("Attempting to read mario.nes header");
+    println!("Welcome to RusticNES");
+    println!("Attempting to read mario.nes header");
 
     let mut file = match File::open("mario.nes") {
         Err(why) => panic!("Couldn't open mario.nes: {}", why.description()),
@@ -127,61 +37,13 @@ fn main() {
     // Read the whole damn thing?
     match file.read_to_end(&mut cartridge) {
         Err(why) => panic!("Couldn't read data: {}", why.description()),
-        Ok(bytes_read) => console.printw(&format!("Data read successfully: {}", bytes_read)),
+        Ok(bytes_read) => println!("Data read successfully: {}", bytes_read),
     };
-
-    // See if that worked
-    console.printw(&format!("Magic Header: {0} {1} {2} 0x{3:X}", cartridge[0] as char, cartridge[1] as char, cartridge[2] as char, cartridge[3]));
-
-    // Okay, now create an NES struct and massage the data into it
-    let mut nes_header: NesHeader = NesHeader {
-        prg_rom_size: cartridge[4] as u32 * 16 * 1024,
-        chr_rom_size: cartridge[5] as u32 * 8 * 1024,
-        mapper_number: (cartridge[6] & 0xF0 >> 4) + cartridge[7] & 0xF0,
-        prg_ram_size: cartridge[8] as u32 * 8 * 1024,
-        ..Default::default()
-    };
-
-    console.printw(&format!("PRG ROM: {0}", nes_header.prg_rom_size));
-    console.printw(&format!("CHR ROM: {0}", nes_header.chr_rom_size));
-    console.printw(&format!("PRG RAM: {0}", nes_header.prg_ram_size));
-    console.printw(&format!("Mapper: {0}", nes_header.mapper_number));
-
-    if cartridge[6] & 0x08 != 0 {
-        nes_header.four_screen_mirroring = true;
-    } else {
-        nes_header.horizontal_mirroring = cartridge[6] & 0x01 == 0;
-        nes_header.vertical_mirroring   = cartridge[6] & 0x01 != 0;
-    }
-    nes_header.has_sram = cartridge[6] & 0x02 != 0;
-    nes_header.trainer  = cartridge[6] & 0x04 != 0;
-
-    let mut offset = 16;
-    let mut trainer = &cartridge[16..16]; //default to empty
-    if nes_header.trainer {
-        trainer = &cartridge[offset..(offset + 512)];
-        offset = offset + 512;
-    }
-    let prg_rom_size = (nes_header.prg_rom_size) as usize;
-    let prg_rom = &cartridge[offset .. (offset + prg_rom_size)];
-    offset = offset + prg_rom_size;
-
-    let chr_rom_size = (nes_header.chr_rom_size) as usize;
-    let chr_rom = &cartridge[offset .. (offset + chr_rom_size as usize)];
-    offset = offset + chr_rom_size;
 
     let mut nes = NesState::new();
-
-    // Initialize main memory (this is only valid for very simple games)
-    for i in 0 .. 32768 - 1 {
-        nes.memory.cart_rom[i] = prg_rom[i];
-    }
-
-    // Initialize PPU CHR memory (again, only valid for simple mappers)
-    for i in 0 .. 0x1000 - 1 {
-        nes.ppu.pattern_0[i] = chr_rom[i];
-        nes.ppu.pattern_1[i] = chr_rom[0x1000 + i];
-    }
+    let nes_header = cartridge::extract_header(&cartridge);
+    cartridge::print_header_info(nes_header);
+    cartridge::load_from_cartridge(&mut nes, nes_header, &cartridge);
 
     // Initialize CPU register state for power-up sequence
     nes.registers.a = 0;
@@ -228,8 +90,8 @@ fn main() {
 
     let mut pattern_0_buffer = ImageBuffer::new(128, 128);
     let mut pattern_1_buffer = ImageBuffer::new(128, 128);
-    generate_debug_chr_pattern(&nes.ppu.pattern_0, &mut pattern_0_buffer);
-    generate_debug_chr_pattern(&nes.ppu.pattern_1, &mut pattern_1_buffer);
+    debug::generate_chr_pattern(&nes.ppu.pattern_0, &mut pattern_0_buffer);
+    debug::generate_chr_pattern(&nes.ppu.pattern_1, &mut pattern_1_buffer);
     let mut pattern_0_texture = Texture::from_image(&mut window.factory, &pattern_0_buffer,
         &texture_settings).unwrap();
     let mut pattern_1_texture = Texture::from_image(&mut window.factory, &pattern_1_buffer,
@@ -240,53 +102,66 @@ fn main() {
         &texture_settings).unwrap();
 
     let mut thingy = 0;
+    let mut running = false;
 
-    //while !exit {
+    debug::print_program_state(&mut nes);
+
     while let Some(event) = window.next() {
-        // Debug draw some junk
-        for x in 0 .. 256 {
-            for y in 0 .. 240 {
-                screen_buffer.put_pixel(x, y, Rgba { data: [
-                    (x + thingy & 0xFF) as u8,
-                    (y + thingy & 0xFF) as u8,
-                    ((x ^ y ^ thingy) & 0xFF) as u8,
-                    255] });
+        if let Some(button) = event.press_args() {
+            // Keyboard input here
+            if button == Keyboard(Key::R) {
+                running = !running;
+            }
+
+            if button == Keyboard(Key::Space) {
+                // Run one opcode, then debug
+                cpu::process_instruction(&mut nes);
+                nes.ppu.run_to_cycle(cycles, &mut nes.memory);
+                cycles = cycles + 12;
+
+                debug::print_program_state(&mut nes);
             }
         }
-        screen_texture.update(&mut window.encoder, &screen_buffer);
-        generate_debug_nametables(&mut nes.ppu, &mut nametables_buffer);
-        nametables_texture.update(&mut window.encoder, &nametables_buffer);
+
+        if let Some(_) = event.update_args() {
+            // Debug draw some junk
+            for x in 0 .. 256 {
+                for y in 0 .. 240 {
+                    screen_buffer.put_pixel(x, y, Rgba { data: [
+                        (x + thingy & 0xFF) as u8,
+                        (y + thingy & 0xFF) as u8,
+                        ((x ^ y ^ thingy) & 0xFF) as u8,
+                        255] });
+                }
+            }
+            screen_texture.update(&mut window.encoder, &screen_buffer);
+            debug::generate_nametables(&mut nes.ppu, &mut nametables_buffer);
+            nametables_texture.update(&mut window.encoder, &nametables_buffer);
+
+            if running {
+                // TODO: Move this into NesEmulator and make it run until vblank
+                cpu::process_instruction(&mut nes);
+                nes.ppu.run_to_cycle(cycles, &mut nes.memory);
+                cycles = cycles + 12;
+            }
+        }
 
         window.draw_2d(&event, |context, graphics| {
-            console.clear();
-            print_program_state(&mut console, &mut nes);
-            console.refresh();
-            //let input = console.getch();
-            //if input == Some(pancurses::Input::Character('q')) {
-            //    exit = true;
-            //}
-
-            cpu::process_instruction(&mut nes);
-            nes.ppu.run_to_cycle(cycles, &mut nes.memory);
-            cycles = cycles + 12;
-
             clear([0.8; 4], graphics);
             let base_transform = context.transform.scale(2.0, 2.0);
-            let pal_transform = base_transform.trans(256.0, 0.0).scale(16.0, 16.0);
+            let pal_transform = base_transform.trans(0.0, 240.0).scale(16.0, 16.0);
             image(&screen_texture, base_transform, graphics);
             image(&pal_texture, pal_transform, graphics);
 
-            let pattern_0_transform = base_transform.trans(256.0, 64.0);
-            let pattern_1_transform = base_transform.trans(256.0 + 128.0, 64.0);
+            let pattern_0_transform = base_transform.trans(256.0, 0.0);
+            let pattern_1_transform = base_transform.trans(256.0 + 128.0, 0.0);
             image(&pattern_0_texture, pattern_0_transform, graphics);
             image(&pattern_1_texture, pattern_1_transform, graphics);
 
-            let nametables_transform = base_transform.trans(256.0, 64.0 + 128.0);
+            let nametables_transform = base_transform.trans(256.0, 128.0);
             image(&nametables_texture, nametables_transform, graphics);
 
             thingy = thingy + 1;
         });
     }
-
-    pancurses::endwin();
 }
