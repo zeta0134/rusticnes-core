@@ -178,7 +178,7 @@ fn bit(registers: &mut Registers, data: u8) {
 
 fn brk(nes: &mut NesState) {
     // Push PC and processor status to stack
-    let pc_high = (nes.registers.pc & 0xFF00 >> 8) as u8;
+    let pc_high = ((nes.registers.pc & 0xFF00) >> 8) as u8;
     let pc_low =  (nes.registers.pc & 0x00FF) as u8;
     push(nes, pc_high);
     push(nes, pc_low);
@@ -291,7 +291,7 @@ fn jmp(registers: &mut Registers, address: u16) {
 // Jump to Subroutine
 fn jsr(nes: &mut NesState, address: u16) {
     let return_address = nes.registers.pc.wrapping_sub(1);
-    let addr_high = (return_address & 0xFF00 >> 8) as u8;
+    let addr_high = ((return_address & 0xFF00) >> 8) as u8;
     let addr_low =  (return_address & 0x00FF) as u8;
     push(nes, addr_high);
     push(nes, addr_low);
@@ -590,7 +590,7 @@ pub fn nmi_signal(nes: &NesState) -> bool {
 
 pub fn service_nmi(nes: &mut NesState) {
     // Push PC and processor status to stack
-    let pc_high = (nes.registers.pc & 0xFF00 >> 8) as u8;
+    let pc_high = ((nes.registers.pc & 0xFF00) >> 8) as u8;
     let pc_low =  (nes.registers.pc & 0x00FF) as u8;
     push(nes, pc_high);
     push(nes, pc_low);
