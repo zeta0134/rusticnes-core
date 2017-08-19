@@ -71,6 +71,6 @@ pub fn print_program_state(nes: &mut NesState) {
     println!("OAM Address: {:04X} PPU Address: {:04X}",
         nes.ppu.oam_addr, nes.ppu.current_addr);
     println!("Frame: {}, Scanline: {}, Cycle: {}, Scanline Cycles: {}",
-        nes.ppu.current_frame, nes.ppu.current_scanline, nes.ppu.last_cycle, nes.ppu.scanline_cycles);
+        nes.ppu.current_frame, nes.ppu.current_scanline, nes.current_cycle, nes.ppu.scanline_cycles);
 
 }

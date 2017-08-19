@@ -117,10 +117,19 @@ fn main() {
 
             if button == Keyboard(Key::Space) {
                 // Run one opcode, then debug
-                cpu::process_instruction(&mut nes);
-                nes.ppu.run_to_cycle(cycles, &mut nes.memory);
-                cycles = cycles + 12;
+                nes::step(&mut nes);
+                debug::print_program_state(&mut nes);
+            }
 
+            if button == Keyboard(Key::H) {
+                // Run one opcode, then debug
+                nes::run_until_hblank(&mut nes);
+                debug::print_program_state(&mut nes);
+            }
+
+            if button == Keyboard(Key::V) {
+                // Run one opcode, then debug
+                nes::run_until_vblank(&mut nes);
                 debug::print_program_state(&mut nes);
             }
         }
@@ -142,9 +151,8 @@ fn main() {
 
             if running {
                 // TODO: Move this into NesEmulator and make it run until vblank
-                cpu::process_instruction(&mut nes);
-                nes.ppu.run_to_cycle(cycles, &mut nes.memory);
-                cycles = cycles + 12;
+                nes::step(&mut nes);
+                debug::print_program_state(&mut nes);
             }
         }
 
