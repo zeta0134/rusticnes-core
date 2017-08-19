@@ -36,6 +36,7 @@ pub struct PpuState {
     pub oam_dma_high: u8,
 
     // Internal
+    pub current_frame: u32,
     pub current_scanline: u16,
     pub scanline_cycles: u32,
     pub last_cycle: u32,
@@ -53,6 +54,7 @@ impl PpuState {
            oam: [0u8; 0x100],
            palette: [0u8; 0x20],
            v_mirroring: false,
+           current_frame: 0,
            current_scanline: 0,
            scanline_cycles: 0,
            last_cycle: 0,
@@ -167,15 +169,18 @@ impl PpuState {
         }
     }
 
-    pub fn run_to_cycle(&mut self, cycles: u32, memory: &mut CpuMemory) {
+    pub fn run_to_cycle(&mut self, current_cycle: u32, memory: &mut CpuMemory) {
         let cycles_per_scanline = 341 * 4;
-        self.scanline_cycles = cycles - self.last_cycle;
-        self.last_cycle = cycles;
-        let nmi = false;
+        self.scanline_cycles = self.scanline_cycles + (current_cycle - self.last_cycle);
+        self.last_cycle = current_cycle;
         while self.scanline_cycles > cycles_per_scanline {
-            self.current_scanline.wrapping_add(1);
-            self.scanline_cycles = self.scanline_cycles  - cycles_per_scanline;
             self.process_scanline();
+            self.current_scanline = self.current_scanline.wrapping_add(1);
+            if self.current_scanline > 261 {
+                self.current_scanline = 0;
+                self.current_frame = self.current_frame + 1;
+            }
+            self.scanline_cycles = self.scanline_cycles  - cycles_per_scanline;
         }
     }
 

@@ -1,9 +1,11 @@
 extern crate image;
 extern crate piston_window;
+extern crate glutin_window;
 
 use piston_window::*;
 use piston_window::Button::Keyboard;
 use piston_window::Key;
+use glutin_window::GlutinWindow;
 
 mod cartridge;
 mod cpu;
@@ -23,7 +25,7 @@ use image::Rgba;
 use nes::NesState;
 
 fn main() {
-    let mut window: PistonWindow = WindowSettings::new("RusticNES", [1024, 768])
+    let mut window: PistonWindow<GlutinWindow> = WindowSettings::new("RusticNES", [1024, 768])
     .exit_on_esc(true).build().unwrap();
 
     println!("Welcome to RusticNES");

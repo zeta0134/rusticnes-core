@@ -5,5 +5,5 @@ authors = ["Nicholas Flynt <thegamefreak0134@gmail.com>"]
 
 [dependencies]
 image = "*"
-pancurses = "0.9"
-piston_window = "0.69.0"
+piston_window = "0.69.1"
+pistoncore-glutin_window = "0.38.0"
