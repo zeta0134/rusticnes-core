@@ -11,6 +11,9 @@ pub struct CpuMemory {
     // Cartridge Space
     // TODO: Implement mappers. Not this.
     pub cart_rom: [u8; 0x8000],
+
+    pub recent_reads: Vec<u16>,
+    pub recent_writes: Vec<u16>,
 }
 
 impl CpuMemory {
@@ -18,16 +21,20 @@ impl CpuMemory {
         return CpuMemory {
             iram_raw: [0u8; 0x800],
             cart_rom: [0u8; 0x8000],
+            recent_reads: Vec::new(),
+            recent_writes: Vec::new(),
         }
     }
 }
 
-pub fn passively_read_byte(state: &mut NesState, address: u16) -> u8 {
-    return _read_byte(state, address, false);
+pub fn passively_read_byte(nes: &mut NesState, address: u16) -> u8 {
+    return _read_byte(nes, address, false);
 }
 
-pub fn read_byte(state: &mut NesState, address: u16) -> u8 {
-    return _read_byte(state, address, true);
+pub fn read_byte(nes: &mut NesState, address: u16) -> u8 {
+    nes.memory.recent_reads.insert(0, address);
+    nes.memory.recent_reads.truncate(20);
+    return _read_byte(nes, address, true);
 }
 
 fn _read_byte(nes: &mut NesState, address: u16, side_effects: bool) -> u8 {
@@ -82,6 +89,8 @@ fn _read_byte(nes: &mut NesState, address: u16, side_effects: bool) -> u8 {
 }
 
 pub fn write_byte(nes: &mut NesState, address: u16, data: u8) {
+    nes.memory.recent_writes.insert(0, address);
+    nes.memory.recent_writes.truncate(20);
     let memory = &mut nes.memory;
     match address {
         0x0000 ... 0x1FFF => memory.iram_raw[(address & 0x7FF) as usize] = data,

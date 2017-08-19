@@ -82,23 +82,6 @@ fn main() {
         &texture_settings
     ).unwrap();
 
-    let mut pal_buffer = ImageBuffer::new(16, 32);
-    for i in 0 .. 63 {
-        let x = i % 16;
-        let y = i >> 4;
-        let index = (i * 3) as usize;
-        pal_buffer.put_pixel(x, y, Rgba { data: [
-            palettes::ntsc_pal[index],
-            palettes::ntsc_pal[index + 1],
-            palettes::ntsc_pal[index + 2],
-            255] });
-    }
-    let mut pal_texture = Texture::from_image(
-        &mut window.factory,
-        &pal_buffer,
-        &texture_settings
-    ).unwrap();
-
     let mut pattern_0_buffer = ImageBuffer::new(128, 128);
     let mut pattern_1_buffer = ImageBuffer::new(128, 128);
     debug::generate_chr_pattern(&nes.ppu.pattern_0, &mut pattern_0_buffer);
@@ -114,6 +97,7 @@ fn main() {
 
     let mut thingy = 0;
     let mut running = false;
+    let mut memory_viewer_page = 0u16;
 
     debug::print_program_state(&mut nes);
 
@@ -141,6 +125,9 @@ fn main() {
                 nes::run_until_vblank(&mut nes);
                 debug::print_program_state(&mut nes);
             }
+
+            if button == Keyboard(Key::Comma ) { memory_viewer_page = memory_viewer_page.wrapping_sub(0x100); }
+            if button == Keyboard(Key::Period) { memory_viewer_page = memory_viewer_page.wrapping_add(0x100); }
         }
 
         if let Some(_) = event.update_args() {
@@ -168,9 +155,7 @@ fn main() {
         window.draw_2d(&event, |context, graphics| {
             clear([0.8; 4], graphics);
             let base_transform = context.transform.scale(2.0, 2.0);
-            let base_text_transform = context.transform.trans(0.0, 480.0 + 16.0);
-
-            let pal_transform = base_transform.trans(0.0, 240.0).scale(16.0, 16.0);
+            let base_text_transform = context.transform.trans(0.0, 0.0 + 16.0);
             image(&screen_texture, base_transform, graphics);
 
             let pattern_0_transform = base_transform.trans(256.0, 0.0);
@@ -181,17 +166,55 @@ fn main() {
             let nametables_transform = context.transform.trans(512.0, 256.0);
             image(&nametables_texture, nametables_transform, graphics);
 
-            let yellow_text = text::Text::new_color([0.0, 0.0, 0.0, 1.0], 16);
+            let black_text = text::Text::new_color([0.0, 0.0, 0.0, 1.0], 16);
+            let bright_text = text::Text::new_color([1.0, 1.0, 1.0, 0.8], 16);
+            let dim_text = text::Text::new_color([1.0, 1.0, 1.0, 0.3], 16);
+            let memory_viewer_base = base_text_transform.trans(0.0, 480.0);
+            black_text.draw("--- MEMORY ---", &mut glyphs, &context.draw_state, memory_viewer_base, graphics);
 
+            for y in 0 .. 16 {
+                black_text.draw(&format!("0x{:04X}:", memory_viewer_page + y * 16),
+                    &mut glyphs, &context.draw_state, memory_viewer_base.trans(0.0, y as f64 * 17.0 + 16.0), graphics);
+                for x in 0 .. 16 {
+                    let mut color = [0.15, 0.15, 0.15, 1.0];
+                    if (x ^ y) & 0x1 != 0 {
+                        color = [0.25, 0.25, 0.25, 1.0];
+                    }
+                    let address = (y * 16 + x) as u16 + memory_viewer_page;
+                    if address == nes.registers.pc {
+                        color = [0.5, 0.1, 0.1, 1.0];
+                    } else if address == (nes.registers.s as u16 + 0x100) {
+                        color = [0.1, 0.1, 0.5, 1.0];
+                    } else if nes.memory.recent_reads.contains(&address) {
+                        for i in 0 .. nes.memory.recent_reads.len() {
+                            if nes.memory.recent_reads[i] == address {
+                                let brightness = 0.6 - (0.02 * i as f32);
+                                color = [0.3, brightness, 0.3, 1.0];
+                                break;
+                            }
+                        }
+                    } else if nes.memory.recent_writes.contains(&address) {
+                        for i in 0 .. nes.memory.recent_writes.len() {
+                            if nes.memory.recent_writes[i] == address {
+                                let brightness = 0.6 - (0.02 * i as f32);
+                                color = [brightness, brightness, 0.2, 1.0];
+                                break;
+                            }
+                        }
+                    }
+                    let byte = memory::passively_read_byte(&mut nes, address);
+                    let tx = x as f64 * 22.0 + 80.0;
+                    let ty = y as f64 * 17.0 + 16.0;
+                    let pos = memory_viewer_base.trans(tx, ty);
+                    rectangle(color, [0.0, 0.0, 22.0, 17.0], pos.trans(-2.0, -14.0), graphics);
 
-            yellow_text.draw("== MEMORY ==", &mut glyphs, &context.draw_state, base_text_transform, graphics);
-
-            for x in 0 .. 16 {
-                for y in 0 .. 16 {
-                    let byte = memory::passively_read_byte(&mut nes, (y * 16 + x) as u16);
-                    let pos = base_text_transform.trans(x as f64 * 20.0, y as f64 * 16.0 + 16.0);
-                    yellow_text.draw(&format!("{:02X}", byte),
-                        &mut glyphs, &context.draw_state, pos, graphics);
+                    if byte == 0 {
+                        dim_text.draw(&format!("{:02X}", byte),
+                            &mut glyphs, &context.draw_state, pos, graphics);
+                    } else {
+                        bright_text.draw(&format!("{:02X}", byte),
+                            &mut glyphs, &context.draw_state, pos, graphics);
+                    }
                 }
             }
 
