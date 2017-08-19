@@ -14,6 +14,7 @@ mod memory;
 mod palettes;
 mod ppu;
 
+use std::env;
 use std::error::Error;
 use std::io::Read;
 use std::fs::File;
@@ -28,9 +29,13 @@ fn main() {
     .exit_on_esc(true).build().unwrap();
 
     println!("Welcome to RusticNES");
-    println!("Attempting to read mario.nes header");
 
-    let mut file = match File::open("mario.nes") {
+    let args: Vec<String> = env::args().collect();
+    let filename = &args[1];
+
+    println!("Attempting to load {}...", filename);
+
+    let mut file = match File::open(filename) {
         Err(why) => panic!("Couldn't open mario.nes: {}", why.description()),
         Ok(file) => file,
     };
@@ -147,7 +152,7 @@ fn main() {
 
             if running {
                 // TODO: Move this into NesEmulator and make it run until vblank
-                nes::step(&mut nes);
+                nes::run_until_vblank(&mut nes);
                 debug::print_program_state(&mut nes);
             }
         }
