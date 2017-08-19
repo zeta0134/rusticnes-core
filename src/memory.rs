@@ -51,7 +51,7 @@ fn _read_byte(nes: &mut NesState, address: u16, side_effects: bool) -> u8 {
                         nes.ppu.status = nes.ppu.status & 0x7F; // Clear VBlank bit
                         return nes.ppu.latch;
                     } else {
-                        return nes.ppu.status & 0xE0 + nes.ppu.latch & 0x1F;
+                        return (nes.ppu.status & 0xE0) + (nes.ppu.latch & 0x1F);
                     }
                 },
                 // OAMDATA

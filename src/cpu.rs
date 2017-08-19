@@ -521,7 +521,7 @@ fn absolute(nes: &mut NesState) -> u16 {
 
 fn absolute_x(nes: &mut NesState) -> u16 {
     let mut pc = nes.registers.pc;
-    let address_low =read_byte(nes, pc);
+    let address_low = read_byte(nes, pc);
     nes.registers.pc = nes.registers.pc.wrapping_add(1);
     pc = nes.registers.pc;
     let address_high = read_byte(nes, pc);

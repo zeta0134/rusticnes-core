@@ -1,11 +1,10 @@
+extern crate find_folder;
 extern crate image;
 extern crate piston_window;
-extern crate glutin_window;
 
 use piston_window::*;
 use piston_window::Button::Keyboard;
 use piston_window::Key;
-use glutin_window::GlutinWindow;
 
 mod cartridge;
 mod cpu;
@@ -25,7 +24,7 @@ use image::Rgba;
 use nes::NesState;
 
 fn main() {
-    let mut window: PistonWindow<GlutinWindow> = WindowSettings::new("RusticNES", [1024, 768])
+    let mut window: PistonWindow = WindowSettings::new("RusticNES", [1024, 768])
     .exit_on_esc(true).build().unwrap();
 
     println!("Welcome to RusticNES");
@@ -65,6 +64,16 @@ fn main() {
     let mut texture_settings = TextureSettings::new()
         .min(texture::Filter::Nearest)
         .mag(texture::Filter::Nearest);
+
+    // Load a font for text drawing (todo: probably need to find one with a better license)
+    let assets = find_folder::Search::ParentsThenKids(3, 3)
+        .for_folder("assets").unwrap();
+    let ref font = assets.join("FiraSans-Regular.ttf");
+    let factory = window.factory.clone();
+    let mut glyphs = Glyphs::new(font, factory,
+        TextureSettings::new()
+        .min(texture::Filter::Nearest)
+        .mag(texture::Filter::Nearest)).unwrap();
 
     let mut screen_buffer = ImageBuffer::new(256, 240);
     let mut screen_texture = Texture::from_image(
@@ -159,17 +168,32 @@ fn main() {
         window.draw_2d(&event, |context, graphics| {
             clear([0.8; 4], graphics);
             let base_transform = context.transform.scale(2.0, 2.0);
+            let base_text_transform = context.transform.trans(0.0, 480.0 + 16.0);
+
             let pal_transform = base_transform.trans(0.0, 240.0).scale(16.0, 16.0);
             image(&screen_texture, base_transform, graphics);
-            image(&pal_texture, pal_transform, graphics);
 
             let pattern_0_transform = base_transform.trans(256.0, 0.0);
             let pattern_1_transform = base_transform.trans(256.0 + 128.0, 0.0);
             image(&pattern_0_texture, pattern_0_transform, graphics);
             image(&pattern_1_texture, pattern_1_transform, graphics);
 
-            let nametables_transform = base_transform.trans(256.0, 128.0);
+            let nametables_transform = context.transform.trans(512.0, 256.0);
             image(&nametables_texture, nametables_transform, graphics);
+
+            let yellow_text = text::Text::new_color([0.0, 0.0, 0.0, 1.0], 16);
+
+
+            yellow_text.draw("== MEMORY ==", &mut glyphs, &context.draw_state, base_text_transform, graphics);
+
+            for x in 0 .. 16 {
+                for y in 0 .. 16 {
+                    let byte = memory::passively_read_byte(&mut nes, (y * 16 + x) as u16);
+                    let pos = base_text_transform.trans(x as f64 * 20.0, y as f64 * 16.0 + 16.0);
+                    yellow_text.draw(&format!("{:02X}", byte),
+                        &mut glyphs, &context.draw_state, pos, graphics);
+                }
+            }
 
             thingy = thingy + 1;
         });

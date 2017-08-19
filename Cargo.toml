@@ -4,6 +4,6 @@ version = "0.1.0"
 authors = ["Nicholas Flynt <thegamefreak0134@gmail.com>"]
 
 [dependencies]
+find_folder = "*"
 image = "*"
 piston_window = "0.69.1"
-pistoncore-glutin_window = "0.38.0"
