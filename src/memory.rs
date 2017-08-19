@@ -10,6 +10,7 @@ pub struct CpuMemory {
 
     // Cartridge Space
     // TODO: Implement mappers. Not this.
+    pub cart_ram: [u8; 0x2000],
     pub cart_rom: [u8; 0x8000],
 
     pub recent_reads: Vec<u16>,
@@ -20,6 +21,7 @@ impl CpuMemory {
     pub fn new() -> CpuMemory {
         return CpuMemory {
             iram_raw: [0u8; 0x800],
+            cart_ram: [0u8; 0x2000],
             cart_rom: [0u8; 0x8000],
             recent_reads: Vec::new(),
             recent_writes: Vec::new(),
@@ -88,6 +90,7 @@ fn _read_byte(nes: &mut NesState, address: u16, side_effects: bool) -> u8 {
                 _ => return 0
             }
         },
+        0x6000 ... 0x7FFF => return memory.cart_ram[(address & 0x1FFF) as usize],
         0x8000 ... 0xFFFF => return memory.cart_rom[(address & 0x7FFF) as usize],
         _ => return 0
     }
@@ -156,7 +159,8 @@ pub fn write_byte(nes: &mut NesState, address: u16, data: u8) {
                 },
                 _ => ()
             }
-        }
+        },
+        0x6000 ... 0x7FFF => memory.cart_ram[(address & 0x1FFF) as usize] = data,
         _ => () // Do nothing!
     }
 }
