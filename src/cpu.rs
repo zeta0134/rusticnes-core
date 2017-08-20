@@ -172,8 +172,8 @@ fn bvs(registers: &mut Registers, offset: i8) {
 fn bit(registers: &mut Registers, data: u8) {
     let result: u8 = registers.a & data;
     registers.flags.zero = result == 0;
-    registers.flags.overflow = result & 0x40 != 0;
-    registers.flags.negative = result & 0x80 != 0;
+    registers.flags.overflow = data & 0x40 != 0;
+    registers.flags.negative = data & 0x80 != 0;
 }
 
 fn brk(nes: &mut NesState) {
