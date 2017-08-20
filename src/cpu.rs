@@ -184,7 +184,7 @@ fn brk(nes: &mut NesState) {
     let status_byte = status_as_byte(&mut nes.registers, true);
     push(nes, status_byte);
     // Set PC to interrupt vector at FFFE/FFFF
-    nes.registers.pc = read_byte(nes, 0xFFFE) as u16 + ((read_byte(nes, 0xFFFF) as u16) << 8);
+    nes.registers.pc = read_byte(nes, 0xFFFE) as u16 | ((read_byte(nes, 0xFFFF) as u16) << 8);
 }
 
 // Clear carry flag
