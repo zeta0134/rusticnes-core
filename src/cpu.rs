@@ -62,14 +62,14 @@ fn pop(nes: &mut NesState) -> u8 {
 }
 
 fn status_as_byte(registers: &mut Registers, s_flag: bool) -> u8 {
-    return registers.flags.carry     as u8 +
-           (registers.flags.zero      as u8) << 1 +
-           (registers.flags.interrupts_disabled as u8) << 2 +
-           (registers.flags.decimal   as u8) << 3 +
-           (s_flag                    as u8) << 4 +
-           (1u8                            ) << 5 + // always set
-           (registers.flags.overflow  as u8) << 6 +
-           (registers.flags.negative  as u8) << 7
+    return (registers.flags.carry     as u8) +
+           ((registers.flags.zero      as u8) << 1) +
+           ((registers.flags.interrupts_disabled as u8) << 2) +
+           ((registers.flags.decimal   as u8) << 3) +
+           ((s_flag                    as u8) << 4) +
+           ((1u8                            ) << 5) + // always set
+           ((registers.flags.overflow  as u8) << 6) +
+           ((registers.flags.negative  as u8) << 7)
 }
 
 fn set_status_from_byte(registers: &mut Registers, data: u8) {
@@ -345,7 +345,7 @@ fn pha(nes: &mut NesState) {
 
 // Push Processor Status
 fn php(nes: &mut NesState) {
-    let processor_status = status_as_byte(&mut nes.registers, false);
+    let processor_status = status_as_byte(&mut nes.registers, true);
     push(nes, processor_status);
 }
 
