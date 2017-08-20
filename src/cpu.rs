@@ -177,14 +177,17 @@ fn bit(registers: &mut Registers, data: u8) {
 
 fn brk(nes: &mut NesState) {
     // Push PC and processor status to stack
-    let pc_high = ((nes.registers.pc & 0xFF00) >> 8) as u8;
-    let pc_low =  (nes.registers.pc & 0x00FF) as u8;
-    push(nes, pc_high);
-    push(nes, pc_low);
+    let return_address = nes.registers.pc.wrapping_add(1);
+    let addr_high = ((return_address & 0xFF00) >> 8) as u8;
+    let addr_low =  (return_address & 0x00FF) as u8;
+    push(nes, addr_high);
+    push(nes, addr_low);
     let status_byte = status_as_byte(&mut nes.registers, true);
     push(nes, status_byte);
     // Set PC to interrupt vector at FFFE/FFFF
     nes.registers.pc = read_byte(nes, 0xFFFE) as u16 | ((read_byte(nes, 0xFFFF) as u16) << 8);
+    // Disable interrupts
+    nes.registers.flags.interrupts_disabled = true;
 }
 
 // Clear carry flag
