@@ -74,7 +74,7 @@ fn _read_byte(nes: &mut NesState, address: u16, side_effects: bool) -> u8 {
                     let ppu_addr = nes.ppu.current_addr;
                     if side_effects {
                         nes.ppu.latch = nes.ppu.read_byte(ppu_addr);
-                        if nes.ppu.status & 0x04 == 0 {
+                        if nes.ppu.control & 0x04 == 0 {
                             nes.ppu.current_addr = nes.ppu.current_addr.wrapping_add(1);
                         } else {
                             nes.ppu.current_addr = nes.ppu.current_addr.wrapping_add(32);
@@ -147,7 +147,7 @@ pub fn write_byte(nes: &mut NesState, address: u16, data: u8) {
                 // PPUDATA
                 7 => {
                     let ppu_addr = nes.ppu.current_addr;
-                    if nes.ppu.status & 0x04 == 0 {
+                    if nes.ppu.control & 0x04 == 0 {
                         nes.ppu.current_addr = nes.ppu.current_addr.wrapping_add(1);
                     } else {
                         nes.ppu.current_addr = nes.ppu.current_addr.wrapping_add(32);
