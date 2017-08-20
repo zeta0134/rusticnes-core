@@ -541,20 +541,23 @@ fn absolute_y(nes: &mut NesState) -> u16 {
     return address as u16;
 }
 
-// Only used by jump
+// Only used by jmp
 fn indirect(nes: &mut NesState) -> u16 {
     let mut pc = nes.registers.pc;
-    let indirect_low = read_byte(nes, pc);
+    let mut indirect_low: u8 = read_byte(nes, pc);
     nes.registers.pc = nes.registers.pc.wrapping_add(1);
     pc = nes.registers.pc;
-    let indirect_high = read_byte(nes, pc);
+    let indirect_high: u8 = read_byte(nes, pc);
     nes.registers.pc = nes.registers.pc.wrapping_add(1);
-    let mut indirect_address = ((indirect_high as u16) << 8) + (indirect_low as u16);
+    let mut indirect_address = ((indirect_high as u16) << 8) | (indirect_low as u16);
 
     let address_low = read_byte(nes, indirect_address);
-    indirect_address = indirect_address.wrapping_add(1);
+    // This emulates a hardware bug. A jump to ($xxFF) reads the high byte from ($xx00),
+    // not ($(xx+1)00) as one might expect.
+    indirect_low = indirect_low.wrapping_add(1);
+    indirect_address = ((indirect_high as u16) << 8) | (indirect_low as u16);
     let address_high = read_byte(nes, indirect_address);
-    let address = ((address_high as u16) << 8) + (address_low as u16);
+    let address = ((address_high as u16) << 8) | (address_low as u16);
 
     return address as u16;
 }
