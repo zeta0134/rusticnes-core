@@ -353,6 +353,8 @@ fn php(nes: &mut NesState) {
 // Pull Accumulator
 fn pla(nes: &mut NesState) {
     nes.registers.a = pop(nes);
+    nes.registers.flags.zero = nes.registers.a == 0;
+    nes.registers.flags.negative = nes.registers.a & 0x80 != 0;
 }
 
 // Pull Procesor Status
