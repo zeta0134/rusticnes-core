@@ -11,7 +11,6 @@ mod cpu;
 mod debug;
 mod nes;
 mod memory;
-mod palettes;
 mod ppu;
 
 use std::env;
@@ -61,12 +60,8 @@ fn main() {
     let pc_high = memory::read_byte(&mut nes, 0xFFFD);
     nes.registers.pc = pc_low as u16 + ((pc_high as u16) << 8);
 
-    // Initialized? Let's go!
-    let mut exit: bool = false;
-    let mut cycles: u32 = 0;
-
     // "Screen"
-    let mut texture_settings = TextureSettings::new()
+    let texture_settings = TextureSettings::new()
         .min(texture::Filter::Nearest)
         .mag(texture::Filter::Nearest);
 
@@ -91,9 +86,9 @@ fn main() {
     let mut pattern_1_buffer = ImageBuffer::new(128, 128);
     debug::generate_chr_pattern(&nes.ppu.pattern_0, &mut pattern_0_buffer);
     debug::generate_chr_pattern(&nes.ppu.pattern_1, &mut pattern_1_buffer);
-    let mut pattern_0_texture = Texture::from_image(&mut window.factory, &pattern_0_buffer,
+    let pattern_0_texture = Texture::from_image(&mut window.factory, &pattern_0_buffer,
         &texture_settings).unwrap();
-    let mut pattern_1_texture = Texture::from_image(&mut window.factory, &pattern_1_buffer,
+    let pattern_1_texture = Texture::from_image(&mut window.factory, &pattern_1_buffer,
         &texture_settings).unwrap();
 
     let mut nametables_buffer = ImageBuffer::new(512, 480);
@@ -149,6 +144,13 @@ fn main() {
                     memory_viewer_page = 0x4000;
                 }
             }
+
+            if button == Keyboard(Key::B/*largg*/) {
+                let buf = &nes.memory.cart_ram[0x4 .. 0x1000];
+                let s = String::from_utf8_lossy(buf);
+                println!("Blargg Test Output: ");
+                println!("{}", s);
+            }
         }
 
         if let Some(_) = event.update_args() {
@@ -162,9 +164,9 @@ fn main() {
                         255] });
                 }
             }
-            screen_texture.update(&mut window.encoder, &screen_buffer);
+            let _ = screen_texture.update(&mut window.encoder, &screen_buffer);
             debug::generate_nametables(&mut nes.ppu, &mut nametables_buffer);
-            nametables_texture.update(&mut window.encoder, &nametables_buffer);
+            let _ = nametables_texture.update(&mut window.encoder, &nametables_buffer);
 
             if running {
                 // TODO: Move this into NesEmulator and make it run until vblank

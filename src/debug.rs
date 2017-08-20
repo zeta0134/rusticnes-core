@@ -1,7 +1,6 @@
 use image::ImageBuffer;
 use image::Rgba;
 
-use cartridge::NesHeader;
 use nes::NesState;
 use memory;
 use ppu;
@@ -62,7 +61,7 @@ pub fn print_program_state(nes: &mut NesState) {
     println!("\nMemory @ Program Counter");
     // print out the next 8 bytes or so from the program counter
     let mut pc = registers.pc;
-    for i in 1 .. 8 {
+    for _ in 1 .. 8 {
         println!("0x{:04X}: 0x{:02X}", pc, memory::passively_read_byte(nes, pc));
         pc = pc.wrapping_add(1);
     }

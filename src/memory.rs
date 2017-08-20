@@ -1,6 +1,3 @@
-use std::ops::Index;
-use std::ops::IndexMut;
-
 use nes::NesState;
 
 pub struct CpuMemory {

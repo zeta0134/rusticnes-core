@@ -23,7 +23,7 @@ impl NesState {
 
 pub fn step(nes: &mut NesState) {
     cpu::process_instruction(nes);
-    nes.ppu.run_to_cycle(nes.current_cycle, &mut nes.memory);
+    nes.ppu.run_to_cycle(nes.current_cycle);
     nes.current_cycle = nes.current_cycle + 12;
 }
 

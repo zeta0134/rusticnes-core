@@ -64,13 +64,11 @@ pub fn print_header_info(header: NesHeader) {
     println!("Mapper: {0}", header.mapper_number);
 }
 
-use std::cmp;
-
 pub fn load_from_cartridge(nes: &mut NesState, header: NesHeader, cartridge: &Vec<u8>) {
     let mut offset = 16;
-    let mut trainer = &cartridge[16..16]; //default to empty
+    //let mut trainer = &cartridge[16..16]; //default to empty
     if header.trainer {
-        trainer = &cartridge[offset..(offset + 512)];
+        //trainer = &cartridge[offset..(offset + 512)];
         offset = offset + 512;
     }
     let prg_rom_size = (header.prg_rom_size) as usize;
@@ -79,7 +77,7 @@ pub fn load_from_cartridge(nes: &mut NesState, header: NesHeader, cartridge: &Ve
 
     let chr_rom_size = (header.chr_rom_size) as usize;
     let chr_rom = &cartridge[offset .. (offset + chr_rom_size as usize)];
-    offset = offset + chr_rom_size;
+    //offset = offset + chr_rom_size;
 
     // Initialize main memory (this is only valid for very simple games)
     if prg_rom_size == 32768 {

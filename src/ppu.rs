@@ -1,6 +1,3 @@
-use nes::NesState;
-use memory::CpuMemory;
-
 // Note: For basic testing purposes, this is scanline-accurate. This should
 // later be rewritten with cycle-accurate logic once we're past proof of concept
 // and prototype stages.
@@ -169,7 +166,7 @@ impl PpuState {
         }
     }
 
-    pub fn run_to_cycle(&mut self, current_cycle: u32, memory: &mut CpuMemory) {
+    pub fn run_to_cycle(&mut self, current_cycle: u32) {
         let cycles_per_scanline = 341 * 4;
         self.scanline_cycles = self.scanline_cycles + (current_cycle - self.last_cycle);
         self.last_cycle = current_cycle;

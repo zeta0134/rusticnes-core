@@ -1,4 +1,3 @@
-use memory::CpuMemory;
 use memory::write_byte;
 use memory::read_byte;
 use nes::NesState;
@@ -403,7 +402,7 @@ fn rts(nes: &mut NesState) {
 fn sbc(registers: &mut Registers, data: u8) {
     // Preload the carry into bit 8
     let inverted_data = data ^ 0xFF;
-    adc(registers, data);
+    adc(registers, inverted_data);
 }
 
 // Set Carry Flag
@@ -474,10 +473,6 @@ fn tya(registers: &mut Registers) {
     registers.a = registers.y;
     registers.flags.zero = registers.a == 0;
     registers.flags.negative = registers.a & 0x80 != 0;
-}
-
-fn undefined() {
-    println!("Undefined opcode!");
 }
 
 // Addressing Modes
