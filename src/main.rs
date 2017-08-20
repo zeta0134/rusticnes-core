@@ -131,8 +131,24 @@ fn main() {
                 debug::print_program_state(&mut nes);
             }
 
-            if button == Keyboard(Key::Comma ) { memory_viewer_page = memory_viewer_page.wrapping_sub(0x100); }
-            if button == Keyboard(Key::Period) { memory_viewer_page = memory_viewer_page.wrapping_add(0x100); }
+            if button == Keyboard(Key::Comma ) {
+                memory_viewer_page = memory_viewer_page.wrapping_sub(0x100);
+                if memory_viewer_page == 0x1F00 {
+                    memory_viewer_page = 0x0700;
+                }
+                if memory_viewer_page == 0x3F00 {
+                    memory_viewer_page = 0x2000;
+                }
+            }
+            if button == Keyboard(Key::Period) {
+                memory_viewer_page = memory_viewer_page.wrapping_add(0x100);
+                if memory_viewer_page == 0x0800 {
+                    memory_viewer_page = 0x2000;
+                }
+                if memory_viewer_page == 0x2100 {
+                    memory_viewer_page = 0x4000;
+                }
+            }
         }
 
         if let Some(_) = event.update_args() {
