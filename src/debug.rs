@@ -26,7 +26,7 @@ pub fn generate_chr_pattern(pattern: &[u8], buffer: &mut ImageBuffer<Rgba<u8>, V
 
 pub fn generate_nametables(ppu: &mut ppu::PpuState, buffer: &mut ImageBuffer<Rgba<u8>, Vec<u8>>) {
     let mut pattern = ppu.pattern_0;
-    if (ppu.control & 0x08) != 0 {
+    if (ppu.control & 0x10) != 0 {
         pattern = ppu.pattern_1;
     }
     let debug_pallete: [u8; 4] = [255, 192, 128, 0];

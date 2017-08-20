@@ -96,9 +96,8 @@ fn _read_byte(nes: &mut NesState, address: u16, side_effects: bool) -> u8 {
 pub fn write_byte(nes: &mut NesState, address: u16, data: u8) {
     nes.memory.recent_writes.insert(0, address);
     nes.memory.recent_writes.truncate(20);
-    let memory = &mut nes.memory;
     match address {
-        0x0000 ... 0x1FFF => memory.iram_raw[(address & 0x7FF) as usize] = data,
+        0x0000 ... 0x1FFF => nes.memory.iram_raw[(address & 0x7FF) as usize] = data,
         0x2000 ... 0x3FFF => {
             // PPU
             let ppu_reg = address & 0x7;
@@ -157,7 +156,15 @@ pub fn write_byte(nes: &mut NesState, address: u16, data: u8) {
                 _ => ()
             }
         },
-        0x6000 ... 0x7FFF => memory.cart_ram[(address & 0x1FFF) as usize] = data,
+        0x4014 => {
+            // OAM DMA, for cheating just do this instantly and return
+            let read_address = (data as u16) << 8;
+            for i in 0 .. 256 {
+                let byte = read_byte(nes, read_address + i);
+                nes.ppu.oam[i as usize] = byte;
+            }
+        },
+        0x6000 ... 0x7FFF => nes.memory.cart_ram[(address & 0x1FFF) as usize] = data,
         _ => () // Do nothing!
     }
 }

@@ -42,6 +42,10 @@ pub struct PpuState {
 
     // Framebuffer
     pub screen: [u8; 256 * 240],
+    pub sprite_color: [u8; 256],
+    pub sprite_index: [u8; 256],
+    pub sprite_bg_priority: [bool; 256],
+    pub sprite_zero: [bool; 256],
 }
 
 impl PpuState {
@@ -58,6 +62,10 @@ impl PpuState {
            scanline_cycles: 0,
            last_cycle: 0,
            screen: [0u8; 256 * 240],
+           sprite_color: [0u8; 256],
+           sprite_index: [0u8; 256],
+           sprite_bg_priority: [false; 256],
+           sprite_zero: [false; 256],
 
            control: 0,
            mask: 0,
@@ -167,9 +175,70 @@ impl PpuState {
         }
     }
 
+    fn render_sprites(&mut self, scanline: u8) {
+        // Init buffers
+        self.sprite_color = [0u8; 256];
+        self.sprite_index = [0u8; 256];
+        self.sprite_bg_priority = [false; 256];
+        self.sprite_zero = [false; 256];
+
+        let mut secondary_oam = [0xFFu8; 32];
+        let mut secondary_index = 0;
+        let sprite_size = 8;
+
+        // Gather first 8 visible sprites (and pay attention if there are more)
+        for i in 0 .. 39 {
+            let y = self.oam[i * 4 + 0];
+            if scanline >= y && scanline < y + sprite_size {
+                if secondary_index < 8 {
+                    for j in 0 .. 4 {
+                        secondary_oam[secondary_index * 4 + j] = self.oam[i * 4 + j];
+                    }
+                    secondary_index += 1;
+                } else {
+                    self.status = self.status | 0x20; // bit 5 = sprite overflow this frame
+                }
+            }
+        }
+
+        // secondary_oam now has up to 8 sprites, all of which have a Y coordinate
+        // which is on this scanline. Proceed to render!
+        let pattern = self.pattern_0;
+
+        // Note: Iterating over the list in reverse order cheats a bit, by having higher priority
+        // sprites overwrite the work done to draw lower priority sprites.
+        for i in (0 .. secondary_index).rev() {
+            let sprite_y = secondary_oam[i * 4 + 0];
+            let tile_index = secondary_oam[i * 4 + 1];
+            let flags = secondary_oam[i * 4 + 2];
+            let sprite_x = secondary_oam[i * 4 + 3];
+
+            let priority = flags & 0x20 != 0;
+            let tile_y = scanline - sprite_y;
+
+            for x in 0 .. 8 {
+                let scanline_x = (sprite_x as u16) + x;
+                let mut tile_x = x;
+                if flags & 0x40 != 0 {
+                    tile_x = 7 - x;
+                }
+
+                if scanline_x < 256 {
+                    let palette_index = decode_chr_pixel(&pattern, tile_index, tile_x as u8, tile_y);
+                    if palette_index  > 0 {
+                        self.sprite_index[scanline_x as usize] = palette_index;
+                        self.sprite_color[scanline_x as usize] = palette_index; // TODO: Decode real color here
+                        self.sprite_bg_priority[scanline_x as usize] = priority;
+                        self.sprite_zero[scanline_x as usize] = i == 0;
+                    }
+                }
+            }
+        }
+    }
+
     fn render_background(&mut self, scanline: u16) {
         let mut pattern = self.pattern_0;
-        if (self.control & 0x08) != 0 {
+        if (self.control & 0x10) != 0 {
             pattern = self.pattern_1;
         }
         let mut y = self.scroll_y as u16 + scanline;
@@ -188,6 +257,16 @@ impl PpuState {
             let tile = self.get_bg_tile((x >> 3) as u8, (y >> 3) as u8);
             let index = decode_chr_pixel(&pattern, tile, (x & 0x7) as u8, (y & 0x7) as u8);
             self.screen[(scanline * 256 + sx) as usize] = index;
+
+            // Here, decide if a sprite pixel should overwrite a background pixel
+            if self.sprite_index[sx as usize] != 0 {
+                if self.sprite_zero[sx as usize] {
+                    self.status = self.status | 0x40; // bit 6 = sprite zero hit
+                }
+                if !self.sprite_bg_priority[sx as usize] {
+                    self.screen[(scanline * 256 + sx) as usize] = self.sprite_color[sx as usize];
+                }
+            }
         }
     }
 
@@ -197,6 +276,7 @@ impl PpuState {
         match scanline {
             0 ... 239 => {
                 // Visible scanline here
+                self.render_sprites(scanline as u8);
                 self.render_background(scanline);
             },
             // 240 does nothing
@@ -208,7 +288,8 @@ impl PpuState {
             261 => {
                 // Set vertical scrolling registers, in preparation for new frame
                 // (Emulator: Draw actual frame here)
-                self.status = self.status & 0x7F; // Clear VBlank bit
+                // Clear sprite overflow and sprite zero hit too
+                self.status = self.status & 0x1F; // Clear VBlank bit
             },
             _ => ()
         }
