@@ -255,7 +255,7 @@ fn dey(registers: &mut Registers) {
 
 // Exclusive OR
 fn eor(registers: &mut Registers, data: u8) {
-    registers.a = registers.a | data;
+    registers.a = registers.a ^ data;
     registers.flags.zero = registers.a == 0;
     registers.flags.negative = registers.a & 0x80 != 0;
 }
@@ -323,6 +323,7 @@ fn lsr(registers: &mut Registers, data: u8) -> u8 {
     registers.flags.carry = data & 0x1 != 0;
     let result: u8 = data >> 1;
     registers.flags.zero = result == 0;
+    registers.flags.negative = false;
     return result;
 }
 
@@ -363,20 +364,20 @@ fn plp(nes: &mut NesState) {
 // Rotate left
 fn rol(registers: &mut Registers, data: u8) -> u8 {
     let old_carry = registers.flags.carry;
-    registers.flags.carry = data & 0x80 != 0;
-    let result = (data << 1) + old_carry as u8;
+    registers.flags.carry = (data & 0x80) != 0;
+    let result = (data << 1) | (old_carry as u8);
     registers.flags.zero = result == 0;
-    registers.flags.negative = result & 0x80 != 0;
+    registers.flags.negative = (result & 0x80) != 0;
     return result;
 }
 
 // Rotate Right
 fn ror(registers: &mut Registers, data: u8) -> u8 {
     let old_carry = registers.flags.carry;
-    registers.flags.carry = data & 0x01 != 0;
-    let result = (data >> 1) + ((old_carry as u8) << 7);
+    registers.flags.carry = (data & 0x01) != 0;
+    let result = (data >> 1) | ((old_carry as u8) << 7);
     registers.flags.zero = result == 0;
-    registers.flags.negative = result & 0x80 != 0;
+    registers.flags.negative = (result & 0x80) != 0;
     return result;
 }
 
