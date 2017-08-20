@@ -5,7 +5,6 @@ use nes::NesState;
 use memory;
 use ppu;
 
-
 pub fn generate_chr_pattern(pattern: &[u8], buffer: &mut ImageBuffer<Rgba<u8>, Vec<u8>>) {
     let debug_pallete: [u8; 4] = [255, 192, 128, 0];
     for x in 0 .. 16 {
@@ -26,13 +25,17 @@ pub fn generate_chr_pattern(pattern: &[u8], buffer: &mut ImageBuffer<Rgba<u8>, V
 }
 
 pub fn generate_nametables(ppu: &mut ppu::PpuState, buffer: &mut ImageBuffer<Rgba<u8>, Vec<u8>>) {
+    let mut pattern = ppu.pattern_0;
+    if (ppu.control & 0x08) != 0 {
+        pattern = ppu.pattern_1;
+    }
     let debug_pallete: [u8; 4] = [255, 192, 128, 0];
     for tx in 0 .. 63 {
         for ty in 0 .. 59 {
             let tile_index = ppu.get_bg_tile(tx, ty);
             for px in 0 .. 8 {
                 for py in 0 .. 8 {
-                    let palette_index = ppu::decode_chr_pixel(&ppu.pattern_1, tile_index as u8, px as u8, py as u8);
+                    let palette_index = ppu::decode_chr_pixel(&pattern, tile_index as u8, px as u8, py as u8);
                     buffer.put_pixel(tx as u32 * 8 + px as u32, ty as u32 * 8 + py as u32, Rgba { data: [
                         debug_pallete[palette_index as usize],
                         debug_pallete[palette_index as usize],

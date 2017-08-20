@@ -77,57 +77,49 @@ impl PpuState {
     pub fn read_byte(&mut self, address: u16) -> u8 {
         let masked_address = address & 0x3FFF;
         match masked_address {
-            0x0000 ... 0x0FFF => {
-                let result = self.read_buffer;
-                self.read_buffer = self.pattern_0[(masked_address & 0x0FFF) as usize];
-                return result
-            },
-            0x1000 ... 0x1FFF => {
-                let result = self.read_buffer;
-                self.read_buffer = self.pattern_1[(masked_address & 0x0FFF) as usize];
-                return result
-            },
-            // Nametable 0
-            0x2000 ... 0x23FF => {
-                let result = self.read_buffer;
-                self.read_buffer = self.internal_vram[(masked_address & 0x3FF) as usize];
-                return result;
-            }
-            // Nametable 1
-            0x2400 ... 0x27FF => {
-                let result = self.read_buffer;
-                if self.v_mirroring {
-                    self.read_buffer = self.internal_vram[((masked_address & 0x3FF) + 0x400) as usize];
-                } else {
-                    self.read_buffer = self.internal_vram[(masked_address & 0x3FF) as usize];
-                }
-                return result;
-            },
-            // Nametable 2
-            0x2800 ... 0x2BFF => {
-                let result = self.read_buffer;
-                if self.v_mirroring {
-                    self.read_buffer = self.internal_vram[(masked_address & 0x3FF) as usize];
-                } else {
-                    self.read_buffer = self.internal_vram[((masked_address & 0x3FF) + 0x400) as usize];
-                }
-                return result;
-            },
-            // Nametable 3
-            0x2C00 ... 0x2FFF => {
-                let result = self.read_buffer;
-                self.read_buffer = self.internal_vram[((masked_address & 0x3FF) + 0x400) as usize];
-                return result;
-            }
-            0x3000 ... 0x3EFF => {
-                let result = self.read_buffer;
-                self.read_buffer = self.read_byte(masked_address - 0x1000);
-                return result;
-            }
             0x3F00 ... 0x3FFF => {
                 // Weird read buffer behavior
                 self.read_buffer = self.read_byte((masked_address & 0x0FFF) + 0x2000);
-                
+                return self._read_byte(address);
+            },
+            _ => {
+                let result = self.read_buffer;
+                self.read_buffer = self._read_byte(address);
+                return result;
+            }
+        }
+    }
+
+    pub fn _read_byte(&mut self, address: u16) -> u8 {
+        let masked_address = address & 0x3FFF;
+        match masked_address {
+            0x0000 ... 0x0FFF => return self.pattern_0[(masked_address & 0x0FFF) as usize],
+            0x1000 ... 0x1FFF => return self.pattern_1[(masked_address & 0x0FFF) as usize],
+            // Nametable 0
+            0x2000 ... 0x23FF => return self.internal_vram[(masked_address & 0x3FF) as usize],
+            // Nametable 1
+            0x2400 ... 0x27FF => {
+                if self.v_mirroring {
+                    return self.internal_vram[((masked_address & 0x3FF) + 0x400) as usize];
+                } else {
+                    return self.internal_vram[(masked_address & 0x3FF) as usize];
+                }
+            },
+            // Nametable 2
+            0x2800 ... 0x2BFF => {
+                if self.v_mirroring {
+                    return self.internal_vram[(masked_address & 0x3FF) as usize];
+                } else {
+                    return self.internal_vram[((masked_address & 0x3FF) + 0x400) as usize];
+                }
+            },
+            // Nametable 3
+            0x2C00 ... 0x2FFF => return self.internal_vram[((masked_address & 0x3FF) + 0x400) as usize],
+            0x3000 ... 0x3EFF => return self.read_byte(masked_address - 0x1000),
+            0x3F00 ... 0x3FFF => {
+                // Weird read buffer behavior
+                //self.read_buffer = self.read_byte((masked_address & 0x0FFF) + 0x2000);
+
                 let mut palette_address = masked_address & 0x1F;
                 // Weird background masking
                 if palette_address & 0x13 == 0x10 {
@@ -175,12 +167,37 @@ impl PpuState {
         }
     }
 
+    fn render_background(&mut self, scanline: u16) {
+        let mut pattern = self.pattern_0;
+        if (self.control & 0x08) != 0 {
+            pattern = self.pattern_1;
+        }
+        let mut y = self.scroll_y as u16 + scanline;
+        if self.control & 0x2 != 0 {
+            y += 240;
+        }
+        // wrap around if we go off the bottom of the map
+        y = y % (240 * 2);
+        for sx in 0 .. 256 {
+            let mut x = sx + self.scroll_x as u16;
+            if self.control & 0x1 != 0 {
+                x += 256;
+            }
+            // wrap around if we go off the right of the map
+            x = x & 0x1FF;
+            let tile = self.get_bg_tile((x >> 3) as u8, (y >> 3) as u8);
+            let index = decode_chr_pixel(&pattern, tile, (x & 0x7) as u8, (y & 0x7) as u8);
+            self.screen[(scanline * 256 + sx) as usize] = index;
+        }
+    }
+
     // Return value: NMI interrupt happened this cycle
     pub fn process_scanline(&mut self) {
         let scanline = self.current_scanline;
         match scanline {
             0 ... 239 => {
                 // Visible scanline here
+                self.render_background(scanline);
             },
             // 240 does nothing
             241 => {
@@ -220,8 +237,8 @@ impl PpuState {
         if ty > 29 {
             address = address + 0x0800;
         }
-        address = address + ((ty % 30) as u16) * 32 + ((tx % 0x1F) as u16);
-        return self.read_byte(address);
+        address = address + ((ty % 30) as u16) * 32 + ((tx & 0x1F) as u16);
+        return self._read_byte(address);
     }
 }
 

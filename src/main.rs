@@ -154,13 +154,15 @@ fn main() {
         }
 
         if let Some(_) = event.update_args() {
+            let debug_pallete: [u8; 4] = [255, 192, 128, 0];
             // Debug draw some junk
             for x in 0 .. 256 {
                 for y in 0 .. 240 {
-                    screen_buffer.put_pixel(x, y, Rgba { data: [
-                        (x + thingy & 0xFF) as u8,
-                        (y + thingy & 0xFF) as u8,
-                        ((x ^ y ^ thingy) & 0xFF) as u8,
+                    let debug_index = nes.ppu.screen[y * 256 + x];
+                    screen_buffer.put_pixel(x as u32, y as u32, Rgba { data: [
+                        debug_pallete[debug_index as usize],
+                        debug_pallete[debug_index as usize],
+                        debug_pallete[debug_index as usize],
                         255] });
                 }
             }
