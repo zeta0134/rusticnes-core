@@ -81,11 +81,11 @@ pub fn load_from_cartridge(nes: &mut NesState, header: NesHeader, cartridge: &Ve
 
     // Initialize main memory (this is only valid for very simple games)
     if prg_rom_size == 32768 {
-        for i in 0 .. prg_rom_size - 1 {
+        for i in 0 .. prg_rom_size {
             nes.memory.cart_rom[i] = prg_rom[i];
         }
     } else if prg_rom_size == 16384 {
-        for i in 0 .. prg_rom_size - 1 {
+        for i in 0 .. prg_rom_size {
             nes.memory.cart_rom[i] = prg_rom[i];
             nes.memory.cart_rom[i + 16384] = prg_rom[i];
         }
@@ -94,7 +94,7 @@ pub fn load_from_cartridge(nes: &mut NesState, header: NesHeader, cartridge: &Ve
     }
 
     // Initialize PPU CHR memory (again, only valid for simple mappers)
-    for i in 0 .. 0x1000 - 1 {
+    for i in 0 .. 0x1000 {
         nes.ppu.pattern_0[i] = chr_rom[i];
         nes.ppu.pattern_1[i] = chr_rom[0x1000 + i];
     }
