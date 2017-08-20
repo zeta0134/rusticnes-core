@@ -16,6 +16,8 @@ pub struct PpuState {
     // PPU Registers
     pub latch: u8,
 
+    pub read_buffer: u8,
+
     pub control: u8,
     pub mask: u8,
     pub status: u8,
@@ -68,35 +70,64 @@ impl PpuState {
            current_addr: 0,
            oam_dma_high: 0,
            latch: 0,
+           read_buffer: 0,
        };
     }
 
     pub fn read_byte(&mut self, address: u16) -> u8 {
         let masked_address = address & 0x3FFF;
         match masked_address {
-            0x0000 ... 0x0FFF => return self.pattern_0[(masked_address & 0x0FFF) as usize],
-            0x1000 ... 0x1FFF => return self.pattern_1[(masked_address & 0x0FFF) as usize],
+            0x0000 ... 0x0FFF => {
+                let result = self.read_buffer;
+                self.read_buffer = self.pattern_0[(masked_address & 0x0FFF) as usize];
+                return result
+            },
+            0x1000 ... 0x1FFF => {
+                let result = self.read_buffer;
+                self.read_buffer = self.pattern_1[(masked_address & 0x0FFF) as usize];
+                return result
+            },
             // Nametable 0
-            0x2000 ... 0x23FF => return self.internal_vram[(masked_address & 0x3FF) as usize],
+            0x2000 ... 0x23FF => {
+                let result = self.read_buffer;
+                self.read_buffer = self.internal_vram[(masked_address & 0x3FF) as usize];
+                return result;
+            }
             // Nametable 1
             0x2400 ... 0x27FF => {
+                let result = self.read_buffer;
                 if self.v_mirroring {
-                    return self.internal_vram[((masked_address & 0x3FF) + 0x400) as usize];
+                    self.read_buffer = self.internal_vram[((masked_address & 0x3FF) + 0x400) as usize];
                 } else {
-                    return self.internal_vram[(masked_address & 0x3FF) as usize];
+                    self.read_buffer = self.internal_vram[(masked_address & 0x3FF) as usize];
                 }
+                return result;
             },
             // Nametable 2
             0x2800 ... 0x2BFF => {
+                let result = self.read_buffer;
                 if self.v_mirroring {
-                    return self.internal_vram[(masked_address & 0x3FF) as usize];
+                    self.read_buffer = self.internal_vram[(masked_address & 0x3FF) as usize];
                 } else {
-                    return self.internal_vram[((masked_address & 0x3FF) + 0x400) as usize];
+                    self.read_buffer = self.internal_vram[((masked_address & 0x3FF) + 0x400) as usize];
                 }
+                return result;
             },
-            0x2C00 ... 0x2FFF => return self.internal_vram[((masked_address & 0x3FF) + 0x400) as usize],
-            0x3000 ... 0x3EFF => return self.read_byte(masked_address - 0x1000),
+            // Nametable 3
+            0x2C00 ... 0x2FFF => {
+                let result = self.read_buffer;
+                self.read_buffer = self.internal_vram[((masked_address & 0x3FF) + 0x400) as usize];
+                return result;
+            }
+            0x3000 ... 0x3EFF => {
+                let result = self.read_buffer;
+                self.read_buffer = self.read_byte(masked_address - 0x1000);
+                return result;
+            }
             0x3F00 ... 0x3FFF => {
+                // Weird read buffer behavior
+                self.read_buffer = self.read_byte((masked_address & 0x0FFF) + 0x2000);
+                
                 let mut palette_address = masked_address & 0x1F;
                 // Weird background masking
                 if palette_address & 0x13 == 0x10 {
