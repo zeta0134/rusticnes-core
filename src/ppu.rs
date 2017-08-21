@@ -187,7 +187,7 @@ impl PpuState {
         let sprite_size = 8;
 
         // Gather first 8 visible sprites (and pay attention if there are more)
-        for i in 0 .. 39 {
+        for i in 0 .. 40 {
             let y = self.oam[i * 4 + 0];
             if scanline >= y && scanline < y + sprite_size {
                 if secondary_index < 8 {
@@ -214,13 +214,16 @@ impl PpuState {
             let sprite_x = secondary_oam[i * 4 + 3];
 
             let priority = flags & 0x20 != 0;
-            let tile_y = scanline - sprite_y;
+            let mut tile_y = scanline - sprite_y;
+            if flags & 0x80 != 0 {
+                tile_y = 7 - tile_y;
+            }
 
             for x in 0 .. 8 {
                 let scanline_x = (sprite_x as u16) + x;
                 let mut tile_x = x;
                 if flags & 0x40 != 0 {
-                    tile_x = 7 - x;
+                    tile_x = 7 - tile_x;
                 }
 
                 if scanline_x < 256 {
@@ -255,15 +258,15 @@ impl PpuState {
             // wrap around if we go off the right of the map
             x = x & 0x1FF;
             let tile = self.get_bg_tile((x >> 3) as u8, (y >> 3) as u8);
-            let index = decode_chr_pixel(&pattern, tile, (x & 0x7) as u8, (y & 0x7) as u8);
-            self.screen[(scanline * 256 + sx) as usize] = index;
+            let bg_index = decode_chr_pixel(&pattern, tile, (x & 0x7) as u8, (y & 0x7) as u8);
+            self.screen[(scanline * 256 + sx) as usize] = bg_index;
 
             // Here, decide if a sprite pixel should overwrite a background pixel
             if self.sprite_index[sx as usize] != 0 {
                 if self.sprite_zero[sx as usize] {
                     self.status = self.status | 0x40; // bit 6 = sprite zero hit
                 }
-                if !self.sprite_bg_priority[sx as usize] {
+                if bg_index == 0 || !self.sprite_bg_priority[sx as usize] {
                     self.screen[(scanline * 256 + sx) as usize] = self.sprite_color[sx as usize];
                 }
             }
