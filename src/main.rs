@@ -26,6 +26,7 @@ use nes::NesState;
 fn main() {
     let mut window: PistonWindow = WindowSettings::new("RusticNES", [1024, 768])
     .exit_on_esc(true).build().unwrap();
+    window.set_ups(60);
 
     println!("Welcome to RusticNES");
 
@@ -171,9 +172,7 @@ fn main() {
             let _ = nametables_texture.update(&mut window.encoder, &nametables_buffer);
 
             if running {
-                // TODO: Move this into NesEmulator and make it run until vblank
                 nes::run_until_vblank(&mut nes);
-                debug::print_program_state(&mut nes);
             }
         }
 
