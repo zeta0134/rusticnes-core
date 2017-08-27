@@ -219,6 +219,8 @@ impl PpuState {
                 tile_y = 7 - tile_y;
             }
 
+            let palette_index = flags & 0x03;
+
             for x in 0 .. 8 {
                 let scanline_x = (sprite_x as u16) + x;
                 let mut tile_x = x;
@@ -227,10 +229,11 @@ impl PpuState {
                 }
 
                 if scanline_x < 256 {
-                    let palette_index = decode_chr_pixel(&pattern, tile_index, tile_x as u8, tile_y);
-                    if palette_index  > 0 {
-                        self.sprite_index[scanline_x as usize] = palette_index;
-                        self.sprite_color[scanline_x as usize] = palette_index; // TODO: Decode real color here
+                    let chr_index = decode_chr_pixel(&pattern, tile_index, tile_x as u8, tile_y);
+                    if chr_index > 0 {
+                        let palette_color = self._read_byte(((palette_index << 2) + chr_index) as u16 + 0x3F10);
+                        self.sprite_index[scanline_x as usize] = chr_index;
+                        self.sprite_color[scanline_x as usize] = palette_color;
                         self.sprite_bg_priority[scanline_x as usize] = priority;
                         self.sprite_zero[scanline_x as usize] = i == 0;
                     }
