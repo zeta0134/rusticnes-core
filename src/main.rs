@@ -102,10 +102,39 @@ fn main() {
     let mut running = false;
     let mut memory_viewer_page = 0u16;
 
+    let key_mappings: [Key; 8] = [
+        Key::X,
+        Key::Z,
+        Key::RShift,
+        Key::Return,
+        Key::Up,
+        Key::Down,
+        Key::Left,
+        Key::Right,
+    ];
+
     debug::print_program_state(&mut nes);
 
     while let Some(event) = window.next() {
         if let Some(button) = event.press_args() {
+            // NES Key State
+            for i in 0 .. 8 {
+                if button == Keyboard(key_mappings[i]) {
+                    // Set the corresponding bit
+                    nes.p1_input |= 0x1 << i;
+                }
+            }
+        }
+
+        if let Some(button) = event.release_args() {
+            // NES Key State
+            for i in 0 .. 8 {
+                if button == Keyboard(key_mappings[i]) {
+                    // Clear the corresponding bit
+                    nes.p1_input &= (0x1 << i) ^ 0xFF;
+                }
+            }
+
             // Keyboard input here
             if button == Keyboard(Key::R) {
                 running = !running;
@@ -192,6 +221,8 @@ fn main() {
             let nametables_transform = context.transform.trans(512.0, 256.0);
             image(&nametables_texture, nametables_transform, graphics);
 
+            /*
+
             let black_text = text::Text::new_color([0.0, 0.0, 0.0, 1.0], 16);
             let bright_text = text::Text::new_color([1.0, 1.0, 1.0, 0.8], 16);
             let dim_text = text::Text::new_color([1.0, 1.0, 1.0, 0.3], 16);
@@ -243,6 +274,7 @@ fn main() {
                     }
                 }
             }
+            // */
 
             thingy = thingy + 1;
         });

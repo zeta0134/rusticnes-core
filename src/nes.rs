@@ -8,6 +8,11 @@ pub struct NesState {
     pub ppu: PpuState,
     pub registers: Registers,
     pub current_cycle: u32,
+    pub p1_input: u8,
+    pub p1_data: u8,
+    pub p2_input: u8,
+    pub p2_data: u8,
+    pub input_latch: bool,
 }
 
 impl NesState {
@@ -17,6 +22,11 @@ impl NesState {
             ppu: PpuState::new(),
             registers: Registers::new(),
             current_cycle: 0,
+            p1_input: 0,
+            p1_data: 0,
+            p2_input: 0,
+            p2_data: 0,
+            input_latch: false,
         }
     }
 }

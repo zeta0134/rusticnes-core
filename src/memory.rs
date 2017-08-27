@@ -87,6 +87,26 @@ fn _read_byte(nes: &mut NesState, address: u16, side_effects: bool) -> u8 {
                 _ => return 0
             }
         },
+        0x4016 => {
+            if nes.input_latch {
+                // strobe register is high, so copy input data to latch (probably bad if this
+                // actually occurs here, but it matches what real hardware would do)
+                nes.p1_data = nes.p1_input;
+            }
+            let result = 0x40 | (nes.p1_data & 0x1);
+            nes.p1_data = nes.p1_data >> 1;
+            return result;
+        },
+        0x4017 => {
+            if nes.input_latch {
+                // strobe register is high, so copy input data to latch (probably bad if this
+                // actually occurs here, but it matches what real hardware would do)
+                nes.p2_data = nes.p2_input;
+            }
+            let result = 0x40 | (nes.p2_data & 0x1);
+            nes.p2_data = nes.p2_data >> 1;
+            return result;
+        },
         0x6000 ... 0x7FFF => return memory.cart_ram[(address & 0x1FFF) as usize],
         0x8000 ... 0xFFFF => return memory.cart_rom[(address & 0x7FFF) as usize],
         _ => return 0
@@ -164,6 +184,14 @@ pub fn write_byte(nes: &mut NesState, address: u16, data: u8) {
                 nes.ppu.oam[i as usize] = byte;
             }
         },
+        0x4016 => {
+            // Input latch
+            nes.input_latch = data & 0x1 != 0;
+            if nes.input_latch {
+                nes.p1_data = nes.p1_input;
+                nes.p2_data = nes.p2_input;
+            }
+        }
         0x6000 ... 0x7FFF => nes.memory.cart_ram[(address & 0x1FFF) as usize] = data,
         _ => () // Do nothing!
     }
