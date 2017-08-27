@@ -257,9 +257,16 @@ impl PpuState {
             }
             // wrap around if we go off the right of the map
             x = x & 0x1FF;
-            let tile = self.get_bg_tile((x >> 3) as u8, (y >> 3) as u8);
+            let tx = (x >> 3) as u8;
+            let ty = (y >> 3) as u8;
+            let tile = self.get_bg_tile(tx, ty);
             let bg_index = decode_chr_pixel(&pattern, tile, (x & 0x7) as u8, (y & 0x7) as u8);
-            self.screen[(scanline * 256 + sx) as usize] = bg_index;
+            let mut palette_index = self.get_bg_palette(tx, ty);
+            if bg_index == 0 {
+                palette_index = 0; // Ignore palette index for color 0
+            }
+            let palette_color = self._read_byte(((palette_index << 2) + bg_index) as u16 + 0x3F00);
+            self.screen[(scanline * 256 + sx) as usize] = palette_color;
 
             // Here, decide if a sprite pixel should overwrite a background pixel
             if self.sprite_index[sx as usize] != 0 {
@@ -323,6 +330,22 @@ impl PpuState {
         }
         address = address + ((ty % 30) as u16) * 32 + ((tx & 0x1F) as u16);
         return self._read_byte(address);
+    }
+
+    pub fn get_bg_palette(&mut self, tx: u8, ty: u8) -> u8 {
+        let mut address: u16 = 0x23C0;
+        if tx > 31 {
+            address = address + 0x0400;
+        }
+        if ty > 29 {
+            address = address + 0x0800;
+        }
+        address += ((tx & 0x1F) >> 2) as u16;
+        address += (((ty % 30) >> 2) * 0x8) as u16;
+        let attr_byte = self._read_byte(address);
+        let shift = (((tx & 0x2) >> 1) + (ty & 0x2)) << 1;
+        let mask = 0x3 << shift;
+        return (attr_byte & mask) >> shift;
     }
 }
 

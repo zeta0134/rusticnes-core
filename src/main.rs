@@ -11,6 +11,7 @@ mod cpu;
 mod debug;
 mod nes;
 mod memory;
+mod palettes;
 mod ppu;
 
 use std::env;
@@ -22,6 +23,7 @@ use image::ImageBuffer;
 use image::Rgba;
 
 use nes::NesState;
+use palettes::NTSC_PAL;
 
 fn main() {
     let mut window: PistonWindow = WindowSettings::new("RusticNES", [1024, 768])
@@ -159,11 +161,11 @@ fn main() {
             // Debug draw some junk
             for x in 0 .. 256 {
                 for y in 0 .. 240 {
-                    let debug_index = nes.ppu.screen[y * 256 + x];
+                    let palette_index = ((nes.ppu.screen[y * 256 + x]) as usize) * 3;
                     screen_buffer.put_pixel(x as u32, y as u32, Rgba { data: [
-                        debug_pallete[debug_index as usize],
-                        debug_pallete[debug_index as usize],
-                        debug_pallete[debug_index as usize],
+                        NTSC_PAL[palette_index + 0],
+                        NTSC_PAL[palette_index + 1],
+                        NTSC_PAL[palette_index + 2],
                         255] });
                 }
             }
