@@ -273,17 +273,23 @@ impl PpuState {
                 palette_index = 0; // Ignore palette index for color 0
             }
             let palette_color = self._read_byte(((palette_index << 2) + bg_index) as u16 + 0x3F00);
-            self.screen[(scanline * 256 + sx) as usize] = palette_color;
+            if self.mask & 0x08 != 0 {
+                self.screen[(scanline * 256 + sx) as usize] = palette_color;
+            } else {
+                // Not positive on this, is this documented somewhere?
+                self.screen[(scanline * 256 + sx) as usize] = self._read_byte(0x3F00);
+            }
 
             // Here, decide if a sprite pixel should overwrite a background pixel
-            if self.sprite_index[sx as usize] != 0 {
-
-                if bg_index == 0 || !self.sprite_bg_priority[sx as usize] {
-                    self.screen[(scanline * 256 + sx) as usize] = self.sprite_color[sx as usize];
-                }
-                if self.sprite_zero[sx as usize] {
-                    self.status = self.status | 0x40; // bit 6 = sprite zero hit
-                    //self.screen[(scanline * 256 + sx) as usize] = 0x25;
+            if self.mask & 0x10 != 0 {
+                if self.sprite_index[sx as usize] != 0 {
+                    if bg_index == 0 || !self.sprite_bg_priority[sx as usize] {
+                        self.screen[(scanline * 256 + sx) as usize] = self.sprite_color[sx as usize];
+                    }
+                    if self.sprite_zero[sx as usize] {
+                        self.status = self.status | 0x40; // bit 6 = sprite zero hit
+                        //self.screen[(scanline * 256 + sx) as usize] = 0x25;
+                    }
                 }
             }
         }
