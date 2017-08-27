@@ -185,6 +185,7 @@ impl PpuState {
         let mut secondary_oam = [0xFFu8; 32];
         let mut secondary_index = 0;
         let sprite_size = 8;
+        let mut sprite_zero_on_scanline = false;
 
         // Gather first 8 visible sprites (and pay attention if there are more)
         for i in 0 .. 64 {
@@ -195,6 +196,9 @@ impl PpuState {
                         secondary_oam[secondary_index * 4 + j] = self.oam[i * 4 + j];
                     }
                     secondary_index += 1;
+                    if i == 0 {
+                        sprite_zero_on_scanline = true;
+                    }
                 } else {
                     self.status = self.status | 0x20; // bit 5 = sprite overflow this frame
                 }
@@ -235,7 +239,7 @@ impl PpuState {
                         self.sprite_index[scanline_x as usize] = chr_index;
                         self.sprite_color[scanline_x as usize] = palette_color;
                         self.sprite_bg_priority[scanline_x as usize] = priority;
-                        self.sprite_zero[scanline_x as usize] = i == 0;
+                        self.sprite_zero[scanline_x as usize] = (i == 0) && sprite_zero_on_scanline;
                     }
                 }
             }
@@ -273,11 +277,13 @@ impl PpuState {
 
             // Here, decide if a sprite pixel should overwrite a background pixel
             if self.sprite_index[sx as usize] != 0 {
-                if self.sprite_zero[sx as usize] {
-                    self.status = self.status | 0x40; // bit 6 = sprite zero hit
-                }
+
                 if bg_index == 0 || !self.sprite_bg_priority[sx as usize] {
                     self.screen[(scanline * 256 + sx) as usize] = self.sprite_color[sx as usize];
+                }
+                if self.sprite_zero[sx as usize] {
+                    self.status = self.status | 0x40; // bit 6 = sprite zero hit
+                    //self.screen[(scanline * 256 + sx) as usize] = 0x25;
                 }
             }
         }
@@ -289,7 +295,7 @@ impl PpuState {
         match scanline {
             0 ... 239 => {
                 // Visible scanline here
-                self.render_sprites(scanline as u8);
+                self.render_sprites((scanline - 1) as u8);
                 self.render_background(scanline);
             },
             // 240 does nothing
