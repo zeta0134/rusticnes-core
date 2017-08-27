@@ -187,7 +187,7 @@ impl PpuState {
         let sprite_size = 8;
 
         // Gather first 8 visible sprites (and pay attention if there are more)
-        for i in 0 .. 40 {
+        for i in 0 .. 64 {
             let y = self.oam[i * 4 + 0];
             if scanline >= y && scanline < y + sprite_size {
                 if secondary_index < 8 {
