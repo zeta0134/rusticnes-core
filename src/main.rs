@@ -9,6 +9,7 @@ use piston_window::Key;
 mod cartridge;
 mod cpu;
 mod debug;
+mod mmc;
 mod nes;
 mod memory;
 mod palettes;
