@@ -1,4 +1,5 @@
 target/
+tests/
 **/*.rs.bk
 *.nes
 *.zip
