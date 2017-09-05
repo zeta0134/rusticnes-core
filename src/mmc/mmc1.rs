@@ -47,8 +47,9 @@ impl Mapper for Mmc1 {
         println!("======= MMC1 =======");
         println!("PRG Mode: {} | CHR: Mode: {} | S.Count: {} | S.Data: {:02X}",
             prg_mode, chr_mode, self.shift_counter, self.shift_data);
-        println!("PRG: {} | CHR0: {} | CHR1: {}",
-            self.prg_bank, self.chr_bank_0, self.chr_bank_1);
+        let last_bank = (self.prg_rom.len() / (16 * 1024)) as u16 - 1;
+        println!("PRG: {} | CHR0: {} | CHR1: {} | PRG_LAST: {}",
+            self.prg_bank, self.chr_bank_0, self.chr_bank_1, last_bank);
         println!("====================");
     }
 
@@ -151,9 +152,9 @@ impl Mapper for Mmc1 {
                 if data & 0x80 != 0 {
                     // Shift / Control Reset!
                     self.shift_counter = 0;
-                    self.control = self.control & 0x0C;
+                    self.control = self.control | 0x0C;
                 } else {
-                    self.shift_data = (self.shift_data << 1) | (data & 0x1);
+                    self.shift_data = (self.shift_data >> 1) | ((data & 0x1) << 4);
                     self.shift_counter += 1;
                     if self.shift_counter == 5 {
                         let register = (address & 0xE000) >> 8;
