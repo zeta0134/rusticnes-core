@@ -1,2 +1,2 @@
-mod mapper;
-mod nrom;
+pub mod mapper;
+pub mod nrom;

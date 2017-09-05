@@ -1,14 +1,7 @@
 use nes::NesState;
 
 pub struct CpuMemory {
-    // Naive implementation -- a stupid array!
-    //pub raw: [u8; 0x10000]
     pub iram_raw: [u8; 0x800],
-
-    // Cartridge Space
-    // TODO: Implement mappers. Not this.
-    pub cart_ram: [u8; 0x2000],
-    pub cart_rom: [u8; 0x8000],
 
     pub recent_reads: Vec<u16>,
     pub recent_writes: Vec<u16>,
@@ -18,8 +11,6 @@ impl CpuMemory {
     pub fn new() -> CpuMemory {
         return CpuMemory {
             iram_raw: [0u8; 0x800],
-            cart_ram: [0u8; 0x2000],
-            cart_rom: [0u8; 0x8000],
             recent_reads: Vec::new(),
             recent_writes: Vec::new(),
         }
@@ -73,7 +64,7 @@ fn _read_byte(nes: &mut NesState, address: u16, side_effects: bool) -> u8 {
                 7 => {
                     let ppu_addr = nes.ppu.current_addr;
                     if side_effects {
-                        nes.ppu.latch = nes.ppu.read_byte(ppu_addr);
+                        nes.ppu.latch = nes.ppu.read_byte(&mut *nes.mapper, ppu_addr);
                         if nes.ppu.control & 0x04 == 0 {
                             nes.ppu.current_addr = nes.ppu.current_addr.wrapping_add(1);
                         } else {
@@ -81,7 +72,7 @@ fn _read_byte(nes: &mut NesState, address: u16, side_effects: bool) -> u8 {
                         }
                         return nes.ppu.latch;
                     } else {
-                        return nes.ppu.read_byte(ppu_addr);
+                        return nes.ppu.read_byte(&mut *nes.mapper, ppu_addr);
                     }
                 },
                 _ => return 0
@@ -107,8 +98,7 @@ fn _read_byte(nes: &mut NesState, address: u16, side_effects: bool) -> u8 {
             nes.p2_data = nes.p2_data >> 1;
             return result;
         },
-        0x6000 ... 0x7FFF => return memory.cart_ram[(address & 0x1FFF) as usize],
-        0x8000 ... 0xFFFF => return memory.cart_rom[(address & 0x7FFF) as usize],
+        0x4020 ... 0xFFFF => return nes.mapper.read_byte(address),
         _ => return 0
     }
 }
@@ -171,7 +161,7 @@ pub fn write_byte(nes: &mut NesState, address: u16, data: u8) {
                     } else {
                         nes.ppu.current_addr = nes.ppu.current_addr.wrapping_add(32);
                     }
-                    nes.ppu.write_byte(ppu_addr, data);
+                    nes.ppu.write_byte(&mut *nes.mapper, ppu_addr, data);
                 },
                 _ => ()
             }
@@ -192,7 +182,7 @@ pub fn write_byte(nes: &mut NesState, address: u16, data: u8) {
                 nes.p2_data = nes.p2_input;
             }
         }
-        0x6000 ... 0x7FFF => nes.memory.cart_ram[(address & 0x1FFF) as usize] = data,
+        0x4020 ... 0xFFFF => nes.mapper.write_byte(address, data),
         _ => () // Do nothing!
     }
 }
