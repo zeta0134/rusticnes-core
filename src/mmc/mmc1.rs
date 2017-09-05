@@ -37,7 +37,7 @@ impl Mmc1 {
             chr_bank_1: 0,
             prg_bank: 0,
             prg_ram_enabled: false,
-            control: 0,
+            control: 0x0C,
         }
     }
 }
@@ -136,6 +136,29 @@ impl Mapper for Mmc1 {
                     self.prg_ram[((address - 0x6000) % (prg_ram_len as u16)) as usize] = data;
                 }
             },
+            0x8000 ... 0xFFFF => {
+                if data & 0x80 != 0 {
+                    // Shift / Control Reset!
+                    self.shift_counter = 0;
+                    self.control = self.control & 0x0C;
+                } else {
+                    self.shift_data = (self.shift_data << 1) | (data & 0x1);
+                    self.shift_counter += 1;
+                    if self.shift_counter == 5 {
+                        let register = (address & 0xE000) >> 8;
+                        match register {
+                            0x80 ... 0x9F => self.control = self.shift_data,
+                            0xA0 ... 0xBF => self.chr_bank_0 = self.shift_data as u16,
+                            0xC0 ... 0xDF => self.chr_bank_1 = self.shift_data as u16,
+                            0xE0 ... 0xFF => self.prg_bank = self.shift_data as u16,
+                            _ => ()
+                        }
+                        println!("MMC1 Debug: Wrote register {:02X} with {:02X}", register, self.shift_data);
+                        self.shift_counter = 0;
+                        self.shift_data = 0;
+                    }
+                }
+            }
             _ => {}
         }
     }

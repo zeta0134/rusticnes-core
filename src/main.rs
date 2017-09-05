@@ -90,9 +90,9 @@ fn main() {
     let mut pattern_1_buffer = ImageBuffer::new(128, 128);
     debug::generate_chr_pattern(&mut *nes.mapper, 0x0000, &mut pattern_0_buffer);
     debug::generate_chr_pattern(&mut *nes.mapper, 0x1000, &mut pattern_1_buffer);
-    let pattern_0_texture = Texture::from_image(&mut window.factory, &pattern_0_buffer,
+    let mut pattern_0_texture = Texture::from_image(&mut window.factory, &pattern_0_buffer,
         &texture_settings).unwrap();
-    let pattern_1_texture = Texture::from_image(&mut window.factory, &pattern_1_buffer,
+    let mut pattern_1_texture = Texture::from_image(&mut window.factory, &pattern_1_buffer,
         &texture_settings).unwrap();
 
     let mut nametables_buffer = ImageBuffer::new(512, 480);
@@ -194,7 +194,11 @@ fn main() {
             }
             let _ = screen_texture.update(&mut window.encoder, &screen_buffer);
             debug::generate_nametables(&mut *nes.mapper, &mut nes.ppu, &mut nametables_buffer);
+            debug::generate_chr_pattern(&mut *nes.mapper, 0x0000, &mut pattern_0_buffer);
+            debug::generate_chr_pattern(&mut *nes.mapper, 0x1000, &mut pattern_1_buffer);
             let _ = nametables_texture.update(&mut window.encoder, &nametables_buffer);
+            let _ = pattern_0_texture.update(&mut window.encoder, &pattern_0_buffer);
+            let _ = pattern_1_texture.update(&mut window.encoder, &pattern_1_buffer);
 
             if running {
                 nes::run_until_vblank(&mut nes);
@@ -215,7 +219,7 @@ fn main() {
             let nametables_transform = context.transform.trans(512.0, 256.0);
             image(&nametables_texture, nametables_transform, graphics);
 
-            /*
+            //*
 
             let black_text = text::Text::new_color([0.0, 0.0, 0.0, 1.0], 16);
             let bright_text = text::Text::new_color([1.0, 1.0, 1.0, 0.8], 16);
