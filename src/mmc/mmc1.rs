@@ -25,8 +25,6 @@ pub struct Mmc1 {
 
 impl Mmc1 {
     pub fn new(header: NesHeader, chr: &[u8], prg: &[u8]) -> Mmc1 {
-        println!("Creating MMC1!!");
-        println!("PRG: {0}, CHR: {1}", prg.to_vec().len(), chr.to_vec().len());
         return Mmc1 {
             prg_rom: prg.to_vec(),
             prg_ram: vec![0u8; 0x2000],
@@ -35,7 +33,7 @@ impl Mmc1 {
             shift_data: 0,
             chr_bank_0: 0,
             chr_bank_1: 0,
-            prg_bank: 0,
+            prg_bank: 0x0F, // Powerup state has all bits SET? What?
             prg_ram_enabled: false,
             control: 0x0C,
         }
@@ -43,6 +41,17 @@ impl Mmc1 {
 }
 
 impl Mapper for Mmc1 {
+    fn print_debug_status(&self) {
+        let prg_mode = (self.control >> 2) & 0x3;
+        let chr_mode = (self.control & 0x10) >> 4;
+        println!("======= MMC1 =======");
+        println!("PRG Mode: {} | CHR: Mode: {} | S.Count: {} | S.Data: {:02X}",
+            prg_mode, chr_mode, self.shift_counter, self.shift_data);
+        println!("PRG: {} | CHR0: {} | CHR1: {}",
+            self.prg_bank, self.chr_bank_0, self.chr_bank_1);
+        println!("====================");
+    }
+
     fn read_byte(&self, address: u16) -> u8 {
         match address {
             0x0000 ... 0x0FFF => {
@@ -131,9 +140,11 @@ impl Mapper for Mmc1 {
     fn write_byte(&mut self, address: u16, data: u8) {
         match address {
             0x6000 ... 0x7FFF => {
-                let prg_ram_len = self.prg_ram.len();
-                if prg_ram_len > 0 {
-                    self.prg_ram[((address - 0x6000) % (prg_ram_len as u16)) as usize] = data;
+                if self.prg_ram_enabled {
+                    let prg_ram_len = self.prg_ram.len();
+                    if prg_ram_len > 0 {
+                        self.prg_ram[((address - 0x6000) % (prg_ram_len as u16)) as usize] = data;
+                    }
                 }
             },
             0x8000 ... 0xFFFF => {
@@ -150,7 +161,10 @@ impl Mapper for Mmc1 {
                             0x80 ... 0x9F => self.control = self.shift_data,
                             0xA0 ... 0xBF => self.chr_bank_0 = self.shift_data as u16,
                             0xC0 ... 0xDF => self.chr_bank_1 = self.shift_data as u16,
-                            0xE0 ... 0xFF => self.prg_bank = self.shift_data as u16,
+                            0xE0 ... 0xFF => {
+                                self.prg_ram_enabled = self.shift_data & 0x10 != 0;
+                                self.prg_bank = (self.shift_data & 0x0F) as u16
+                            },
                             _ => ()
                         }
                         println!("MMC1 Debug: Wrote register {:02X} with {:02X}", register, self.shift_data);
