@@ -2,6 +2,7 @@ use cpu;
 use cpu::Registers;
 use memory::CpuMemory;
 use ppu::PpuState;
+use mmc::mapper::Mapper;
 
 pub struct NesState {
     pub memory: CpuMemory,
@@ -13,10 +14,11 @@ pub struct NesState {
     pub p2_input: u8,
     pub p2_data: u8,
     pub input_latch: bool,
+    pub mapper: Box<Mapper>,
 }
 
 impl NesState {
-    pub fn new() -> NesState {
+    pub fn new(m: Box<Mapper>) -> NesState {
         return NesState {
             memory: CpuMemory::new(),
             ppu: PpuState::new(),
@@ -27,13 +29,14 @@ impl NesState {
             p2_input: 0,
             p2_data: 0,
             input_latch: false,
+            mapper: m,
         }
     }
 }
 
 pub fn step(nes: &mut NesState) {
     cpu::process_instruction(nes);
-    nes.ppu.run_to_cycle(nes.current_cycle);
+    nes.ppu.run_to_cycle(&mut *nes.mapper, nes.current_cycle);
     nes.current_cycle = nes.current_cycle + 12;
 }
 

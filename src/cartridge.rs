@@ -1,3 +1,6 @@
+use mmc::mapper::Mapper;
+use mmc::nrom::Nrom;
+use mmc::mmc1::Mmc1;
 use nes::NesState;
 
 #[derive(Copy, Clone)]
@@ -40,7 +43,7 @@ pub fn extract_header(cartridge: &Vec<u8>) -> NesHeader {
     let mut nes_header: NesHeader = NesHeader {
         prg_rom_size: cartridge[4] as u32 * 16 * 1024,
         chr_rom_size: cartridge[5] as u32 * 8 * 1024,
-        mapper_number: (cartridge[6] & 0xF0 >> 4) + cartridge[7] & 0xF0,
+        mapper_number: ((cartridge[6] & 0xF0) >> 4) + (cartridge[7] & 0xF0),
         prg_ram_size: cartridge[8] as u32 * 8 * 1024,
         ..Default::default()
     };
@@ -64,7 +67,7 @@ pub fn print_header_info(header: NesHeader) {
     println!("Mapper: {0}", header.mapper_number);
 }
 
-pub fn load_from_cartridge(nes: &mut NesState, header: NesHeader, cartridge: &Vec<u8>) {
+pub fn load_from_cartridge(header: NesHeader, cartridge: &Vec<u8>) -> Box<Mapper> {
     let mut offset = 16;
     //let mut trainer = &cartridge[16..16]; //default to empty
     if header.trainer {
@@ -79,8 +82,18 @@ pub fn load_from_cartridge(nes: &mut NesState, header: NesHeader, cartridge: &Ve
     let chr_rom = &cartridge[offset .. (offset + chr_rom_size as usize)];
     //offset = offset + chr_rom_size;
 
+    let mapper: Box<Mapper> = match header.mapper_number {
+        0 => Box::new(Nrom::new(header, chr_rom, prg_rom)),
+        1 => Box::new(Mmc1::new(header, chr_rom, prg_rom)),
+        _ => {
+            println!("Undefined mapper: {}", header.mapper_number);
+            println!("Will proceed as though this is NROM, which will LIKELY NOT WORK.");
+            return Box::new(Nrom::new(header, chr_rom, prg_rom));
+        }
+    };
+
     // Initialize main memory (this is only valid for very simple games)
-    if prg_rom_size == 32768 {
+    /*if prg_rom_size == 32768 {
         for i in 0 .. prg_rom_size {
             nes.memory.cart_rom[i] = prg_rom[i];
         }
@@ -97,5 +110,6 @@ pub fn load_from_cartridge(nes: &mut NesState, header: NesHeader, cartridge: &Ve
     for i in 0 .. 0x1000 {
         nes.ppu.pattern_0[i] = chr_rom[i];
         nes.ppu.pattern_1[i] = chr_rom[0x1000 + i];
-    }
+    }*/
+    return mapper;
 }
