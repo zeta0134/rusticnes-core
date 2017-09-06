@@ -41,7 +41,7 @@ impl Mmc1 {
             chr_bank_0: 0,
             chr_bank_1: 0,
             prg_bank: 0x0F, // Powerup state has all bits set.  This force-loads the last page, no matter the starting mode.
-            prg_ram_enabled: false,
+            prg_ram_enabled: true,
             control: 0x0C,
             chr_ram: header.has_chr_ram,
             mirroring: Mirroring::Vertical, // Completely arbitrary, should be set by game code later
