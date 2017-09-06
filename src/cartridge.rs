@@ -1,4 +1,4 @@
-use mmc::mapper::Mapper;
+use mmc::mapper::*;
 use mmc::nrom::Nrom;
 use mmc::mmc1::Mmc1;
 use nes::NesState;
@@ -12,11 +12,9 @@ pub struct NesHeader {
   pub has_chr_ram: bool,
 
   // Flags 6
-  pub horizontal_mirroring: bool,
-  pub vertical_mirroring: bool,
+  pub mirroring: Mirroring,
   pub has_sram: bool,
   pub trainer: bool,
-  pub four_screen_mirroring: bool,
 }
 
 impl Default for NesHeader {
@@ -27,12 +25,10 @@ impl Default for NesHeader {
             mapper_number: 0,
             prg_ram_size: 0,
 
-            horizontal_mirroring: false,
-            vertical_mirroring: false,
             has_sram: false,
             has_chr_ram: false,
             trainer: false,
-            four_screen_mirroring: false,
+            mirroring: Mirroring::Vertical, // Arbitrary default
         }
     }
 }
@@ -51,10 +47,13 @@ pub fn extract_header(cartridge: &Vec<u8>) -> NesHeader {
     };
 
     if cartridge[6] & 0x08 != 0 {
-        nes_header.four_screen_mirroring = true;
+        nes_header.mirroring = Mirroring::FourScreen;
     } else {
-        nes_header.horizontal_mirroring = cartridge[6] & 0x01 == 0;
-        nes_header.vertical_mirroring   = cartridge[6] & 0x01 != 0;
+        if cartridge[6] & 0x01 == 0 {
+            nes_header.mirroring = Mirroring::Horizontal;
+        } else {
+            nes_header.mirroring = Mirroring::Vertical;
+        }
     }
     nes_header.has_sram = cartridge[6] & 0x02 != 0;
     nes_header.trainer  = cartridge[6] & 0x04 != 0;

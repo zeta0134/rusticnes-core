@@ -2,12 +2,13 @@
 // Reference capabilities: https://wiki.nesdev.com/w/index.php/NROM
 
 use cartridge::NesHeader;
-use mmc::mapper::Mapper;
+use mmc::mapper::*;
 
 pub struct Nrom {
     pub prg_rom: Vec<u8>,
     pub prg_ram: Vec<u8>,
     pub chr_rom: Vec<u8>,
+    pub mirroring: Mirroring,
 }
 
 impl Nrom {
@@ -16,11 +17,16 @@ impl Nrom {
             prg_rom: prg.to_vec(),
             prg_ram: Vec::new(),
             chr_rom: chr.to_vec(),
+            mirroring: header.mirroring,
         }
     }
 }
 
 impl Mapper for Nrom {
+    fn mirroring(&self) -> Mirroring {
+        return self.mirroring;
+    }
+    
     fn read_byte(&self, address: u16) -> u8 {
         match address {
             0x0000 ... 0x1FFF => return self.chr_rom[address as usize],

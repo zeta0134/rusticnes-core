@@ -2,7 +2,7 @@
 // Reference capabilities: https://wiki.nesdev.com/w/index.php/NROM
 
 use cartridge::NesHeader;
-use mmc::mapper::Mapper;
+use mmc::mapper::*;
 
 pub struct Mmc1 {
     pub prg_rom: Vec<u8>,
@@ -12,8 +12,8 @@ pub struct Mmc1 {
     pub shift_counter: u8,
     pub shift_data: u8,
 
-    // Note: u16 is technically overkill, but having the type aligned
-    // with u16 addresses makes typecasting nicer.
+    // Note: usize is technically overkill, but having the type aligned is
+    // just nicer down below.
     pub chr_bank_0: usize,
     pub chr_bank_1: usize,
     pub chr_ram: bool,
@@ -22,6 +22,8 @@ pub struct Mmc1 {
     pub prg_ram_enabled: bool,
 
     pub control: u8,
+
+    pub mirroring: Mirroring,
 }
 
 impl Mmc1 {
@@ -42,6 +44,7 @@ impl Mmc1 {
             prg_ram_enabled: false,
             control: 0x0C,
             chr_ram: header.has_chr_ram,
+            mirroring: Mirroring::Vertical, // Completely arbitrary, should be set by game code later
         }
     }
 }
@@ -57,6 +60,10 @@ impl Mapper for Mmc1 {
         println!("PRG: {} | CHR0: {} | CHR1: {} | PRG_LAST: {}",
             self.prg_bank, self.chr_bank_0, self.chr_bank_1, last_bank);
         println!("====================");
+    }
+
+    fn mirroring(&self) -> Mirroring {
+        return self.mirroring;
     }
 
     fn read_byte(&self, address: u16) -> u8 {
@@ -191,7 +198,17 @@ impl Mapper for Mmc1 {
                     if self.shift_counter == 5 {
                         let register = (address & 0xE000) >> 8;
                         match register {
-                            0x80 ... 0x9F => self.control = self.shift_data,
+                            0x80 ... 0x9F => {
+                                self.control = self.shift_data;
+                                let nametable_mode = self.control & 0x3;
+                                match nametable_mode {
+                                    0 => self.mirroring = Mirroring::OneScreenLower,
+                                    1 => self.mirroring = Mirroring::OneScreenUpper,
+                                    2 => self.mirroring = Mirroring::Vertical,
+                                    3 => self.mirroring = Mirroring::Horizontal,
+                                    _ => () // should never be called
+                                }
+                            },
                             0xA0 ... 0xBF => self.chr_bank_0 = self.shift_data as usize,
                             0xC0 ... 0xDF => self.chr_bank_1 = self.shift_data as usize,
                             0xE0 ... 0xFF => {

@@ -2,15 +2,13 @@
 // later be rewritten with cycle-accurate logic once we're past proof of concept
 // and prototype stages.
 
-use mmc::mapper::Mapper;
+use mmc::mapper::*;
 
 pub struct PpuState {
     // PPU Memory (incl. cart CHR ROM for now)
-    pub internal_vram: [u8; 0x800],
+    pub internal_vram: [u8; 0x1000], // 4k for four-screen mirroring, most games only use upper 2k
     pub oam: [u8; 0x100],
     pub palette: [u8; 0x20],
-
-    pub v_mirroring: bool,
 
     // Memory Mapped Registers
     // PPU Registers
@@ -51,10 +49,9 @@ pub struct PpuState {
 impl PpuState {
     pub fn new() -> PpuState {
         return PpuState {
-           internal_vram: [0u8; 0x800],
+           internal_vram: [0u8; 0x1000],
            oam: [0u8; 0x100],
            palette: [0u8; 0x20],
-           v_mirroring: true,
            current_frame: 0,
            current_scanline: 0,
            scanline_cycles: 0,
@@ -97,29 +94,11 @@ impl PpuState {
     }
 
     pub fn _read_byte(&mut self, mapper: &mut Mapper, address: u16) -> u8 {
-        let masked_address = address & 0x3FFF;
+        let mut masked_address = address & 0x3FFF;
         match masked_address {
-            0x0000 ... 0x1FFF => mapper.read_byte(address),
-            // Nametable 0
-            0x2000 ... 0x23FF => return self.internal_vram[(masked_address & 0x3FF) as usize],
-            // Nametable 1
-            0x2400 ... 0x27FF => {
-                if self.v_mirroring {
-                    return self.internal_vram[((masked_address & 0x3FF) + 0x400) as usize];
-                } else {
-                    return self.internal_vram[(masked_address & 0x3FF) as usize];
-                }
-            },
-            // Nametable 2
-            0x2800 ... 0x2BFF => {
-                if self.v_mirroring {
-                    return self.internal_vram[(masked_address & 0x3FF) as usize];
-                } else {
-                    return self.internal_vram[((masked_address & 0x3FF) + 0x400) as usize];
-                }
-            },
-            // Nametable 3
-            0x2C00 ... 0x2FFF => return self.internal_vram[((masked_address & 0x3FF) + 0x400) as usize],
+            0x0000 ... 0x1FFF => return mapper.read_byte(masked_address),
+            // Nametable 0 (top-left)
+            0x2000 ... 0x2FFF => return self.internal_vram[nametable_address(masked_address, mapper.mirroring()) as usize],
             0x3000 ... 0x3EFF => return self.read_byte(mapper, masked_address - 0x1000),
             0x3F00 ... 0x3FFF => {
                 // Weird read buffer behavior
@@ -140,24 +119,7 @@ impl PpuState {
         match masked_address {
             0x0000 ... 0x1FFF => mapper.write_byte(address, data),
             // Nametable 0
-            0x2000 ... 0x23FF => self.internal_vram[(masked_address & 0x3FF) as usize] = data,
-            // Nametable 1
-            0x2400 ... 0x27FF => {
-                if self.v_mirroring {
-                    self.internal_vram[((masked_address & 0x3FF) + 0x400) as usize] = data;
-                } else {
-                    self.internal_vram[(masked_address & 0x3FF) as usize] = data;
-                }
-            },
-            // Nametable 2
-            0x2800 ... 0x2BFF => {
-                if self.v_mirroring {
-                    self.internal_vram[(masked_address & 0x3FF) as usize] = data;
-                } else {
-                    self.internal_vram[((masked_address & 0x3FF) + 0x400) as usize] = data;
-                }
-            },
-            0x2C00 ... 0x2FFF => self.internal_vram[((masked_address & 0x3FF) + 0x400) as usize] = data,
+            0x2000 ... 0x2FFF => self.internal_vram[nametable_address(masked_address, mapper.mirroring()) as usize] = data,
             0x3000 ... 0x3EFF => self.write_byte(mapper, masked_address - 0x1000, data),
             0x3F00 ... 0x3FFF => {
                 let mut palette_address = masked_address & 0x1F;
@@ -357,6 +319,56 @@ impl PpuState {
         let shift = (((tx & 0x2) >> 1) + ((ty % 30) & 0x2)) << 1;
         let mask = 0x3 << shift;
         return (attr_byte & mask) >> shift;
+    }
+}
+
+pub fn nametable_address(read_address: u16, mirroring: Mirroring) -> u16 {
+    // Mirroring documented here, the ABCD references to the charts in this article:
+    // https://wiki.nesdev.com/w/index.php/Mirroring
+    let nt_address = read_address & 0x3FF;
+    let nt_offset = (0x000, 0x400, 0x800, 0xC00);
+    match read_address {
+        // Nametable 0 (top-left)
+        0x2000 ... 0x23FF => {
+            return match mirroring {
+                Mirroring::Horizontal       => nt_address + nt_offset.0, // A
+                Mirroring::Vertical         => nt_address + nt_offset.0, // A
+                Mirroring::OneScreenLower   => nt_address + nt_offset.0, // A
+                Mirroring::OneScreenUpper   => nt_address + nt_offset.1, // B
+                Mirroring::FourScreen       => nt_address + nt_offset.0, // A
+            }
+        },
+        // Nametable 1 (top-right)
+        0x2400 ... 0x27FF => {
+            return match mirroring {
+                Mirroring::Horizontal       => nt_address + nt_offset.0, // A
+                Mirroring::Vertical         => nt_address + nt_offset.1, // B
+                Mirroring::OneScreenLower   => nt_address + nt_offset.0, // A
+                Mirroring::OneScreenUpper   => nt_address + nt_offset.1, // B
+                Mirroring::FourScreen       => nt_address + nt_offset.1, // B
+            }
+        },
+        // Nametable 2 (bottom-left)
+        0x2800 ... 0x2BFF => {
+            return match mirroring {
+                Mirroring::Horizontal       => nt_address + nt_offset.1, // B
+                Mirroring::Vertical         => nt_address + nt_offset.0, // A
+                Mirroring::OneScreenLower   => nt_address + nt_offset.0, // A
+                Mirroring::OneScreenUpper   => nt_address + nt_offset.1, // B
+                Mirroring::FourScreen       => nt_address + nt_offset.2, // C
+            }
+        },
+        // Nametable 3 (bottom-right)
+        0x2C00 ... 0x2FFF => {
+            return match mirroring {
+                Mirroring::Horizontal       => nt_address + nt_offset.1, // B
+                Mirroring::Vertical         => nt_address + nt_offset.1, // B
+                Mirroring::OneScreenLower   => nt_address + nt_offset.0, // A
+                Mirroring::OneScreenUpper   => nt_address + nt_offset.1, // B
+                Mirroring::FourScreen       => nt_address + nt_offset.3, // D
+            }
+        },
+        _ => return 0, // wat
     }
 }
 
