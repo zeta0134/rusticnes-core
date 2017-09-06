@@ -93,7 +93,7 @@ impl Mapper for Mmc1 {
             0x6000 ... 0x7FFF => {
                 let prg_ram_len = self.prg_ram.len();
                 if prg_ram_len > 0 {
-                    return self.prg_ram[((address - 0x6000) % (prg_ram_len as u16)) as usize];
+                    return self.prg_ram[(address - 0x6000) as usize];
                 } else {
                     return 0;
                 }
@@ -183,7 +183,7 @@ impl Mapper for Mmc1 {
                 if self.prg_ram_enabled {
                     let prg_ram_len = self.prg_ram.len();
                     if prg_ram_len > 0 {
-                        self.prg_ram[((address as usize - 0x6000) % (prg_ram_len))] = data;
+                        self.prg_ram[address as usize - 0x6000] = data;
                     }
                 }
             },
@@ -212,7 +212,7 @@ impl Mapper for Mmc1 {
                             0xA0 ... 0xBF => self.chr_bank_0 = self.shift_data as usize,
                             0xC0 ... 0xDF => self.chr_bank_1 = self.shift_data as usize,
                             0xE0 ... 0xFF => {
-                                self.prg_ram_enabled = self.shift_data & 0x10 != 0;
+                                self.prg_ram_enabled = self.shift_data & 0x10 == 0;
                                 self.prg_bank = (self.shift_data & 0x0F) as usize;
                             },
                             _ => ()
