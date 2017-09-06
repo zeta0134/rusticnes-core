@@ -5,17 +5,18 @@ use nes::NesState;
 
 #[derive(Copy, Clone)]
 pub struct NesHeader {
-  prg_rom_size: u32,
-  chr_rom_size: u32,
-  mapper_number: u8,
-  prg_ram_size: u32,
+  pub prg_rom_size: u32,
+  pub chr_rom_size: u32,
+  pub mapper_number: u8,
+  pub prg_ram_size: u32,
+  pub has_chr_ram: bool,
 
   // Flags 6
-  horizontal_mirroring: bool,
-  vertical_mirroring: bool,
-  has_sram: bool,
-  trainer: bool,
-  four_screen_mirroring: bool,
+  pub horizontal_mirroring: bool,
+  pub vertical_mirroring: bool,
+  pub has_sram: bool,
+  pub trainer: bool,
+  pub four_screen_mirroring: bool,
 }
 
 impl Default for NesHeader {
@@ -29,6 +30,7 @@ impl Default for NesHeader {
             horizontal_mirroring: false,
             vertical_mirroring: false,
             has_sram: false,
+            has_chr_ram: false,
             trainer: false,
             four_screen_mirroring: false,
         }
@@ -67,8 +69,9 @@ pub fn print_header_info(header: NesHeader) {
     println!("Mapper: {0}", header.mapper_number);
 }
 
-pub fn load_from_cartridge(header: NesHeader, cartridge: &Vec<u8>) -> Box<Mapper> {
+pub fn load_from_cartridge(nes_header: NesHeader, cartridge: &Vec<u8>) -> Box<Mapper> {
     let mut offset = 16;
+    let mut header = nes_header;
     //let mut trainer = &cartridge[16..16]; //default to empty
     if header.trainer {
         //trainer = &cartridge[offset..(offset + 512)];
@@ -79,8 +82,13 @@ pub fn load_from_cartridge(header: NesHeader, cartridge: &Vec<u8>) -> Box<Mapper
     offset = offset + prg_rom_size;
 
     let chr_rom_size = (header.chr_rom_size) as usize;
-    let chr_rom = &cartridge[offset .. (offset + chr_rom_size as usize)];
+    let mut chr_rom = &cartridge[offset .. (offset + chr_rom_size as usize)];
     //offset = offset + chr_rom_size;
+
+    if header.chr_rom_size == 0 {
+        header.chr_rom_size = 8 * 1024;
+        header.has_chr_ram = true;
+    }
 
     let mapper: Box<Mapper> = match header.mapper_number {
         0 => Box::new(Nrom::new(header, chr_rom, prg_rom)),
