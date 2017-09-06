@@ -142,7 +142,10 @@ impl PpuState {
 
         let mut secondary_oam = [0xFFu8; 32];
         let mut secondary_index = 0;
-        let sprite_size = 8;
+        let mut sprite_size = 8;
+        if (self.control & 0x20) != 0 {
+            sprite_size = 16;
+        }
         let mut sprite_zero_on_scanline = false;
 
         // Gather first 8 visible sprites (and pay attention if there are more)
@@ -165,20 +168,37 @@ impl PpuState {
 
         // secondary_oam now has up to 8 sprites, all of which have a Y coordinate
         // which is on this scanline. Proceed to render!
-        let pattern_address = 0x0000;
 
         // Note: Iterating over the list in reverse order cheats a bit, by having higher priority
         // sprites overwrite the work done to draw lower priority sprites.
         for i in (0 .. secondary_index).rev() {
+            let mut pattern_address = 0x0000;
             let sprite_y = secondary_oam[i * 4 + 0];
-            let tile_index = secondary_oam[i * 4 + 1];
+            let mut tile_index = secondary_oam[i * 4 + 1];
             let flags = secondary_oam[i * 4 + 2];
             let sprite_x = secondary_oam[i * 4 + 3];
 
             let priority = flags & 0x20 != 0;
             let mut tile_y = scanline - sprite_y;
-            if flags & 0x80 != 0 {
-                tile_y = 7 - tile_y;
+            if sprite_size == 16 {
+                if tile_index & 0x01 != 0 {
+                    pattern_address = 0x1000;
+                }
+                tile_index = tile_index & 0xFE;
+                if flags & 0x80 != 0 {
+                    tile_y = 15 - tile_y;
+                }
+                if tile_y >= 8 {
+                    tile_y -= 8;
+                    tile_index += 1;
+                }
+            } else {
+                if flags & 0x80 != 0 {
+                    tile_y = 7 - tile_y;
+                }
+                if (self.control & 0x08) != 0 {
+                    pattern_address = 0x1000;
+                }
             }
 
             let palette_index = flags & 0x03;
