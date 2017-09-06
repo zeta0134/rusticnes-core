@@ -219,7 +219,7 @@ fn main() {
             let nametables_transform = context.transform.trans(512.0, 256.0);
             image(&nametables_texture, nametables_transform, graphics);
 
-            //*
+            /*
 
             let black_text = text::Text::new_color([0.0, 0.0, 0.0, 1.0], 16);
             let bright_text = text::Text::new_color([1.0, 1.0, 1.0, 0.8], 16);

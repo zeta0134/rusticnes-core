@@ -200,7 +200,6 @@ impl Mapper for Mmc1 {
                             },
                             _ => ()
                         }
-                        println!("MMC1 Debug: Wrote register {:02X} with {:02X}", register, self.shift_data);
                         self.shift_counter = 0;
                         self.shift_data = 0;
                     }
