@@ -352,9 +352,9 @@ impl PpuState {
             address = address + 0x0800;
         }
         address += ((tx & 0x1F) >> 2) as u16;
-        address += (((ty % 30) >> 2) * 0x8) as u16;
+        address += (((ty % 30) >> 2) as u16)* 0x8;
         let attr_byte = self._read_byte(mapper, address);
-        let shift = (((tx & 0x2) >> 1) + (ty & 0x2)) << 1;
+        let shift = (((tx & 0x2) >> 1) + ((ty % 30) & 0x2)) << 1;
         let mask = 0x3 << shift;
         return (attr_byte & mask) >> shift;
     }
