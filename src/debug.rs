@@ -2,7 +2,7 @@ use image::ImageBuffer;
 use image::Rgba;
 
 use memory;
-use mmc::mapper::Mapper;
+use mmc::mapper::*;
 use nes::NesState;
 use palettes::NTSC_PAL;
 use ppu;
@@ -74,11 +74,20 @@ pub fn print_program_state(nes: &mut NesState) {
         println!("0x{:04X}: 0x{:02X}", pc, memory::passively_read_byte(nes, pc));
         pc = pc.wrapping_add(1);
     }
+
+    let mirror_mode = match nes.mapper.mirroring() {
+        Mirroring::Horizontal => "Horizontal",
+        Mirroring::Vertical => "Vertical",
+        Mirroring::OneScreenLower => "OneScreen - Lower",
+        Mirroring::OneScreenUpper => "OneScreen - Upper",
+        Mirroring::FourScreen => "FourScreen",
+    };
+
     println!("\nPPU: Control: {:02X} Mask: {:02X} Status: {:02X}, Scroll: {:02X}, {:02X}",
         nes.ppu.control, nes.ppu.mask, nes.ppu.status, nes.ppu.scroll_x, nes.ppu.scroll_y);
     println!("OAM Address: {:04X} PPU Address: {:04X}",
         nes.ppu.oam_addr, nes.ppu.current_addr);
-    println!("Frame: {}, Scanline: {}, Cycle: {}, Scanline Cycles: {}\n",
-        nes.ppu.current_frame, nes.ppu.current_scanline, nes.current_cycle, nes.ppu.scanline_cycles);
+    println!("Frame: {}, Scanline: {}, Cycle: {}, Scanline Cycles: {}, Mirroring: {}\n",
+        nes.ppu.current_frame, nes.ppu.current_scanline, nes.current_cycle, nes.ppu.scanline_cycles, mirror_mode);
     nes.mapper.print_debug_status();
 }

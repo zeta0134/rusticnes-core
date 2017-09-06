@@ -44,7 +44,7 @@ impl Mmc1 {
             prg_ram_enabled: true,
             control: 0x0C,
             chr_ram: header.has_chr_ram,
-            mirroring: Mirroring::Vertical, // Completely arbitrary, should be set by game code later
+            mirroring: Mirroring::Horizontal, // Completely arbitrary, should be set by game code later
         }
     }
 }
@@ -200,13 +200,13 @@ impl Mapper for Mmc1 {
                         match register {
                             0x80 ... 0x9F => {
                                 self.control = self.shift_data;
-                                let nametable_mode = self.control & 0x3;
+                                let nametable_mode = (self.control & 0x3);
                                 match nametable_mode {
                                     0 => self.mirroring = Mirroring::OneScreenLower,
                                     1 => self.mirroring = Mirroring::OneScreenUpper,
                                     2 => self.mirroring = Mirroring::Vertical,
                                     3 => self.mirroring = Mirroring::Horizontal,
-                                    _ => () // should never be called
+                                    _ => println!("Bad mirroring mode!! {}", nametable_mode) // should never be called
                                 }
                             },
                             0xA0 ... 0xBF => self.chr_bank_0 = self.shift_data as usize,
