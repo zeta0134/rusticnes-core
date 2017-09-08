@@ -49,7 +49,7 @@ impl Mmc1 {
             chr_bank_1: 0,
             // Powerup and reset always have all bits set. This force-loads the last prg page, so
             // programs can reliably place their reset routines here.
-            prg_bank: 0x0F,
+            prg_bank: 0x00,
             prg_ram_enabled: true,
             control: 0x0C,
             mirroring: Mirroring::Vertical,
