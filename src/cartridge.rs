@@ -58,8 +58,8 @@ pub fn extract_header(cartridge: &Vec<u8>) -> NesHeader {
         ..Default::default()
     };
 
-    let four_screen_mirroring = cartridge[6] & 0b0000_1000 != 0;
-    let vertical_mirroring = cartridge[6] & 0b0000_0001 == 0;
+    let four_screen_mirroring = (cartridge[6] & 0b0000_1000) != 0;
+    let vertical_mirroring = (cartridge[6] & 0b0000_0001) != 0;
 
     if four_screen_mirroring {
         nes_header.mirroring = Mirroring::FourScreen;
