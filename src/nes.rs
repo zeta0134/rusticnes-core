@@ -10,7 +10,7 @@ pub struct NesState {
     pub memory: CpuMemory,
     pub ppu: PpuState,
     pub registers: Registers,
-    pub current_cycle: u32,
+    pub current_cycle: u64,
     pub p1_input: u8,
     pub p1_data: u8,
     pub p2_input: u8,

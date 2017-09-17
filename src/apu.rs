@@ -61,7 +61,7 @@ impl PulseChannelState {
 }
 
 pub struct ApuState {
-    pub current_cycle: u32,
+    pub current_cycle: u64,
 
     pub frame_sequencer_mode: u8,
     pub frame_sequencer: u16,
@@ -132,7 +132,7 @@ impl ApuState {
         }
     }
 
-    pub fn run_to_cycle(&mut self, target_cycle: u32) {
+    pub fn run_to_cycle(&mut self, target_cycle: u64) {
         // For testing: Pulse 1 only
         while self.current_cycle < target_cycle {
             // Only clock Pulse channels on every other cycle

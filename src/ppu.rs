@@ -35,8 +35,8 @@ pub struct PpuState {
     // Internal
     pub current_frame: u32,
     pub current_scanline: u16,
-    pub scanline_cycles: u32,
-    pub last_cycle: u32,
+    pub scanline_cycles: u64,
+    pub last_cycle: u64,
 
     // Framebuffer
     pub screen: [u8; 256 * 240],
@@ -298,7 +298,7 @@ impl PpuState {
         }
     }
 
-    pub fn run_to_cycle(&mut self, mapper: &mut Mapper, current_cycle: u32) {
+    pub fn run_to_cycle(&mut self, mapper: &mut Mapper, current_cycle: u64) {
         let cycles_per_scanline = 341 * 4;
         self.scanline_cycles = self.scanline_cycles + (current_cycle - self.last_cycle);
         self.last_cycle = current_cycle;
