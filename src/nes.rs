@@ -1,3 +1,4 @@
+use apu::ApuState;
 use cpu;
 use cpu::Registers;
 use memory::CpuMemory;
@@ -5,6 +6,7 @@ use ppu::PpuState;
 use mmc::mapper::Mapper;
 
 pub struct NesState {
+    pub apu: ApuState,
     pub memory: CpuMemory,
     pub ppu: PpuState,
     pub registers: Registers,
@@ -20,6 +22,7 @@ pub struct NesState {
 impl NesState {
     pub fn new(m: Box<Mapper>) -> NesState {
         return NesState {
+            apu: ApuState::new(),
             memory: CpuMemory::new(),
             ppu: PpuState::new(),
             registers: Registers::new(),
@@ -54,4 +57,5 @@ pub fn run_until_vblank(nes: &mut NesState) {
     while nes.ppu.current_scanline != 242 {
         step(nes);
     }
+    nes.apu.run_to_cycle(nes.current_cycle);
 }

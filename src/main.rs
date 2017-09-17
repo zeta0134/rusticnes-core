@@ -6,6 +6,7 @@ use piston_window::*;
 use piston_window::Button::Keyboard;
 use piston_window::Key;
 
+mod apu;
 mod cartridge;
 mod cpu;
 mod debug;
@@ -97,6 +98,10 @@ fn main() {
 
     let mut nametables_buffer = ImageBuffer::new(512, 480);
     let mut nametables_texture = Texture::from_image(&mut window.factory, &nametables_buffer,
+        &texture_settings).unwrap();
+
+    let mut audiocanvas_buffer = ImageBuffer::new(256, 128);
+    let mut audiocanvas_texture = Texture::from_image(&mut window.factory, &audiocanvas_buffer,
         &texture_settings).unwrap();
 
     let mut thingy = 0;
@@ -203,6 +208,30 @@ fn main() {
             if running {
                 nes::run_until_vblank(&mut nes);
             }
+
+            // Draw audio samples! What could possibly go wrong?
+            // Why do we need to clear this manually?
+            for x in 0 .. 256 {
+                for y in 0 .. 128 {
+                    audiocanvas_buffer.put_pixel(x, y, Rgba { data: [255, 255, 255, 255] });
+                }
+            }
+            let mut last_y = 64;
+            for x in 0 .. 256 {
+                let sample_index = (nes.apu.current_sample + (x * 16)) %  nes.apu.sample_buffer.len();
+                let sample = nes.apu.sample_buffer[sample_index];
+                let current_y = (sample / 512) as u32;
+                for y in current_y .. last_y {
+                    audiocanvas_buffer.put_pixel(x as u32, y, Rgba { data: [0, 0, 0, 255] });
+                }
+                for y in last_y .. current_y {
+                    audiocanvas_buffer.put_pixel(x as u32, y, Rgba { data: [0, 0, 0, 255] });
+                }
+                last_y = current_y;
+                audiocanvas_buffer.put_pixel(x as u32, current_y, Rgba { data: [0, 0, 0, 255] });
+            }
+            let _ = audiocanvas_texture.update(&mut window.encoder, &audiocanvas_buffer);
+
         }
 
         window.draw_2d(&event, |context, graphics| {
@@ -218,6 +247,9 @@ fn main() {
 
             let nametables_transform = context.transform.trans(512.0, 256.0);
             image(&nametables_texture, nametables_transform, graphics);
+
+            let audiocanvas_transform = context.transform.trans(0.0, 480.0);
+            image(&audiocanvas_texture, audiocanvas_transform, graphics);
 
             /*
 

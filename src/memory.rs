@@ -166,6 +166,10 @@ pub fn write_byte(nes: &mut NesState, address: u16, data: u8) {
                 _ => ()
             }
         },
+        0x4000 ... 0x4013 => {
+            nes.apu.run_to_cycle(nes.current_cycle);
+            nes.apu.write_register(address, data);
+        },
         0x4014 => {
             // OAM DMA, for cheating just do this instantly and return
             let read_address = (data as u16) << 8;
