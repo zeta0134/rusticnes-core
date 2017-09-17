@@ -167,7 +167,7 @@ pub fn write_byte(nes: &mut NesState, address: u16, data: u8) {
             }
         },
         0x4000 ... 0x4013 => {
-            nes.apu.run_to_cycle(nes.current_cycle);
+            nes.apu.run_to_cycle(nes.master_clock / 12);
             nes.apu.write_register(address, data);
         },
         0x4014 => {

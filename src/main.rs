@@ -218,9 +218,9 @@ fn main() {
             }
             let mut last_y = 64;
             for x in 0 .. 256 {
-                let sample_index = (nes.apu.current_sample + (x * 16)) %  nes.apu.sample_buffer.len();
+                let sample_index = (nes.apu.buffer_index + x) %  nes.apu.sample_buffer.len();
                 let sample = nes.apu.sample_buffer[sample_index];
-                let current_y = (sample / 512) as u32;
+                let current_y = (64 + (sample / 512)) as u32;
                 for y in current_y .. last_y {
                     audiocanvas_buffer.put_pixel(x as u32, y, Rgba { data: [0, 0, 0, 255] });
                 }

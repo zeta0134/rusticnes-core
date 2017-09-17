@@ -2,6 +2,9 @@
 // later be rewritten with cycle-accurate logic once we're past proof of concept
 // and prototype stages.
 
+use std::fs::OpenOptions;
+use std::io::prelude::*;
+
 pub struct PulseChannelState {
     pub enabled: bool,
 
@@ -69,20 +72,30 @@ pub struct ApuState {
     pub pulse_1: PulseChannelState,
     pub pulse_2: PulseChannelState,
 
-    pub sample_buffer: [u16; 4096],
-    pub current_sample: usize,
+    pub sample_buffer: [i16; 4096],
+    pub sample_rate: u64,
+    pub cpu_clock_rate: u64,
+    pub buffer_index: usize,
+    pub generated_samples: u64,
+    pub next_sample_at: u64,
+
 }
 
 impl ApuState {
     pub fn new() -> ApuState {
+
         return ApuState {
             current_cycle: 0,
             frame_sequencer_mode: 0,
             frame_sequencer: 0,
             pulse_1: PulseChannelState::new(true),
             pulse_2: PulseChannelState::new(false),
-            current_sample: 0,
-            sample_buffer: [0u16; 4096],
+            sample_buffer: [0i16; 4096],
+            sample_rate: 44100,
+            cpu_clock_rate: 1_786_860,
+            buffer_index: 0,
+            generated_samples: 0,
+            next_sample_at: 0,
         }
     }
 
@@ -153,18 +166,46 @@ impl ApuState {
                 }
             }
 
-            let volume = 15;
+            if self.current_cycle >= self.next_sample_at {
+                let volume = 15;
 
-            let mut pulse_1_sample = (self.pulse_1.duty >> self.pulse_1.sequence_counter) & 0b1;
-            pulse_1_sample *= volume;
+                let mut pulse_1_sample = (self.pulse_1.duty >> self.pulse_1.sequence_counter) & 0b1;
+                pulse_1_sample *= volume;
 
-            // Mixing? Bah! Just throw the sample in the buffer.
-            let mut composite_sample = 0;
-            composite_sample += (pulse_1_sample as u16) * 1024; // Sure, why not?
-            self.sample_buffer[self.current_sample] = composite_sample;
-            self.current_sample = (self.current_sample + 1) % self.sample_buffer.len();
+                // Mixing? Bah! Just throw the sample in the buffer.
+                let mut composite_sample: i16 = 0;
+                composite_sample += ((pulse_1_sample as i16) * 1024) - 512; // Sure, why not?
+                self.sample_buffer[self.buffer_index] = composite_sample;
+                self.buffer_index = (self.buffer_index + 1) % self.sample_buffer.len();
+
+                self.generated_samples += 1;
+                self.next_sample_at = ((self.generated_samples + 1) * self.cpu_clock_rate) / self.sample_rate;
+
+                if self.buffer_index == 0 {
+                    self.dump_sample_buffer();
+                }
+            }
 
             self.current_cycle += 1;
         }
+    }
+
+    pub fn dump_sample_buffer(&self) {
+        let mut file =
+            OpenOptions::new()
+            .write(true)
+            .create(true)
+            .append(true)
+            .open("audiodump.raw")
+            .unwrap();
+
+        // turn our sample buffer into a simple file buffer for output
+        let mut buffer = [0u8; 4096 * 2];
+        for i in 0 .. 4096 {
+            buffer[i * 2]     = (((self.sample_buffer[i] as u16) & 0xFF00) >> 8) as u8;
+            buffer[i * 2 + 1] = (((self.sample_buffer[i] as u16) & 0x00FF)     ) as u8;
+        }
+
+        file.write_all(&buffer);
     }
 }
