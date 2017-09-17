@@ -139,7 +139,40 @@ impl ApuState {
                 // Start this note
                 self.pulse_1.sequence_counter = 0;
                 self.pulse_1.envelope_start = true;
-            }
+            },
+            0x4004 => {
+                let duty_index =      (data & 0b1100_0000) >> 6;
+                let length_disable =  (data & 0b0010_0000) != 0;
+                let constant_volume = (data & 0b0001_0000) != 0;
+
+                self.pulse_2.duty = duty_table[duty_index as usize];
+                self.pulse_2.length_enabled = !(length_disable);
+                self.pulse_2.envelope_enabled = !(constant_volume);
+                if (constant_volume) {
+                    self.pulse_2.volume = data & 0b0000_1111;
+                }
+            },
+            0x4005 => {
+                self.pulse_2.sweep_enabled =  (data & 0b1000_0000) != 0;
+                self.pulse_2.sweep_period =   (data & 0b0111_0000) >> 4;
+                self.pulse_2.sweep_negate =   (data & 0b0000_1000) != 0;
+                self.pulse_2.sweep_shift =     data & 0b0000_1111;
+            },
+            0x4006 => {
+                let period_low = data as u16;
+                self.pulse_2.period_initial = (self.pulse_2.period_initial & 0xFF00) | period_low
+            },
+            0x4007 => {
+                let period_high = ((data & 0b0000_0111) as u16) << 8;
+                let length =     (data & 0b1111_1000) >> 3;
+
+                self.pulse_2.period_initial = (self.pulse_2.period_initial & 0x00FF) | period_high;
+                self.pulse_2.length = length;
+
+                // Start this note
+                self.pulse_2.sequence_counter = 0;
+                self.pulse_2.envelope_start = true;
+            },
 
             _ => ()
         }
@@ -164,17 +197,35 @@ impl ApuState {
                 } else {
                     self.pulse_1.period_current -= 1;
                 }
+
+                if self.pulse_2.period_current == 0 {
+                    // Reset the period timer, and clock the waveform generator
+                    self.pulse_2.period_current = self.pulse_2.period_initial;
+
+                    // The sequence counter starts at zero, but counts downwards, resulting in an odd
+                    // lookup sequence of 0, 7, 6, 5, 4, 3, 2, 1
+                    if self.pulse_2.sequence_counter == 0 {
+                        self.pulse_2.sequence_counter = 7;
+                    } else {
+                        self.pulse_2.sequence_counter -= 1;
+                    }
+                } else {
+                    self.pulse_2.period_current -= 1;
+                }
             }
 
             if self.current_cycle >= self.next_sample_at {
-                let volume = 15;
-
                 let mut pulse_1_sample = (self.pulse_1.duty >> self.pulse_1.sequence_counter) & 0b1;
-                pulse_1_sample *= volume;
+                pulse_1_sample *= self.pulse_1.volume;
+
+                let mut pulse_2_sample = (self.pulse_2.duty >> self.pulse_2.sequence_counter) & 0b1;
+                pulse_2_sample *= self.pulse_2.volume;
+
 
                 // Mixing? Bah! Just throw the sample in the buffer.
                 let mut composite_sample: i16 = 0;
                 composite_sample += ((pulse_1_sample as i16) * 1024) - 512; // Sure, why not?
+                composite_sample += ((pulse_2_sample as i16) * 1024) - 512; // Sure, why not?
                 self.sample_buffer[self.buffer_index] = composite_sample;
                 self.buffer_index = (self.buffer_index + 1) % self.sample_buffer.len();
 

@@ -3,3 +3,6 @@ tests/
 **/*.rs.bk
 *.nes
 *.zip
+*.ogg
+*.flac
+*.raw
