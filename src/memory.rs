@@ -178,6 +178,9 @@ pub fn write_byte(nes: &mut NesState, address: u16, data: u8) {
                 nes.ppu.oam[i as usize] = byte;
             }
         },
+        0x4015 => {
+            nes.apu.write_register(address, data);
+        },
         0x4016 => {
             // Input latch
             nes.input_latch = data & 0x1 != 0;
@@ -185,7 +188,10 @@ pub fn write_byte(nes: &mut NesState, address: u16, data: u8) {
                 nes.p1_data = nes.p1_input;
                 nes.p2_data = nes.p2_input;
             }
-        }
+        },
+        0x4017 => {
+            nes.apu.write_register(address, data);
+        },
         0x4020 ... 0xFFFF => nes.mapper.write_byte(address, data),
         _ => () // Do nothing!
     }

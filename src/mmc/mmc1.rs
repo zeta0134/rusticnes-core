@@ -223,7 +223,7 @@ impl Mapper for Mmc1 {
                         match register {
                             0x8000 ... 0x9F00 => {
                                 self.control = self.shift_data;
-                                let nametable_mode = (self.control & 0b0_0011);
+                                let nametable_mode = self.control & 0b0_0011;
                                 match nametable_mode {
                                     0 => self.mirroring = Mirroring::OneScreenLower,
                                     1 => self.mirroring = Mirroring::OneScreenUpper,
