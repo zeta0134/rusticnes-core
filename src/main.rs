@@ -1,10 +1,12 @@
 extern crate find_folder;
 extern crate image;
 extern crate piston_window;
+extern crate sdl2_window;
 
 use piston_window::*;
 use piston_window::Button::Keyboard;
 use piston_window::Key;
+use sdl2_window::Sdl2Window;
 
 mod apu;
 mod cartridge;
@@ -28,11 +30,19 @@ use nes::NesState;
 use palettes::NTSC_PAL;
 
 fn main() {
-    let mut window: PistonWindow = WindowSettings::new("RusticNES", [1024, 768])
-    .exit_on_esc(true).build().unwrap();
-    window.set_ups(60);
-
     println!("Welcome to RusticNES");
+
+    //let mut window: PistonWindow = WindowSettings::new("RusticNES", [1024, 768])
+    //.exit_on_esc(true).opengl(OpenGL::V3_1).build().unwrap();
+    //window.set_ups(60);
+
+    let mut window: PistonWindow = PistonWindow::new(OpenGL::V4_5, 0, 
+        WindowSettings::new("RusticNES", (1024, 768))
+            .opengl(OpenGL::V4_5)
+            .srgb(false)
+            .build()
+            .unwrap());
+    window.set_ups(60);
 
     let args: Vec<String> = env::args().collect();
     let filename = &args[1];
@@ -211,6 +221,7 @@ fn main() {
 
             // Draw audio samples! What could possibly go wrong?
             // Why do we need to clear this manually?
+            //*
             for x in 0 .. 256 {
                 for y in 0 .. 128 {
                     audiocanvas_buffer.put_pixel(x, y, Rgba { data: [255, 255, 255, 255] });
@@ -231,6 +242,7 @@ fn main() {
                 audiocanvas_buffer.put_pixel(x as u32, current_y, Rgba { data: [0, 0, 0, 255] });
             }
             let _ = audiocanvas_texture.update(&mut window.encoder, &audiocanvas_buffer);
+            // */
 
         }
 
@@ -248,7 +260,7 @@ fn main() {
             let nametables_transform = context.transform.trans(512.0, 256.0);
             image(&nametables_texture, nametables_transform, graphics);
 
-            let audiocanvas_transform = context.transform.trans(0.0, 480.0);
+            let audiocanvas_transform = base_transform.trans(0.0, 240.0);
             image(&audiocanvas_texture, audiocanvas_transform, graphics);
 
             /*

@@ -224,8 +224,8 @@ impl ApuState {
 
                 // Mixing? Bah! Just throw the sample in the buffer.
                 let mut composite_sample: i16 = 0;
-                composite_sample += ((pulse_1_sample as i16) * 1024) - 512; // Sure, why not?
-                composite_sample += ((pulse_2_sample as i16) * 1024) - 512; // Sure, why not?
+                composite_sample += (pulse_1_sample as i16 - 8) * 512; // Sure, why not?
+                composite_sample += (pulse_2_sample as i16 - 8) * 512;
                 self.sample_buffer[self.buffer_index] = composite_sample;
                 self.buffer_index = (self.buffer_index + 1) % self.sample_buffer.len();
 

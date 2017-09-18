@@ -6,4 +6,5 @@ authors = ["Nicholas Flynt <thegamefreak0134@gmail.com>"]
 [dependencies]
 find_folder = "*"
 image = "*"
-piston_window = "0.69.1"
+piston_window = "*"
+pistoncore-sdl2_window = "*"
