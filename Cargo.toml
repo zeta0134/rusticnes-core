@@ -7,4 +7,3 @@ authors = ["Nicholas Flynt <thegamefreak0134@gmail.com>"]
 find_folder = "*"
 image = "*"
 piston_window = "*"
-pistoncore-sdl2_window = "*"

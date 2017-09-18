@@ -1,12 +1,10 @@
 extern crate find_folder;
 extern crate image;
 extern crate piston_window;
-extern crate sdl2_window;
 
 use piston_window::*;
 use piston_window::Button::Keyboard;
 use piston_window::Key;
-use sdl2_window::Sdl2Window;
 
 mod apu;
 mod cartridge;
@@ -36,9 +34,8 @@ fn main() {
     //.exit_on_esc(true).opengl(OpenGL::V3_1).build().unwrap();
     //window.set_ups(60);
 
-    let mut window: PistonWindow = PistonWindow::new(OpenGL::V4_5, 0, 
+    let mut window: PistonWindow = PistonWindow::new(OpenGL::V4_0, 0,
         WindowSettings::new("RusticNES", (1024, 768))
-            .opengl(OpenGL::V4_5)
             .srgb(false)
             .build()
             .unwrap());
