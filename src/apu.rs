@@ -275,7 +275,8 @@ pub struct NoiseChannelState {
     pub length_counter: LengthCounterState,
 
     pub mode: u8,
-    pub period: u16,
+    pub period_initial: u16,
+    pub period_current: u16,
 
     // Actually a 15-bit register
     pub shift_register: u16,
@@ -290,7 +291,8 @@ impl NoiseChannelState {
             envelope: VolumeEnvelopeState::new(),
             length_counter: LengthCounterState::new(),
             mode: 0,
-            period: 4068,
+            period_initial: 0,
+            period_current: 0,
 
             // Actually a 15-bit register
             shift_register: 1,
@@ -298,14 +300,20 @@ impl NoiseChannelState {
     }
 
     pub fn clock(&mut self) {
-        let mut feedback = self.shift_register & 0b1;
-        if self.mode == 1 {
-            feedback ^= (self.shift_register >> 6) & 0b1;
+        if self.period_current == 0 {
+            self.period_current = self.period_initial;
+            
+            let mut feedback = self.shift_register & 0b1;
+            if self.mode == 1 {
+                feedback ^= (self.shift_register >> 6) & 0b1;
+            } else {
+                feedback ^= (self.shift_register >> 1) & 0b1;
+            }
+            self.shift_register = self.shift_register >> 1;
+            self.shift_register |= feedback << 14;
         } else {
-            feedback ^= (self.shift_register >> 1) & 0b1;
+            self.period_current -= 1;
         }
-        self.shift_register = self.shift_register >> 1;
-        self.shift_register |= feedback << 14;
     }
 
     pub fn output(&self) -> i16 {
@@ -482,7 +490,7 @@ impl ApuState {
                 let mode =        (data & 0b1000_0000) >> 7;
                 let period_index = data & 0b0000_1111;
                 self.noise.mode = mode;
-                self.noise.period = noise_period[period_index as usize];
+                self.noise.period_initial = noise_period[period_index as usize];
             },
             0x400F => {
                 let length_index = (data & 0b1111_1000) >> 3;
