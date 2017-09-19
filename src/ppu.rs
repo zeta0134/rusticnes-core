@@ -122,12 +122,14 @@ impl PpuState {
             0x2000 ... 0x2FFF => self.internal_vram[nametable_address(masked_address, mapper.mirroring()) as usize] = data,
             0x3000 ... 0x3EFF => self.write_byte(mapper, masked_address - 0x1000, data),
             0x3F00 ... 0x3FFF => {
+                // palette data is 6-bits, so mask off the upper two:
+                let palette_entry = data & 0b0011_1111;
                 let mut palette_address = masked_address & 0x1F;
                 // Weird background masking
                 if palette_address & 0x13 == 0x10 {
                     palette_address = palette_address - 0x10;
                 }
-                self.palette[palette_address as usize] = data;
+                self.palette[palette_address as usize] = palette_entry;
             },
             _ => () // Do nothing!
         }
