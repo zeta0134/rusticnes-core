@@ -58,10 +58,46 @@ impl VolumeEnvelopeState {
     }
 }
 
-pub struct PulseChannelState {
-    pub enabled: bool,
+pub struct LengthCounterState {
+    pub length: u8,
+    pub halt_flag: bool,
+    pub channel_enabled: bool,
+}
 
+impl LengthCounterState{
+    pub fn new() -> LengthCounterState {
+        return LengthCounterState {
+            length: 0,
+            halt_flag: false,
+            channel_enabled: false,
+        }
+    }
+
+    pub fn clock(&mut self) {
+        if self.channel_enabled {
+            if self.length > 0 && !(self.halt_flag) {
+                self.length -= 1;
+            }
+        } else {
+            self.length = 0;
+        }
+    }
+
+    pub fn set_length(&mut self, index: u8) {
+        if self.channel_enabled {
+            let table = [
+                10, 254, 20,  2, 40,  4, 80,  6, 160,  8, 60, 10, 14, 12, 26, 14,
+                12, 16, 24, 18, 48, 20, 96, 22, 192, 24, 72, 26, 16, 28, 32, 30];
+            self.length = table[index as usize];
+        } else {
+            self.length = 0
+        }
+    }
+}
+
+pub struct PulseChannelState {
     pub envelope: VolumeEnvelopeState,
+    pub length_counter: LengthCounterState,
 
     // Frequency Sweep
     pub sweep_enabled: bool,
@@ -77,16 +113,14 @@ pub struct PulseChannelState {
     pub sequence_counter: u8,
     pub period_initial: u16,
     pub period_current: u16,
-    pub length: u8,
-    pub length_halt_flag: bool,
+
 }
 
 impl PulseChannelState {
     pub fn new(sweep_ones_compliment: bool) -> PulseChannelState {
         return PulseChannelState {
-            enabled: false,
-
             envelope: VolumeEnvelopeState::new(),
+            length_counter: LengthCounterState::new(),
 
             // Frequency Sweep
             sweep_enabled: false,
@@ -102,8 +136,6 @@ impl PulseChannelState {
             sequence_counter: 0,
             period_initial: 0,
             period_current: 0,
-            length: 0,
-            length_halt_flag: false,
         }
     }
 
@@ -125,9 +157,13 @@ impl PulseChannelState {
     }
 
     pub fn output(&self) -> i16 {
-        let mut sample = (self.duty >> self.sequence_counter) & 0b1;
-        sample *= self.envelope.current_volume();
-        return sample as i16;
+        if self.length_counter.length > 0 {
+            let mut sample = (self.duty >> self.sequence_counter) & 0b1;
+            sample *= self.envelope.current_volume();
+            return sample as i16;
+        } else {
+            return 0
+        }
     }
 
     pub fn target_period(&mut self) -> u16 {
@@ -159,6 +195,8 @@ impl PulseChannelState {
 }
 
 pub struct TriangleChannelState {
+    pub length_counter: LengthCounterState,
+
     pub control_flag: bool,
     pub linear_reload_flag: bool,
     pub linear_counter_initial: u8,
@@ -173,6 +211,7 @@ pub struct TriangleChannelState {
 impl TriangleChannelState {
     pub fn new() -> TriangleChannelState {
         return TriangleChannelState {
+            length_counter: LengthCounterState::new(),
             control_flag: false,
             linear_reload_flag: false,
             linear_counter_initial: 0,
@@ -218,9 +257,13 @@ impl TriangleChannelState {
     }
 
     pub fn output(&self) -> i16 {
-        let triangle_sequence = [15,14,13,12,11,10,9,8,7,6,5,4,3,2,1,0,
-                                 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15];
-        return triangle_sequence[self.sequence_counter as usize];
+        if self.length_counter.length > 0 {
+            let triangle_sequence = [15,14,13,12,11,10,9,8,7,6,5,4,3,2,1,0,
+                                     0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15];
+            return triangle_sequence[self.sequence_counter as usize];
+        } else {
+            return 0;
+        }
     }
 }
 
@@ -229,6 +272,8 @@ pub struct NoiseChannelState {
     pub length_halt_flag: bool,
 
     pub envelope: VolumeEnvelopeState,
+    pub length_counter: LengthCounterState,
+
     pub mode: u8,
     pub period: u16,
 
@@ -243,6 +288,7 @@ impl NoiseChannelState {
             length_halt_flag: false,
 
             envelope: VolumeEnvelopeState::new(),
+            length_counter: LengthCounterState::new(),
             mode: 0,
             period: 4068,
 
@@ -263,9 +309,13 @@ impl NoiseChannelState {
     }
 
     pub fn output(&self) -> i16 {
-        let mut sample = (self.shift_register & 0b1) as u8;
-        sample *= self.envelope.current_volume();
-        return sample as i16;
+        if self.length_counter.length > 0 {
+            let mut sample = (self.shift_register & 0b1) as u8;
+            sample *= self.envelope.current_volume();
+            return sample as i16;
+        } else {
+            return 0;
+        }
     }
 }
 
@@ -331,7 +381,7 @@ impl ApuState {
                 let constant_volume = (data & 0b0001_0000) != 0;
 
                 self.pulse_1.duty = duty_table[duty_index as usize];
-                self.pulse_1.length_halt_flag = length_disable;
+                self.pulse_1.length_counter.halt_flag = length_disable;
                 self.pulse_1.envelope.looping = length_disable;
                 self.pulse_1.envelope.enabled = !(constant_volume);
                 self.pulse_1.envelope.volume_register = data & 0b0000_1111;
@@ -348,11 +398,11 @@ impl ApuState {
                 self.pulse_1.period_initial = (self.pulse_1.period_initial & 0xFF00) | period_low
             },
             0x4003 => {
-                let period_high = ((data & 0b0000_0111) as u16) << 8;
-                let length =     (data & 0b1111_1000) >> 3;
+                let period_high =  ((data & 0b0000_0111) as u16) << 8;
+                let length_index = (data & 0b1111_1000) >> 3;
 
                 self.pulse_1.period_initial = (self.pulse_1.period_initial & 0x00FF) | period_high;
-                self.pulse_1.length = length;
+                self.pulse_1.length_counter.set_length(length_index);
 
                 // Start this note
                 self.pulse_1.sequence_counter = 0;
@@ -366,7 +416,7 @@ impl ApuState {
                 let constant_volume = (data & 0b0001_0000) != 0;
 
                 self.pulse_2.duty = duty_table[duty_index as usize];
-                self.pulse_2.length_halt_flag = length_disable;
+                self.pulse_2.length_counter.halt_flag = length_disable;
                 self.pulse_2.envelope.looping = length_disable;
                 self.pulse_2.envelope.enabled = !(constant_volume);
                 self.pulse_2.envelope.volume_register = data & 0b0000_1111;
@@ -383,11 +433,11 @@ impl ApuState {
                 self.pulse_2.period_initial = (self.pulse_2.period_initial & 0xFF00) | period_low
             },
             0x4007 => {
-                let period_high = ((data & 0b0000_0111) as u16) << 8;
-                let length =     (data & 0b1111_1000) >> 3;
+                let period_high =  ((data & 0b0000_0111) as u16) << 8;
+                let length_index =  (data & 0b1111_1000) >> 3;
 
                 self.pulse_2.period_initial = (self.pulse_2.period_initial & 0x00FF) | period_high;
-                self.pulse_2.length = length;
+                self.pulse_2.length_counter.set_length(length_index);
 
                 // Start this note
                 self.pulse_2.sequence_counter = 0;
@@ -397,6 +447,7 @@ impl ApuState {
             // Triangle Channel
             0x4008 => {
                 self.triangle.control_flag           = (data & 0b1000_0000) != 0;
+                self.triangle.length_counter.halt_flag = self.triangle.control_flag;
                 self.triangle.linear_counter_initial =  data & 0b0111_1111;
             },
             0x400A => {
@@ -404,11 +455,11 @@ impl ApuState {
                 self.triangle.period_initial = (self.triangle.period_initial & 0xFF00) | period_low
             },
             0x400B => {
-                let period_high = ((data & 0b0000_0111) as u16) << 8;
-                let length =     (data & 0b1111_1000) >> 3;
+                let period_high =  ((data & 0b0000_0111) as u16) << 8;
+                let length_index =  (data & 0b1111_1000) >> 3;
 
                 self.triangle.period_initial = (self.triangle.period_initial & 0x00FF) | period_high;
-                self.triangle.length = length;
+                self.triangle.length_counter.set_length(length_index);
 
                 // Start this note
                 self.triangle.linear_reload_flag = true;
@@ -419,7 +470,7 @@ impl ApuState {
                 let length_disable =  (data & 0b0010_0000) != 0;
                 let constant_volume = (data & 0b0001_0000) != 0;
 
-                self.noise.length_halt_flag = length_disable;
+                self.noise.length_counter.halt_flag = length_disable;
                 self.noise.envelope.looping = length_disable;
                 self.noise.envelope.enabled = !(constant_volume);
                 self.noise.envelope.volume_register = data & 0b0000_1111;
@@ -434,12 +485,33 @@ impl ApuState {
                 self.noise.period = noise_period[period_index as usize];
             },
             0x400F => {
-                let length =     (data & 0b1111_1000) >> 3;
-                self.noise.length = length;
+                let length_index = (data & 0b1111_1000) >> 3;
+                self.noise.length_counter.set_length(length_index);
 
                 // Restart the envelope
                 self.noise.envelope.start_flag = true;
             },
+
+            // Status / Enabled
+            0x4015 => {
+                self.pulse_1.length_counter.channel_enabled  = (data & 0b0001) != 0;
+                self.pulse_2.length_counter.channel_enabled  = (data & 0b0010) != 0;
+                self.triangle.length_counter.channel_enabled = (data & 0b0100) != 0;
+                self.noise.length_counter.channel_enabled    = (data & 0b1000) != 0;
+
+                if ! (self.pulse_1.length_counter.channel_enabled) {
+                    self.pulse_1.length_counter.length = 0;
+                }
+                if ! (self.pulse_2.length_counter.channel_enabled) {
+                    self.pulse_2.length_counter.length = 0;
+                }
+                if ! (self.triangle.length_counter.channel_enabled) {
+                    self.triangle.length_counter.length = 0;
+                }
+                if ! (self.noise.length_counter.channel_enabled) {
+                    self.noise.length_counter.length = 0;
+                }
+            }
 
             // Frame Counter / Interrupts
             0x4017 => {
@@ -521,6 +593,11 @@ impl ApuState {
     pub fn clock_half_frame(&mut self) {
         self.pulse_1.update_sweep();
         self.pulse_2.update_sweep();
+
+        self.pulse_1.length_counter.clock();
+        self.pulse_2.length_counter.clock();
+        self.triangle.length_counter.clock();
+        self.noise.length_counter.clock();
     }
 
     pub fn run_to_cycle(&mut self, target_cycle: u64) {
