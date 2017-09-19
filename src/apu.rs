@@ -224,6 +224,51 @@ impl TriangleChannelState {
     }
 }
 
+pub struct NoiseChannelState {
+    pub length: u8,
+    pub length_halt_flag: bool,
+
+    pub envelope: VolumeEnvelopeState,
+    pub mode: u8,
+    pub period: u16,
+
+    // Actually a 15-bit register
+    pub shift_register: u16,
+}
+
+impl NoiseChannelState {
+    pub fn new() -> NoiseChannelState {
+        return NoiseChannelState {
+            length: 0,
+            length_halt_flag: false,
+
+            envelope: VolumeEnvelopeState::new(),
+            mode: 0,
+            period: 4068,
+
+            // Actually a 15-bit register
+            shift_register: 1,
+        }
+    }
+
+    pub fn clock(&mut self) {
+        let mut feedback = self.shift_register & 0b1;
+        if self.mode == 1 {
+            feedback ^= (self.shift_register >> 6) & 0b1;
+        } else {
+            feedback ^= (self.shift_register >> 1) & 0b1;
+        }
+        self.shift_register = self.shift_register >> 1;
+        self.shift_register |= feedback << 14;
+    }
+
+    pub fn output(&self) -> i16 {
+        let mut sample = (self.shift_register & 0b1) as u8;
+        sample *= self.envelope.current_volume();
+        return sample as i16;
+    }
+}
+
 
 pub struct ApuState {
     pub current_cycle: u64,
@@ -238,6 +283,7 @@ pub struct ApuState {
     pub pulse_1: PulseChannelState,
     pub pulse_2: PulseChannelState,
     pub triangle: TriangleChannelState,
+    pub noise: NoiseChannelState,
 
     pub sample_buffer: [i16; 4096],
     pub sample_rate: u64,
@@ -260,6 +306,7 @@ impl ApuState {
             pulse_1: PulseChannelState::new(true),
             pulse_2: PulseChannelState::new(false),
             triangle: TriangleChannelState::new(),
+            noise: NoiseChannelState::new(),
             sample_buffer: [0i16; 4096],
             sample_rate: 44100,
             cpu_clock_rate: 1_786_860,
@@ -367,6 +414,32 @@ impl ApuState {
                 self.triangle.linear_reload_flag = true;
             },
 
+            // Noise Channel
+            0x400C => {
+                let length_disable =  (data & 0b0010_0000) != 0;
+                let constant_volume = (data & 0b0001_0000) != 0;
+
+                self.noise.length_halt_flag = length_disable;
+                self.noise.envelope.looping = length_disable;
+                self.noise.envelope.enabled = !(constant_volume);
+                self.noise.envelope.volume_register = data & 0b0000_1111;
+            },
+            0x400E => {
+                let noise_period = [
+                    4, 8, 16, 32, 64, 96, 128, 160, 202, 254, 380, 508, 762, 1016, 2034, 4068];
+
+                let mode =        (data & 0b1000_0000) >> 7;
+                let period_index = data & 0b0000_1111;
+                self.noise.mode = mode;
+                self.noise.period = noise_period[period_index as usize];
+            },
+            0x400F => {
+                let length =     (data & 0b1111_1000) >> 3;
+                self.noise.length = length;
+
+                // Restart the envelope
+                self.noise.envelope.start_flag = true;
+            },
 
             // Frame Counter / Interrupts
             0x4017 => {
@@ -442,6 +515,7 @@ impl ApuState {
         self.pulse_1.envelope.clock();
         self.pulse_2.envelope.clock();
         self.triangle.update_linear_counter();
+        self.noise.envelope.clock();
     }
 
     pub fn clock_half_frame(&mut self) {
@@ -461,6 +535,7 @@ impl ApuState {
             if (self.current_cycle & 0b1) == 0 {
                 self.pulse_1.clock();
                 self.pulse_2.clock();
+                self.noise.clock();
             }
 
             if self.current_cycle >= self.next_sample_at {
@@ -469,6 +544,7 @@ impl ApuState {
                 composite_sample += (self.pulse_1.output()  as i16 - 8) * 512; // Sure, why not?
                 composite_sample += (self.pulse_2.output()  as i16 - 8) * 512;
                 composite_sample += (self.triangle.output() as i16 - 8) * 512;
+                composite_sample += (self.noise.output()    as i16 - 8) * 512;
                 self.sample_buffer[self.buffer_index] = composite_sample;
                 self.buffer_index = (self.buffer_index + 1) % self.sample_buffer.len();
 
