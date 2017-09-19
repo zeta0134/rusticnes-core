@@ -147,6 +147,73 @@ impl PulseChannelState {
     }
 }
 
+pub struct TriangleChannelState {
+    pub control_flag: bool,
+    pub linear_reload_flag: bool,
+    pub linear_counter_initial: u8,
+    pub linear_counter_current: u8,
+
+    pub sequence_counter: u8,
+    pub period_initial: u16,
+    pub period_current: u16,
+    pub length: u8,
+}
+
+impl TriangleChannelState {
+    pub fn new() -> TriangleChannelState {
+        return TriangleChannelState {
+            control_flag: false,
+            linear_reload_flag: false,
+            linear_counter_initial: 0,
+            linear_counter_current: 0,
+
+            sequence_counter: 0,
+            period_initial: 0,
+            period_current: 0,
+            length: 0,
+        }
+    }
+
+    pub fn update_linear_counter(&mut self) {
+        if self.linear_reload_flag {
+            self.linear_counter_current = self.linear_counter_initial;
+        } else {
+            if self.linear_counter_current > 0 {
+                self.linear_counter_current -= 1;
+            }
+        }
+        if !(self.control_flag) {
+            self.linear_reload_flag = false;
+        }
+    }
+
+    pub fn clock(&mut self) {
+        if self.linear_counter_current != 0 {
+            if self.period_current == 0 {
+                // Reset the period timer, and clock the waveform generator
+                self.period_current = self.period_initial;
+
+                // The sequence counter starts at zero, but counts downwards, resulting in an odd
+                // lookup sequence of 0, 7, 6, 5, 4, 3, 2, 1
+                if self.sequence_counter >= 31 {
+                    self.sequence_counter = 0;
+                } else {
+                    self.sequence_counter += 1;
+                }
+            } else {
+                self.period_current -= 1;
+            }
+        }
+    }
+
+    pub fn output(&self) -> i16 {
+        let triangle_sequence = [15,14,13,12,11,10,9,8,7,6,5,4,3,2,1,0,
+                                 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15];
+        return triangle_sequence[self.sequence_counter as usize];
+    }
+}
+
+
 pub struct ApuState {
     pub current_cycle: u64,
 
@@ -159,6 +226,7 @@ pub struct ApuState {
 
     pub pulse_1: PulseChannelState,
     pub pulse_2: PulseChannelState,
+    pub triangle: TriangleChannelState,
 
     pub sample_buffer: [i16; 4096],
     pub sample_rate: u64,
@@ -180,6 +248,7 @@ impl ApuState {
             disable_interrupt: false,
             pulse_1: PulseChannelState::new(true),
             pulse_2: PulseChannelState::new(false),
+            triangle: TriangleChannelState::new(),
             sample_buffer: [0i16; 4096],
             sample_rate: 44100,
             cpu_clock_rate: 1_786_860,
@@ -197,6 +266,7 @@ impl ApuState {
             0b0011_1111,
         ];
         match address {
+            // Pulse Channel 1
             0x4000 => {
                 let duty_index =      (data & 0b1100_0000) >> 6;
                 let length_disable =  (data & 0b0010_0000) != 0;
@@ -229,6 +299,8 @@ impl ApuState {
                 self.pulse_1.sequence_counter = 0;
                 self.pulse_1.envelope_start = true;
             },
+
+            // Pulse Channel 2
             0x4004 => {
                 let duty_index =      (data & 0b1100_0000) >> 6;
                 let length_disable =  (data & 0b0010_0000) != 0;
@@ -261,6 +333,29 @@ impl ApuState {
                 self.pulse_2.sequence_counter = 0;
                 self.pulse_2.envelope_start = true;
             },
+
+            // Triangle Channel
+            0x4008 => {
+                self.triangle.control_flag           = (data & 0b1000_0000) != 0;
+                self.triangle.linear_counter_initial =  data & 0b0111_1111;
+            },
+            0x400A => {
+                let period_low = data as u16;
+                self.triangle.period_initial = (self.triangle.period_initial & 0xFF00) | period_low
+            },
+            0x400B => {
+                let period_high = ((data & 0b0000_0111) as u16) << 8;
+                let length =     (data & 0b1111_1000) >> 3;
+
+                self.triangle.period_initial = (self.triangle.period_initial & 0x00FF) | period_high;
+                self.triangle.length = length;
+
+                // Start this note
+                self.triangle.linear_reload_flag = true;
+            },
+
+
+            // Frame Counter / Interrupts
             0x4017 => {
                 self.frame_sequencer_mode = (data & 0b1000_0000) >> 7;
                 self.disable_interrupt =    (data & 0b0100_0000) != 0;
@@ -333,6 +428,7 @@ impl ApuState {
     pub fn clock_quarter_frame(&mut self) {
         self.pulse_1.update_envelope();
         self.pulse_2.update_envelope();
+        self.triangle.update_linear_counter();
     }
 
     pub fn clock_half_frame(&mut self) {
@@ -341,10 +437,14 @@ impl ApuState {
     }
 
     pub fn run_to_cycle(&mut self, target_cycle: u64) {
-        // For testing: Pulse 1 only
         while self.current_cycle < target_cycle {
             self.clock_frame_sequencer();
+
+            // Clock the triangle channel once per CPU cycle
+            self.triangle.clock();
+
             // Only clock Pulse channels on every other cycle
+            // (Most documentation calls this once per APU cycle)
             if (self.current_cycle & 0b1) == 0 {
                 self.pulse_1.clock();
                 self.pulse_2.clock();
@@ -353,8 +453,9 @@ impl ApuState {
             if self.current_cycle >= self.next_sample_at {
                 // Mixing? Bah! Just throw the sample in the buffer.
                 let mut composite_sample: i16 = 0;
-                composite_sample += (self.pulse_1.output() as i16 - 8) * 512; // Sure, why not?
-                composite_sample += (self.pulse_2.output() as i16 - 8) * 512;
+                composite_sample += (self.pulse_1.output()  as i16 - 8) * 512; // Sure, why not?
+                composite_sample += (self.pulse_2.output()  as i16 - 8) * 512;
+                composite_sample += (self.triangle.output() as i16 - 8) * 512;
                 self.sample_buffer[self.buffer_index] = composite_sample;
                 self.buffer_index = (self.buffer_index + 1) % self.sample_buffer.len();
 
