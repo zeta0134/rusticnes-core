@@ -5,17 +5,63 @@
 use std::fs::OpenOptions;
 use std::io::prelude::*;
 
+pub struct VolumeEnvelopeState {
+    // Volume Envelope
+    pub volume_register: u8,
+    pub decay: u8,
+    pub divider: u8,
+    pub enabled: bool,
+    pub looping: bool,
+    pub start_flag: bool,
+}
+
+impl VolumeEnvelopeState {
+    pub fn new() -> VolumeEnvelopeState {
+        return VolumeEnvelopeState {
+            volume_register: 0,
+            decay: 0,
+            divider: 0,
+            enabled: false,
+            looping: false,
+            start_flag: false,
+        }
+    }
+
+    pub fn current_volume(&self) -> u8 {
+        if self.enabled {
+            return self.decay;
+        } else {
+            return self.volume_register;
+        }
+    }
+
+    pub fn clock(&mut self) {
+        if self.start_flag {
+            self.decay = 15;
+            self.start_flag = false;
+            self.divider = self.volume_register;
+        } else {
+            // Clock the divider
+            if self.divider == 0 {
+                self.divider = self.volume_register;
+                if self.decay > 0 {
+                    self.decay -= 1;
+                } else {
+                    if self.looping {
+                        self.decay = 15;
+                    }
+                }
+            } else {
+                self.divider = self.divider - 1;
+            }
+        }
+    }
+}
+
 pub struct PulseChannelState {
     pub enabled: bool,
 
-    // Volume Envelope
-    pub volume: u8,
-    pub decay: u8,
-    pub envelope_divider: u8,
-    pub envelope_enabled: bool,
-    pub envelope_loop: bool,
-    pub length_enabled: bool,
-    pub envelope_start: bool,
+    pub envelope: VolumeEnvelopeState,
 
     // Frequency Sweep
     pub sweep_enabled: bool,
@@ -32,6 +78,7 @@ pub struct PulseChannelState {
     pub period_initial: u16,
     pub period_current: u16,
     pub length: u8,
+    pub length_halt_flag: bool,
 }
 
 impl PulseChannelState {
@@ -39,14 +86,7 @@ impl PulseChannelState {
         return PulseChannelState {
             enabled: false,
 
-            // Volume Envelope
-            volume: 0,
-            decay: 0,
-            envelope_divider: 0,
-            envelope_enabled: false,
-            envelope_loop: false,
-            length_enabled: false,
-            envelope_start: false,
+            envelope: VolumeEnvelopeState::new(),
 
             // Frequency Sweep
             sweep_enabled: false,
@@ -63,6 +103,7 @@ impl PulseChannelState {
             period_initial: 0,
             period_current: 0,
             length: 0,
+            length_halt_flag: false,
         }
     }
 
@@ -83,17 +124,9 @@ impl PulseChannelState {
         }
     }
 
-    pub fn volume(&self) -> u8 {
-        if self.envelope_enabled {
-            return self.decay;
-        } else {
-            return self.volume;
-        }
-    }
-
     pub fn output(&self) -> i16 {
         let mut sample = (self.duty >> self.sequence_counter) & 0b1;
-        sample *= self.volume();
+        sample *= self.envelope.current_volume();
         return sample as i16;
     }
 
@@ -121,28 +154,6 @@ impl PulseChannelState {
             self.sweep_reload = false;
         } else {
             self.sweep_divider -= 1;
-        }
-    }
-
-    pub fn update_envelope(&mut self) {
-        if self.envelope_start {
-            self.decay = 15;
-            self.envelope_start = false;
-            self.envelope_divider = self.volume;
-        } else {
-            // Clock the divider
-            if self.envelope_divider == 0 {
-                self.envelope_divider = self.volume;
-                if self.decay > 0 {
-                    self.decay -= 1;
-                } else {
-                    if self.envelope_loop {
-                        self.decay = 15;
-                    }
-                }
-            } else {
-                self.envelope_divider = self.envelope_divider - 1;
-            }
         }
     }
 }
@@ -273,9 +284,10 @@ impl ApuState {
                 let constant_volume = (data & 0b0001_0000) != 0;
 
                 self.pulse_1.duty = duty_table[duty_index as usize];
-                self.pulse_1.length_enabled = !(length_disable);
-                self.pulse_1.envelope_enabled = !(constant_volume);
-                self.pulse_1.volume = data & 0b0000_1111;
+                self.pulse_1.length_halt_flag = length_disable;
+                self.pulse_1.envelope.looping = length_disable;
+                self.pulse_1.envelope.enabled = !(constant_volume);
+                self.pulse_1.envelope.volume_register = data & 0b0000_1111;
             },
             0x4001 => {
                 self.pulse_1.sweep_enabled =  (data & 0b1000_0000) != 0;
@@ -297,7 +309,7 @@ impl ApuState {
 
                 // Start this note
                 self.pulse_1.sequence_counter = 0;
-                self.pulse_1.envelope_start = true;
+                self.pulse_1.envelope.start_flag = true;
             },
 
             // Pulse Channel 2
@@ -307,9 +319,10 @@ impl ApuState {
                 let constant_volume = (data & 0b0001_0000) != 0;
 
                 self.pulse_2.duty = duty_table[duty_index as usize];
-                self.pulse_2.length_enabled = !(length_disable);
-                self.pulse_2.envelope_enabled = !(constant_volume);
-                self.pulse_2.volume = data & 0b0000_1111;
+                self.pulse_2.length_halt_flag = length_disable;
+                self.pulse_2.envelope.looping = length_disable;
+                self.pulse_2.envelope.enabled = !(constant_volume);
+                self.pulse_2.envelope.volume_register = data & 0b0000_1111;
             },
             0x4005 => {
                 self.pulse_2.sweep_enabled =  (data & 0b1000_0000) != 0;
@@ -331,7 +344,7 @@ impl ApuState {
 
                 // Start this note
                 self.pulse_2.sequence_counter = 0;
-                self.pulse_2.envelope_start = true;
+                self.pulse_2.envelope.start_flag = true;
             },
 
             // Triangle Channel
@@ -426,8 +439,8 @@ impl ApuState {
     }
 
     pub fn clock_quarter_frame(&mut self) {
-        self.pulse_1.update_envelope();
-        self.pulse_2.update_envelope();
+        self.pulse_1.envelope.clock();
+        self.pulse_2.envelope.clock();
         self.triangle.update_linear_counter();
     }
 
