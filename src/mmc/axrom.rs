@@ -12,7 +12,7 @@ pub struct AxRom {
 }
 
 impl AxRom {
-    pub fn new(header: NesHeader, chr: &[u8], prg: &[u8]) -> AxRom {
+    pub fn new(_: NesHeader, _: &[u8], prg: &[u8]) -> AxRom {
         return AxRom {
             prg_rom: prg.to_vec(),
             chr_ram: vec![0u8; 0x2000],

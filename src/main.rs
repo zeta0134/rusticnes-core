@@ -78,6 +78,7 @@ fn main() {
         .mag(texture::Filter::Nearest);
 
     // Load a font for text drawing (todo: probably need to find one with a better license)
+    /*
     let assets = find_folder::Search::ParentsThenKids(3, 3)
         .for_folder("assets").unwrap();
     let ref font = assets.join("FiraSans-Regular.ttf");
@@ -86,6 +87,7 @@ fn main() {
         TextureSettings::new()
         .min(texture::Filter::Nearest)
         .mag(texture::Filter::Nearest)).unwrap();
+    // */
 
     let mut screen_buffer = ImageBuffer::new(256, 240);
     let mut screen_texture = Texture::from_image(
@@ -192,7 +194,6 @@ fn main() {
         }
 
         if let Some(_) = event.update_args() {
-            let debug_pallete: [u8; 4] = [255, 192, 128, 0];
             // Debug draw some junk
             for x in 0 .. 256 {
                 for y in 0 .. 240 {
@@ -246,7 +247,6 @@ fn main() {
         window.draw_2d(&event, |context, graphics| {
             clear([0.8; 4], graphics);
             let base_transform = context.transform.scale(2.0, 2.0);
-            let base_text_transform = context.transform.trans(0.0, 0.0 + 16.0);
             image(&screen_texture, base_transform, graphics);
 
             let pattern_0_transform = base_transform.trans(256.0, 0.0);
@@ -261,7 +261,7 @@ fn main() {
             image(&audiocanvas_texture, audiocanvas_transform, graphics);
 
             /*
-
+            let base_text_transform = context.transform.trans(0.0, 0.0 + 16.0);
             let black_text = text::Text::new_color([0.0, 0.0, 0.0, 1.0], 16);
             let bright_text = text::Text::new_color([1.0, 1.0, 1.0, 0.8], 16);
             let dim_text = text::Text::new_color([1.0, 1.0, 1.0, 0.3], 16);

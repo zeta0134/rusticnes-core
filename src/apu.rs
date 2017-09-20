@@ -167,7 +167,7 @@ impl PulseChannelState {
     }
 
     pub fn target_period(&mut self) -> u16 {
-        let mut change_amount = self.period_initial >> self.sweep_shift;
+        let change_amount = self.period_initial >> self.sweep_shift;
         if self.sweep_negate {
             if self.sweep_ones_compliment {
                 return self.period_initial - change_amount - 1;
@@ -302,7 +302,7 @@ impl NoiseChannelState {
     pub fn clock(&mut self) {
         if self.period_current == 0 {
             self.period_current = self.period_initial;
-            
+
             let mut feedback = self.shift_register & 0b1;
             if self.mode == 1 {
                 feedback ^= (self.shift_register >> 6) & 0b1;
@@ -661,6 +661,6 @@ impl ApuState {
             buffer[i * 2 + 1] = (((self.sample_buffer[i] as u16) & 0x00FF)     ) as u8;
         }
 
-        file.write_all(&buffer);
+        let _ = file.write_all(&buffer);
     }
 }

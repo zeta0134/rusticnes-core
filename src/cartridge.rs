@@ -2,7 +2,6 @@ use mmc::mapper::*;
 use mmc::axrom::AxRom;
 use mmc::nrom::Nrom;
 use mmc::mmc1::Mmc1;
-use nes::NesState;
 
 // iNES 1.0 Header. Flags and decoding documented here. 2.0 is not yet supported.
 // https://wiki.nesdev.com/w/index.php/INES
@@ -97,7 +96,7 @@ pub fn load_from_cartridge(nes_header: NesHeader, cartridge: &Vec<u8>) -> Box<Ma
     offset = offset + prg_rom_size;
 
     let chr_rom_size = (header.chr_rom_size) as usize;
-    let mut chr_rom = &cartridge[offset .. (offset + chr_rom_size as usize)];
+    let chr_rom = &cartridge[offset .. (offset + chr_rom_size as usize)];
 
     if header.chr_rom_size == 0 {
         header.chr_rom_size = 8 * 1024;

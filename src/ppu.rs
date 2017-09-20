@@ -94,7 +94,7 @@ impl PpuState {
     }
 
     pub fn _read_byte(&mut self, mapper: &mut Mapper, address: u16) -> u8 {
-        let mut masked_address = address & 0x3FFF;
+        let masked_address = address & 0x3FFF;
         match masked_address {
             0x0000 ... 0x1FFF => return mapper.read_byte(masked_address),
             // Nametable 0 (top-left)

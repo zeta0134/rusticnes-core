@@ -1,5 +1,3 @@
-use cartridge::NesHeader;
-
 #[derive(Copy, Clone)]
 pub enum Mirroring {
     Horizontal,
