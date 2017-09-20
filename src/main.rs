@@ -173,6 +173,19 @@ fn main() {
                 debug::print_program_state(&mut nes);
             }
 
+            if button == Keyboard(Key::F5) {
+                nes.apu.pulse_1.debug_disable = !(nes.apu.pulse_1.debug_disable);
+            }
+            if button == Keyboard(Key::F6) {
+                nes.apu.pulse_2.debug_disable = !(nes.apu.pulse_2.debug_disable);
+            }
+            if button == Keyboard(Key::F7) {
+                nes.apu.triangle.debug_disable = !(nes.apu.triangle.debug_disable);
+            }
+            if button == Keyboard(Key::F8) {
+                nes.apu.noise.debug_disable = !(nes.apu.noise.debug_disable);
+            }
+
             if button == Keyboard(Key::Comma ) {
                 memory_viewer_page = memory_viewer_page.wrapping_sub(0x100);
                 if memory_viewer_page == 0x1F00 {
@@ -218,15 +231,24 @@ fn main() {
             }
 
             // Draw audio samples! What could possibly go wrong?
-            // Why do we need to clear this manually?
+            // Do we need to clear this manually?
             //*
 
             // Background
             for x in 0 .. 256 {
-                for y in   0 ..  25 { audiocanvas_buffer.put_pixel(x, y, Rgba { data: [32,  8,  8, 255] }); }
-                for y in  25 ..  50 { audiocanvas_buffer.put_pixel(x, y, Rgba { data: [32, 16,  8, 255] }); }
-                for y in  50 ..  75 { audiocanvas_buffer.put_pixel(x, y, Rgba { data: [ 8, 32,  8, 255] }); }
-                for y in  75 .. 100 { audiocanvas_buffer.put_pixel(x, y, Rgba { data: [ 8, 16, 32, 255] }); }
+                for y in   0 ..  125 { audiocanvas_buffer.put_pixel(x, y, Rgba { data: [8,  8,  8, 255] }); }
+                if !(nes.apu.pulse_1.debug_disable) {
+                    for y in   0 ..  25 { audiocanvas_buffer.put_pixel(x, y, Rgba { data: [32,  8,  8, 255] }); }
+                }
+                if !(nes.apu.pulse_2.debug_disable) {
+                    for y in  25 ..  50 { audiocanvas_buffer.put_pixel(x, y, Rgba { data: [32, 16,  8, 255] }); }
+                }
+                if !(nes.apu.triangle.debug_disable) {
+                    for y in  50 ..  75 { audiocanvas_buffer.put_pixel(x, y, Rgba { data: [ 8, 32,  8, 255] }); }
+                }
+                if !(nes.apu.noise.debug_disable) {
+                    for y in  75 .. 100 { audiocanvas_buffer.put_pixel(x, y, Rgba { data: [ 8, 16, 32, 255] }); }
+                }
                 for y in 100 .. 125 { audiocanvas_buffer.put_pixel(x, y, Rgba { data: [16, 16, 16, 255] }); }
             }
 
@@ -250,11 +272,24 @@ fn main() {
                     imagebuffer.put_pixel(dx, y + current_y, color);
                 }
             }
-            draw_waveform(&mut audiocanvas_buffer, &nes.apu.pulse_1.debug_buffer,  nes.apu.buffer_index, Rgba { data: [192,  32,  32, 255]}, 0,   0, 256,  25, 16);
-            draw_waveform(&mut audiocanvas_buffer, &nes.apu.pulse_2.debug_buffer,  nes.apu.buffer_index, Rgba { data: [192,  96,  32, 255]}, 0,  25, 256,  25, 16);
-            draw_waveform(&mut audiocanvas_buffer, &nes.apu.triangle.debug_buffer, nes.apu.buffer_index, Rgba { data: [ 32, 192,  32, 255]}, 0,  50, 256,  25, 16);
-            draw_waveform(&mut audiocanvas_buffer, &nes.apu.noise.debug_buffer,    nes.apu.buffer_index, Rgba { data: [ 32,  96, 192, 255]}, 0,  75, 256,  25, 16);
-            draw_waveform(&mut audiocanvas_buffer, &nes.apu.sample_buffer,         nes.apu.buffer_index, Rgba { data: [192, 192, 192, 255]}, 0, 100, 256,  25, 32768);
+            if !(nes.apu.pulse_1.debug_disable) {
+                draw_waveform(&mut audiocanvas_buffer, &nes.apu.pulse_1.debug_buffer,
+                    nes.apu.buffer_index, Rgba { data: [192,  32,  32, 255]}, 0,   0, 256,  25, 16);
+            }
+            if !(nes.apu.pulse_2.debug_disable) {
+                draw_waveform(&mut audiocanvas_buffer, &nes.apu.pulse_2.debug_buffer,
+                    nes.apu.buffer_index, Rgba { data: [192,  96,  32, 255]}, 0,  25, 256,  25, 16);
+            }
+            if !(nes.apu.triangle.debug_disable) {
+                draw_waveform(&mut audiocanvas_buffer, &nes.apu.triangle.debug_buffer,
+                    nes.apu.buffer_index, Rgba { data: [ 32, 192,  32, 255]}, 0,  50, 256,  25, 16);
+            }
+            if !(nes.apu.noise.debug_disable) {
+                draw_waveform(&mut audiocanvas_buffer, &nes.apu.noise.debug_buffer,
+                    nes.apu.buffer_index, Rgba { data: [ 32,  96, 192, 255]}, 0,  75, 256,  25, 16);
+            }
+            draw_waveform(&mut audiocanvas_buffer, &nes.apu.sample_buffer,
+                nes.apu.buffer_index, Rgba { data: [192, 192, 192, 255]}, 0, 100, 256,  25, 16384);
 
             let _ = audiocanvas_texture.update(&mut window.encoder, &audiocanvas_buffer);
             // */
