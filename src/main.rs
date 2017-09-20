@@ -220,25 +220,42 @@ fn main() {
             // Draw audio samples! What could possibly go wrong?
             // Why do we need to clear this manually?
             //*
+
+            // Background
             for x in 0 .. 256 {
-                for y in 0 .. 128 {
-                    audiocanvas_buffer.put_pixel(x, y, Rgba { data: [255, 255, 255, 255] });
+                for y in   0 ..  25 { audiocanvas_buffer.put_pixel(x, y, Rgba { data: [32,  8,  8, 255] }); }
+                for y in  25 ..  50 { audiocanvas_buffer.put_pixel(x, y, Rgba { data: [32, 16,  8, 255] }); }
+                for y in  50 ..  75 { audiocanvas_buffer.put_pixel(x, y, Rgba { data: [ 8, 32,  8, 255] }); }
+                for y in  75 .. 100 { audiocanvas_buffer.put_pixel(x, y, Rgba { data: [ 8, 16, 32, 255] }); }
+                for y in 100 .. 125 { audiocanvas_buffer.put_pixel(x, y, Rgba { data: [16, 16, 16, 255] }); }
+            }
+
+            fn draw_waveform(imagebuffer: &mut ImageBuffer<Rgba<u8>, Vec<u8>>, audiobuffer: &[u16], start_index: usize, color: Rgba<u8>, x: u32, y: u32, width: u32, height: u32, scale: u32) {
+                let mut last_y = 0;
+                for dx in x .. (x + width) {
+                    let sample_index = (start_index + dx as usize) % audiobuffer.len();
+                    let sample = audiobuffer[sample_index];
+                    let current_x = dx as u32;
+                    let mut current_y = ((sample as u32 * height) / scale) as u32;
+                    if current_y >= height {
+                        current_y = height - 1;
+                    }
+                    for dy in current_y .. last_y {
+                        imagebuffer.put_pixel(current_x, y + dy, color);
+                    }
+                    for dy in last_y .. current_y {
+                        imagebuffer.put_pixel(current_x, y + dy, color);
+                    }
+                    last_y = current_y;
+                    imagebuffer.put_pixel(dx, y + current_y, color);
                 }
             }
-            let mut last_y = 64;
-            for x in 0 .. 256 {
-                let sample_index = (nes.apu.buffer_index + x) %  nes.apu.sample_buffer.len();
-                let sample = nes.apu.sample_buffer[sample_index];
-                let current_y = (64 + (sample / 512)) as u32;
-                for y in current_y .. last_y {
-                    audiocanvas_buffer.put_pixel(x as u32, y, Rgba { data: [0, 0, 0, 255] });
-                }
-                for y in last_y .. current_y {
-                    audiocanvas_buffer.put_pixel(x as u32, y, Rgba { data: [0, 0, 0, 255] });
-                }
-                last_y = current_y;
-                audiocanvas_buffer.put_pixel(x as u32, current_y, Rgba { data: [0, 0, 0, 255] });
-            }
+            draw_waveform(&mut audiocanvas_buffer, &nes.apu.pulse_1.debug_buffer,  nes.apu.buffer_index, Rgba { data: [192,  32,  32, 255]}, 0,   0, 256,  25, 16);
+            draw_waveform(&mut audiocanvas_buffer, &nes.apu.pulse_2.debug_buffer,  nes.apu.buffer_index, Rgba { data: [192,  96,  32, 255]}, 0,  25, 256,  25, 16);
+            draw_waveform(&mut audiocanvas_buffer, &nes.apu.triangle.debug_buffer, nes.apu.buffer_index, Rgba { data: [ 32, 192,  32, 255]}, 0,  50, 256,  25, 16);
+            draw_waveform(&mut audiocanvas_buffer, &nes.apu.noise.debug_buffer,    nes.apu.buffer_index, Rgba { data: [ 32,  96, 192, 255]}, 0,  75, 256,  25, 16);
+            draw_waveform(&mut audiocanvas_buffer, &nes.apu.sample_buffer,         nes.apu.buffer_index, Rgba { data: [192, 192, 192, 255]}, 0, 100, 256,  25, 32768);
+
             let _ = audiocanvas_texture.update(&mut window.encoder, &audiocanvas_buffer);
             // */
 

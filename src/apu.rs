@@ -96,6 +96,8 @@ impl LengthCounterState{
 }
 
 pub struct PulseChannelState {
+    pub debug_disable: bool,
+    pub debug_buffer: [u16; 4096],
     pub envelope: VolumeEnvelopeState,
     pub length_counter: LengthCounterState,
 
@@ -119,6 +121,8 @@ pub struct PulseChannelState {
 impl PulseChannelState {
     pub fn new(sweep_ones_compliment: bool) -> PulseChannelState {
         return PulseChannelState {
+            debug_disable: false,
+            debug_buffer: [0u16; 4096],
             envelope: VolumeEnvelopeState::new(),
             length_counter: LengthCounterState::new(),
 
@@ -156,11 +160,11 @@ impl PulseChannelState {
         }
     }
 
-    pub fn output(&self) -> i16 {
+    pub fn output(&self) -> u16 {
         if self.length_counter.length > 0 {
-            let mut sample = (self.duty >> self.sequence_counter) & 0b1;
-            sample *= self.envelope.current_volume();
-            return sample as i16;
+            let mut sample = ((self.duty >> self.sequence_counter) & 0b1) as u16;
+            sample *= self.envelope.current_volume() as u16;
+            return sample;
         } else {
             return 0
         }
@@ -195,6 +199,8 @@ impl PulseChannelState {
 }
 
 pub struct TriangleChannelState {
+    pub debug_disable: bool,
+    pub debug_buffer: [u16; 4096],
     pub length_counter: LengthCounterState,
 
     pub control_flag: bool,
@@ -211,6 +217,8 @@ pub struct TriangleChannelState {
 impl TriangleChannelState {
     pub fn new() -> TriangleChannelState {
         return TriangleChannelState {
+            debug_disable: false,
+            debug_buffer: [0u16; 4096],
             length_counter: LengthCounterState::new(),
             control_flag: false,
             linear_reload_flag: false,
@@ -256,7 +264,7 @@ impl TriangleChannelState {
         }
     }
 
-    pub fn output(&self) -> i16 {
+    pub fn output(&self) -> u16 {
         if self.length_counter.length > 0 {
             let triangle_sequence = [15,14,13,12,11,10,9,8,7,6,5,4,3,2,1,0,
                                      0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15];
@@ -268,6 +276,8 @@ impl TriangleChannelState {
 }
 
 pub struct NoiseChannelState {
+    pub debug_disable: bool,
+    pub debug_buffer: [u16; 4096],
     pub length: u8,
     pub length_halt_flag: bool,
 
@@ -285,6 +295,8 @@ pub struct NoiseChannelState {
 impl NoiseChannelState {
     pub fn new() -> NoiseChannelState {
         return NoiseChannelState {
+            debug_disable: false,
+            debug_buffer: [0u16; 4096],
             length: 0,
             length_halt_flag: false,
 
@@ -316,11 +328,11 @@ impl NoiseChannelState {
         }
     }
 
-    pub fn output(&self) -> i16 {
+    pub fn output(&self) -> u16 {
         if self.length_counter.length > 0 {
-            let mut sample = (self.shift_register & 0b1) as u8;
-            sample *= self.envelope.current_volume();
-            return sample as i16;
+            let mut sample = (self.shift_register & 0b1) as u16;
+            sample *= self.envelope.current_volume() as u16;
+            return sample;
         } else {
             return 0;
         }
@@ -343,7 +355,7 @@ pub struct ApuState {
     pub triangle: TriangleChannelState,
     pub noise: NoiseChannelState,
 
-    pub sample_buffer: [i16; 4096],
+    pub sample_buffer: [u16; 4096],
     pub sample_rate: u64,
     pub cpu_clock_rate: u64,
     pub buffer_index: usize,
@@ -365,7 +377,7 @@ impl ApuState {
             pulse_2: PulseChannelState::new(false),
             triangle: TriangleChannelState::new(),
             noise: NoiseChannelState::new(),
-            sample_buffer: [0i16; 4096],
+            sample_buffer: [0u16; 4096],
             sample_rate: 44100,
             cpu_clock_rate: 1_786_860,
             buffer_index: 0,
@@ -625,11 +637,31 @@ impl ApuState {
 
             if self.current_cycle >= self.next_sample_at {
                 // Mixing? Bah! Just throw the sample in the buffer.
-                let mut composite_sample: i16 = 0;
-                composite_sample += (self.pulse_1.output()  as i16 - 8) * 512; // Sure, why not?
-                composite_sample += (self.pulse_2.output()  as i16 - 8) * 512;
-                composite_sample += (self.triangle.output() as i16 - 8) * 512;
-                composite_sample += (self.noise.output()    as i16 - 8) * 512;
+                let mut composite_sample: u16 = 0;
+                let pulse_1_sample = self.pulse_1.output();
+                self.pulse_1.debug_buffer[self.buffer_index] = pulse_1_sample;
+                if !(self.pulse_1.debug_disable) {
+                    composite_sample += pulse_1_sample * 512; // Sure, why not?
+                }
+
+                let pulse_2_sample = self.pulse_2.output();
+                self.pulse_2.debug_buffer[self.buffer_index] = pulse_2_sample;
+                if !(self.pulse_2.debug_disable) {
+                    composite_sample += pulse_2_sample * 512; // Sure, why not?
+                }
+
+                let triangle_sample = self.triangle.output();
+                self.triangle.debug_buffer[self.buffer_index] = triangle_sample;
+                if !(self.triangle.debug_disable) {
+                    composite_sample += triangle_sample * 512; // Sure, why not?
+                }
+
+                let noise_sample = self.noise.output();
+                self.noise.debug_buffer[self.buffer_index] = noise_sample;
+                if !(self.noise.debug_disable) {
+                    composite_sample += noise_sample * 512; // Sure, why not?
+                }
+
                 self.sample_buffer[self.buffer_index] = composite_sample;
                 self.buffer_index = (self.buffer_index + 1) % self.sample_buffer.len();
 
@@ -657,8 +689,8 @@ impl ApuState {
         // turn our sample buffer into a simple file buffer for output
         let mut buffer = [0u8; 4096 * 2];
         for i in 0 .. 4096 {
-            buffer[i * 2]     = (((self.sample_buffer[i] as u16) & 0xFF00) >> 8) as u8;
-            buffer[i * 2 + 1] = (((self.sample_buffer[i] as u16) & 0x00FF)     ) as u8;
+            buffer[i * 2]     = (((self.sample_buffer[i]) & 0xFF00) >> 8) as u8;
+            buffer[i * 2 + 1] = (((self.sample_buffer[i]) & 0x00FF)     ) as u8;
         }
 
         let _ = file.write_all(&buffer);
