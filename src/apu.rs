@@ -1,6 +1,4 @@
-// Note: For basic testing purposes, this is scanline-accurate. This should
-// later be rewritten with cycle-accurate logic once we're past proof of concept
-// and prototype stages.
+use mmc::mapper::Mapper;
 
 use std::fs::OpenOptions;
 use std::io::prelude::*;
@@ -339,6 +337,109 @@ impl NoiseChannelState {
     }
 }
 
+pub struct DmcState {
+    pub debug_disable: bool,
+    pub debug_buffer: [u16; 4096],
+
+    pub looping: bool,
+    pub period_initial: u16,
+    pub period_current: u16,
+    pub output_level: u8,
+    pub starting_address: u16,
+    pub sample_length: u16,
+
+    pub current_address: u16,
+    pub sample_buffer: u8,
+    pub shift_register: u8,
+    pub sample_buffer_empty: bool,
+    pub bits_remaining: u8,
+    pub bytes_remaining: u16,
+    pub silence_flag: bool,
+
+    pub interrupt_flag: bool,
+}
+
+impl DmcState {
+    pub fn new() -> DmcState {
+        return DmcState {
+            debug_disable: false,
+            debug_buffer: [0u16; 4096],
+
+            looping: false,
+            period_initial: 0,
+            period_current: 0,
+            output_level: 0,
+            starting_address: 0,
+            sample_length: 0,
+
+            current_address: 0,
+            sample_buffer: 0,
+            shift_register: 0,
+            sample_buffer_empty: true,
+            bits_remaining: 0,
+            bytes_remaining: 0,
+            silence_flag: false,
+            interrupt_flag: false,
+        }
+    }
+    pub fn read_next_sample(&mut self, mapper: &mut Mapper) {
+        self.sample_buffer = mapper.read_byte(0x8000 | (self.current_address & 0x7FFF));
+        self.current_address.wrapping_add(1);
+        self.bytes_remaining -= 1;
+        if self.bytes_remaining == 0 && self.looping {
+            self.current_address = self.starting_address;
+            self.bytes_remaining = self.sample_length;
+        } else {
+            self.interrupt_flag = true;
+        }
+        self.sample_buffer_empty = false;
+    }
+
+    pub fn begin_output_cycle(&mut self) {
+        self.bits_remaining = 8;
+        if self.sample_buffer_empty {
+            self.silence_flag = true;
+        } else {
+            self.silence_flag = false;
+            self.shift_register = self.sample_buffer;
+            self.sample_buffer_empty = true;
+        }
+    }
+
+    pub fn update_output_unit(&mut self) {
+        if !(self.silence_flag) {
+            let mut target_output = self.output_level;
+            if self.shift_register & 0b1 == 0 && self.output_level >= 2 {
+                target_output -= 2;
+            } else if self.output_level <= 125 {
+                target_output += 2;
+            }
+            self.output_level = target_output;
+        }
+        self.shift_register = self.shift_register >> 1;
+        self.bits_remaining -= 1;
+        if self.bits_remaining == 0 {
+            self.begin_output_cycle();
+        }
+    }
+
+    pub fn clock(&mut self, mapper: &mut Mapper) {
+        if self.period_current > 0 {
+            self.period_current -= 1;
+        } else {
+            self.period_current = self.period_initial;
+            self.update_output_unit();
+        }
+        if self.sample_buffer_empty && self.bytes_remaining > 0 {
+            self.read_next_sample(mapper);
+        }
+    }
+
+    pub fn output(&self) -> u16 {
+        return self.output_level as u16;
+    }
+}
+
 
 pub struct ApuState {
     pub current_cycle: u64,
@@ -354,6 +455,7 @@ pub struct ApuState {
     pub pulse_2: PulseChannelState,
     pub triangle: TriangleChannelState,
     pub noise: NoiseChannelState,
+    pub dmc: DmcState,
 
     pub sample_buffer: [u16; 4096],
     pub sample_rate: u64,
@@ -377,6 +479,7 @@ impl ApuState {
             pulse_2: PulseChannelState::new(false),
             triangle: TriangleChannelState::new(),
             noise: NoiseChannelState::new(),
+            dmc: DmcState::new(),
             sample_buffer: [0u16; 4096],
             sample_rate: 44100,
             cpu_clock_rate: 1_786_860,
@@ -512,6 +615,24 @@ impl ApuState {
                 self.noise.envelope.start_flag = true;
             },
 
+            // DMC Channel
+            0x4010 => {
+                let period_table = [
+                    428, 380, 340, 320, 286, 254, 226, 214, 190, 160, 142, 128, 106,  84,  72,  54];
+                self.dmc.looping = (data & 0b0100_0000) != 0;
+                let period_index = data & 0b0000_1111;
+                self.dmc.period_initial = period_table[period_index as usize] / 2;
+            },
+            0x4011 => {
+                self.dmc.output_level = data & 0b0111_1111;
+            },
+            0x4012 => {
+                self.dmc.starting_address = 0xC000 + (data as u16 * 64);
+            },
+            0x4013 => {
+                self.dmc.sample_length = (data as u16 * 16) + 1;
+            },
+
             // Status / Enabled
             0x4015 => {
                 self.pulse_1.length_counter.channel_enabled  = (data & 0b0001) != 0;
@@ -519,18 +640,28 @@ impl ApuState {
                 self.triangle.length_counter.channel_enabled = (data & 0b0100) != 0;
                 self.noise.length_counter.channel_enabled    = (data & 0b1000) != 0;
 
-                if ! (self.pulse_1.length_counter.channel_enabled) {
+                if !(self.pulse_1.length_counter.channel_enabled) {
                     self.pulse_1.length_counter.length = 0;
                 }
-                if ! (self.pulse_2.length_counter.channel_enabled) {
+                if !(self.pulse_2.length_counter.channel_enabled) {
                     self.pulse_2.length_counter.length = 0;
                 }
-                if ! (self.triangle.length_counter.channel_enabled) {
+                if !(self.triangle.length_counter.channel_enabled) {
                     self.triangle.length_counter.length = 0;
                 }
-                if ! (self.noise.length_counter.channel_enabled) {
+                if !(self.noise.length_counter.channel_enabled) {
                     self.noise.length_counter.length = 0;
                 }
+
+                let dmc_enable = (data & 0b1_0000) != 0;
+                if !(dmc_enable) {
+                    self.dmc.bytes_remaining = 0;
+                }
+                if dmc_enable && self.dmc.bytes_remaining == 0 {
+                    self.dmc.current_address = self.dmc.starting_address;
+                    self.dmc.bytes_remaining = self.dmc.sample_length;
+                }
+                self.dmc.interrupt_flag = false;
             }
 
             // Frame Counter / Interrupts
@@ -620,7 +751,7 @@ impl ApuState {
         self.noise.length_counter.clock();
     }
 
-    pub fn run_to_cycle(&mut self, target_cycle: u64) {
+    pub fn run_to_cycle(&mut self, target_cycle: u64, mapper: &mut Mapper) {
         while self.current_cycle < target_cycle {
             self.clock_frame_sequencer();
 
@@ -633,6 +764,7 @@ impl ApuState {
                 self.pulse_1.clock();
                 self.pulse_2.clock();
                 self.noise.clock();
+                self.dmc.clock(mapper);
             }
 
             if self.current_cycle >= self.next_sample_at {
@@ -660,6 +792,12 @@ impl ApuState {
                 self.noise.debug_buffer[self.buffer_index] = noise_sample;
                 if !(self.noise.debug_disable) {
                     composite_sample += noise_sample * 512; // Sure, why not?
+                }
+
+                let dmc_sample = self.dmc.output();
+                self.dmc.debug_buffer[self.buffer_index] = dmc_sample;
+                if !(self.dmc.debug_disable) {
+                    composite_sample += dmc_sample * 64; // Sure, why not?
                 }
 
                 self.sample_buffer[self.buffer_index] = composite_sample;

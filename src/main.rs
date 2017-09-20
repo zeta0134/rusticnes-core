@@ -35,7 +35,7 @@ fn main() {
     //window.set_ups(60);
 
     let mut window: PistonWindow = PistonWindow::new(OpenGL::V4_0, 0,
-        WindowSettings::new("RusticNES", (1024, 768))
+        WindowSettings::new("RusticNES", (1024, 800))
             .srgb(false)
             .build()
             .unwrap());
@@ -109,7 +109,7 @@ fn main() {
     let mut nametables_texture = Texture::from_image(&mut window.factory, &nametables_buffer,
         &texture_settings).unwrap();
 
-    let mut audiocanvas_buffer = ImageBuffer::new(256, 128);
+    let mut audiocanvas_buffer = ImageBuffer::new(256, 150);
     let mut audiocanvas_texture = Texture::from_image(&mut window.factory, &audiocanvas_buffer,
         &texture_settings).unwrap();
 
@@ -185,6 +185,9 @@ fn main() {
             if button == Keyboard(Key::F8) {
                 nes.apu.noise.debug_disable = !(nes.apu.noise.debug_disable);
             }
+            if button == Keyboard(Key::F9) {
+                nes.apu.dmc.debug_disable = !(nes.apu.dmc.debug_disable);
+            }
 
             if button == Keyboard(Key::Comma ) {
                 memory_viewer_page = memory_viewer_page.wrapping_sub(0x100);
@@ -236,7 +239,7 @@ fn main() {
 
             // Background
             for x in 0 .. 256 {
-                for y in   0 ..  125 { audiocanvas_buffer.put_pixel(x, y, Rgba { data: [8,  8,  8, 255] }); }
+                for y in   0 ..  150 { audiocanvas_buffer.put_pixel(x, y, Rgba { data: [8,  8,  8, 255] }); }
                 if !(nes.apu.pulse_1.debug_disable) {
                     for y in   0 ..  25 { audiocanvas_buffer.put_pixel(x, y, Rgba { data: [32,  8,  8, 255] }); }
                 }
@@ -249,7 +252,10 @@ fn main() {
                 if !(nes.apu.noise.debug_disable) {
                     for y in  75 .. 100 { audiocanvas_buffer.put_pixel(x, y, Rgba { data: [ 8, 16, 32, 255] }); }
                 }
-                for y in 100 .. 125 { audiocanvas_buffer.put_pixel(x, y, Rgba { data: [16, 16, 16, 255] }); }
+                if !(nes.apu.dmc.debug_disable) {
+                    for y in  100 .. 125 { audiocanvas_buffer.put_pixel(x, y, Rgba { data: [ 16, 8, 32, 255] }); }
+                }
+                for y in 125 .. 150 { audiocanvas_buffer.put_pixel(x, y, Rgba { data: [16, 16, 16, 255] }); }
             }
 
             fn draw_waveform(imagebuffer: &mut ImageBuffer<Rgba<u8>, Vec<u8>>, audiobuffer: &[u16], start_index: usize, color: Rgba<u8>, x: u32, y: u32, width: u32, height: u32, scale: u32) {
@@ -288,8 +294,12 @@ fn main() {
                 draw_waveform(&mut audiocanvas_buffer, &nes.apu.noise.debug_buffer,
                     nes.apu.buffer_index, Rgba { data: [ 32,  96, 192, 255]}, 0,  75, 256,  25, 16);
             }
+            if !(nes.apu.dmc.debug_disable) {
+                draw_waveform(&mut audiocanvas_buffer, &nes.apu.dmc.debug_buffer,
+                    nes.apu.buffer_index, Rgba { data: [ 96,  32, 192, 255]}, 0, 100, 256,  25, 16);
+            }
             draw_waveform(&mut audiocanvas_buffer, &nes.apu.sample_buffer,
-                nes.apu.buffer_index, Rgba { data: [192, 192, 192, 255]}, 0, 100, 256,  25, 16384);
+                nes.apu.buffer_index, Rgba { data: [192, 192, 192, 255]}, 0, 125, 256,  25, 16384);
 
             let _ = audiocanvas_texture.update(&mut window.encoder, &audiocanvas_buffer);
             // */

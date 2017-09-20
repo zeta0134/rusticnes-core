@@ -57,5 +57,5 @@ pub fn run_until_vblank(nes: &mut NesState) {
     while nes.ppu.current_scanline != 242 {
         step(nes);
     }
-    nes.apu.run_to_cycle(nes.master_clock / 12);
+    nes.apu.run_to_cycle(nes.master_clock / 12, &mut *nes.mapper);
 }
