@@ -831,8 +831,9 @@ impl ApuState {
         // turn our sample buffer into a simple file buffer for output
         let mut buffer = [0u8; 4096 * 2];
         for i in 0 .. 4096 {
-            buffer[i * 2]     = (((self.sample_buffer[i]) & 0xFF00) >> 8) as u8;
-            buffer[i * 2 + 1] = (((self.sample_buffer[i]) & 0x00FF)     ) as u8;
+            let sample = ((self.sample_buffer[i] as i32) - 32768) as u16;
+            buffer[i * 2]     = ((sample & 0xFF00) >> 8) as u8;
+            buffer[i * 2 + 1] = ((sample & 0x00FF)     ) as u8;
         }
 
         let _ = file.write_all(&buffer);
