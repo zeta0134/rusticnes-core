@@ -2,6 +2,7 @@ use mmc::mapper::*;
 use mmc::axrom::AxRom;
 use mmc::nrom::Nrom;
 use mmc::mmc1::Mmc1;
+use mmc::uxrom::UxRom;
 
 // iNES 1.0 Header. Flags and decoding documented here. 2.0 is not yet supported.
 // https://wiki.nesdev.com/w/index.php/INES
@@ -106,6 +107,7 @@ pub fn load_from_cartridge(nes_header: NesHeader, cartridge: &Vec<u8>) -> Box<Ma
     let mapper: Box<Mapper> = match header.mapper_number {
         0 => Box::new(Nrom::new(header, chr_rom, prg_rom)),
         1 => Box::new(Mmc1::new(header, chr_rom, prg_rom)),
+        2 => Box::new(UxRom::new(header, chr_rom, prg_rom)),
         7 => Box::new(AxRom::new(header, chr_rom, prg_rom)),
         _ => {
             println!("Undefined mapper: {}", header.mapper_number);
