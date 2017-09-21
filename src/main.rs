@@ -296,7 +296,7 @@ fn main() {
             }
             if !(nes.apu.dmc.debug_disable) {
                 draw_waveform(&mut audiocanvas_buffer, &nes.apu.dmc.debug_buffer,
-                    nes.apu.buffer_index, Rgba { data: [ 96,  32, 192, 255]}, 0, 100, 256,  25, 16);
+                    nes.apu.buffer_index, Rgba { data: [ 96,  32, 192, 255]}, 0, 100, 256,  25, 128);
             }
             draw_waveform(&mut audiocanvas_buffer, &nes.apu.sample_buffer,
                 nes.apu.buffer_index, Rgba { data: [192, 192, 192, 255]}, 0, 125, 256,  25, 16384);

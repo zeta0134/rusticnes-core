@@ -376,7 +376,7 @@ impl DmcState {
             sample_buffer: 0,
             shift_register: 0,
             sample_buffer_empty: true,
-            bits_remaining: 0,
+            bits_remaining: 8,
             bytes_remaining: 0,
             silence_flag: false,
             interrupt_flag: false,
@@ -409,10 +409,14 @@ impl DmcState {
     pub fn update_output_unit(&mut self) {
         if !(self.silence_flag) {
             let mut target_output = self.output_level;
-            if self.shift_register & 0b1 == 0 && self.output_level >= 2 {
-                target_output -= 2;
-            } else if self.output_level <= 125 {
-                target_output += 2;
+            if (self.shift_register & 0b1) == 0 {
+                if self.output_level >= 2 {
+                    target_output -= 2;
+                }
+            } else  {
+                if self.output_level <= 125 {
+                    target_output += 2;
+                }
             }
             self.output_level = target_output;
         }
@@ -797,7 +801,7 @@ impl ApuState {
                 let dmc_sample = self.dmc.output();
                 self.dmc.debug_buffer[self.buffer_index] = dmc_sample;
                 if !(self.dmc.debug_disable) {
-                    composite_sample += dmc_sample * 64; // Sure, why not?
+                    composite_sample += dmc_sample * 128; // Sure, why not?
                 }
 
                 self.sample_buffer[self.buffer_index] = composite_sample;
