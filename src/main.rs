@@ -34,7 +34,7 @@ fn main() {
     //.exit_on_esc(true).opengl(OpenGL::V3_1).build().unwrap();
     //window.set_ups(60);
 
-    let mut window: PistonWindow = PistonWindow::new(OpenGL::V4_0, 0,
+    let mut window: PistonWindow = PistonWindow::new(OpenGL::V4_5, 0,
         WindowSettings::new("RusticNES", (1024, 800))
             .srgb(false)
             .build()

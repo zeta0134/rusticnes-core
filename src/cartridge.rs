@@ -1,5 +1,6 @@
 use mmc::mapper::*;
 use mmc::axrom::AxRom;
+use mmc::gxrom::GxRom;
 use mmc::nrom::Nrom;
 use mmc::mmc1::Mmc1;
 use mmc::uxrom::UxRom;
@@ -109,6 +110,7 @@ pub fn load_from_cartridge(nes_header: NesHeader, cartridge: &Vec<u8>) -> Box<Ma
         1 => Box::new(Mmc1::new(header, chr_rom, prg_rom)),
         2 => Box::new(UxRom::new(header, chr_rom, prg_rom)),
         7 => Box::new(AxRom::new(header, chr_rom, prg_rom)),
+        66 => Box::new(GxRom::new(header, chr_rom, prg_rom)),
         _ => {
             println!("Undefined mapper: {}", header.mapper_number);
             println!("Will proceed as though this is NROM, which will LIKELY NOT WORK.");

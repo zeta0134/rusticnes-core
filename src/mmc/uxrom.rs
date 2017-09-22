@@ -1,5 +1,5 @@
 // UxROM, simple bank switchable PRG ROM with the last page fixed
-// Reference capabilities: https://wiki.nesdev.com/w/index.php/AxROM
+// Reference capabilities: https://wiki.nesdev.com/w/index.php/UxROM
 
 use cartridge::NesHeader;
 use mmc::mapper::*;
