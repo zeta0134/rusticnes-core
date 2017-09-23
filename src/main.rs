@@ -78,7 +78,7 @@ fn main() {
         .mag(texture::Filter::Nearest);
 
     // Load a font for text drawing (todo: probably need to find one with a better license)
-    /*
+    //*
     let assets = find_folder::Search::ParentsThenKids(3, 3)
         .for_folder("assets").unwrap();
     let ref font = assets.join("FiraSans-Regular.ttf");
@@ -233,74 +233,7 @@ fn main() {
                 nes::run_until_vblank(&mut nes);
             }
 
-            // Draw audio samples! What could possibly go wrong?
-            // Do we need to clear this manually?
-            //*
-
-            // Background
-            for x in 0 .. 256 {
-                for y in   0 ..  150 { audiocanvas_buffer.put_pixel(x, y, Rgba { data: [8,  8,  8, 255] }); }
-                if !(nes.apu.pulse_1.debug_disable) {
-                    for y in   0 ..  25 { audiocanvas_buffer.put_pixel(x, y, Rgba { data: [32,  8,  8, 255] }); }
-                }
-                if !(nes.apu.pulse_2.debug_disable) {
-                    for y in  25 ..  50 { audiocanvas_buffer.put_pixel(x, y, Rgba { data: [32, 16,  8, 255] }); }
-                }
-                if !(nes.apu.triangle.debug_disable) {
-                    for y in  50 ..  75 { audiocanvas_buffer.put_pixel(x, y, Rgba { data: [ 8, 32,  8, 255] }); }
-                }
-                if !(nes.apu.noise.debug_disable) {
-                    for y in  75 .. 100 { audiocanvas_buffer.put_pixel(x, y, Rgba { data: [ 8, 16, 32, 255] }); }
-                }
-                if !(nes.apu.dmc.debug_disable) {
-                    for y in  100 .. 125 { audiocanvas_buffer.put_pixel(x, y, Rgba { data: [ 16, 8, 32, 255] }); }
-                }
-                for y in 125 .. 150 { audiocanvas_buffer.put_pixel(x, y, Rgba { data: [16, 16, 16, 255] }); }
-            }
-
-            fn draw_waveform(imagebuffer: &mut ImageBuffer<Rgba<u8>, Vec<u8>>, audiobuffer: &[u16], start_index: usize, color: Rgba<u8>, x: u32, y: u32, width: u32, height: u32, scale: u32) {
-                let mut last_y = 0;
-                for dx in x .. (x + width) {
-                    let sample_index = (start_index + dx as usize) % audiobuffer.len();
-                    let sample = audiobuffer[sample_index];
-                    let current_x = dx as u32;
-                    let mut current_y = ((sample as u32 * height) / scale) as u32;
-                    if current_y >= height {
-                        current_y = height - 1;
-                    }
-                    for dy in current_y .. last_y {
-                        imagebuffer.put_pixel(current_x, y + dy, color);
-                    }
-                    for dy in last_y .. current_y {
-                        imagebuffer.put_pixel(current_x, y + dy, color);
-                    }
-                    last_y = current_y;
-                    imagebuffer.put_pixel(dx, y + current_y, color);
-                }
-            }
-            if !(nes.apu.pulse_1.debug_disable) {
-                draw_waveform(&mut audiocanvas_buffer, &nes.apu.pulse_1.debug_buffer,
-                    nes.apu.buffer_index, Rgba { data: [192,  32,  32, 255]}, 0,   0, 256,  25, 16);
-            }
-            if !(nes.apu.pulse_2.debug_disable) {
-                draw_waveform(&mut audiocanvas_buffer, &nes.apu.pulse_2.debug_buffer,
-                    nes.apu.buffer_index, Rgba { data: [192,  96,  32, 255]}, 0,  25, 256,  25, 16);
-            }
-            if !(nes.apu.triangle.debug_disable) {
-                draw_waveform(&mut audiocanvas_buffer, &nes.apu.triangle.debug_buffer,
-                    nes.apu.buffer_index, Rgba { data: [ 32, 192,  32, 255]}, 0,  50, 256,  25, 16);
-            }
-            if !(nes.apu.noise.debug_disable) {
-                draw_waveform(&mut audiocanvas_buffer, &nes.apu.noise.debug_buffer,
-                    nes.apu.buffer_index, Rgba { data: [ 32,  96, 192, 255]}, 0,  75, 256,  25, 16);
-            }
-            if !(nes.apu.dmc.debug_disable) {
-                draw_waveform(&mut audiocanvas_buffer, &nes.apu.dmc.debug_buffer,
-                    nes.apu.buffer_index, Rgba { data: [ 96,  32, 192, 255]}, 0, 100, 256,  25, 128);
-            }
-            draw_waveform(&mut audiocanvas_buffer, &nes.apu.sample_buffer,
-                nes.apu.buffer_index, Rgba { data: [192, 192, 192, 255]}, 0, 125, 256,  25, 16384);
-
+            debug::draw_audio_samples(&nes.apu, &mut audiocanvas_buffer);
             let _ = audiocanvas_texture.update(&mut window.encoder, &audiocanvas_buffer);
             // */
 
@@ -367,10 +300,14 @@ fn main() {
                     rectangle(color, [0.0, 0.0, 22.0, 17.0], pos.trans(-2.0, -14.0), graphics);
 
                     if byte == 0 {
-                        dim_text.draw(&format!("{:02X}", byte),
+                        //dim_text.draw(&format!("{:02X}", byte),
+                        //    &mut glyphs, &context.draw_state, pos, graphics);
+                        dim_text.draw("XX",
                             &mut glyphs, &context.draw_state, pos, graphics);
                     } else {
-                        bright_text.draw(&format!("{:02X}", byte),
+                        //bright_text.draw(&format!("{:02X}", byte),
+                        //    &mut glyphs, &context.draw_state, pos, graphics);
+                        bright_text.draw("XX",
                             &mut glyphs, &context.draw_state, pos, graphics);
                     }
                 }
