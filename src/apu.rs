@@ -389,9 +389,16 @@ impl DmcState {
             interrupt_flag: false,
         }
     }
+
+    pub fn debug_status(&self) -> String {
+        return format!("Rate: {:3} - Divisor: {:3} - Start: {:04X} - Current: {:04X} - Length: {:4} - R.Bytes: {:4} - R.Bits: {:1}", 
+            self.period_initial, self.period_current, self.starting_address, self.current_address, self.sample_length,
+            self.bytes_remaining, self.bits_remaining);
+    }
+
     pub fn read_next_sample(&mut self, mapper: &mut Mapper) {
         self.sample_buffer = mapper.read_byte(0x8000 | (self.current_address & 0x7FFF));
-        self.current_address.wrapping_add(1);
+        self.current_address = self.current_address.wrapping_add(1);
         self.bytes_remaining -= 1;
         if self.bytes_remaining == 0 && self.looping {
             self.current_address = self.starting_address;
@@ -435,11 +442,11 @@ impl DmcState {
     }
 
     pub fn clock(&mut self, mapper: &mut Mapper) {
-        if self.period_current > 0 {
-            self.period_current -= 1;
-        } else {
+        if self.period_current == 0 {
             self.period_current = self.period_initial;
             self.update_output_unit();
+        } else {
+            self.period_current -= 1;
         }
         if self.sample_buffer_empty && self.bytes_remaining > 0 {
             self.read_next_sample(mapper);

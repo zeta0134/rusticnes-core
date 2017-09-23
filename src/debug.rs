@@ -8,6 +8,8 @@ use nes::NesState;
 use palettes::NTSC_PAL;
 use ppu;
 
+
+
 fn draw_waveform(imagebuffer: &mut ImageBuffer<Rgba<u8>, Vec<u8>>, audiobuffer: &[u16], start_index: usize, color: Rgba<u8>, x: u32, y: u32, width: u32, height: u32, scale: u32) {
     let mut last_y = 0;
     for dx in x .. (x + width) {

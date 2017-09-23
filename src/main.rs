@@ -78,7 +78,7 @@ fn main() {
         .mag(texture::Filter::Nearest);
 
     // Load a font for text drawing (todo: probably need to find one with a better license)
-    //*
+    /*
     let assets = find_folder::Search::ParentsThenKids(3, 3)
         .for_folder("assets").unwrap();
     let ref font = assets.join("FiraSans-Regular.ttf");
@@ -87,6 +87,11 @@ fn main() {
         TextureSettings::new()
         .min(texture::Filter::Nearest)
         .mag(texture::Filter::Nearest)).unwrap();
+
+    let black_text = text::Text::new_color([0.0, 0.0, 0.0, 1.0], 16);
+    let bright_text = text::Text::new_color([1.0, 1.0, 1.0, 0.8], 16);
+    let dim_text = text::Text::new_color([1.0, 1.0, 1.0, 0.3], 16);
+    let audio_text = text::Text::new_color([1.0, 1.0, 1.0, 0.5], 12);
     // */
 
     let mut screen_buffer = ImageBuffer::new(256, 240);
@@ -159,6 +164,7 @@ fn main() {
                 // Run one opcode, then debug
                 nes::step(&mut nes);
                 debug::print_program_state(&mut nes);
+                nes.apu.run_to_cycle(nes.master_clock / 12, &mut *nes.mapper);
             }
 
             if button == Keyboard(Key::H) {
@@ -236,7 +242,6 @@ fn main() {
             debug::draw_audio_samples(&nes.apu, &mut audiocanvas_buffer);
             let _ = audiocanvas_texture.update(&mut window.encoder, &audiocanvas_buffer);
             // */
-
         }
 
         window.draw_2d(&event, |context, graphics| {
@@ -256,10 +261,6 @@ fn main() {
             image(&audiocanvas_texture, audiocanvas_transform, graphics);
 
             /*
-            let base_text_transform = context.transform.trans(0.0, 0.0 + 16.0);
-            let black_text = text::Text::new_color([0.0, 0.0, 0.0, 1.0], 16);
-            let bright_text = text::Text::new_color([1.0, 1.0, 1.0, 0.8], 16);
-            let dim_text = text::Text::new_color([1.0, 1.0, 1.0, 0.3], 16);
             let memory_viewer_base = base_text_transform.trans(0.0, 480.0);
             black_text.draw("--- MEMORY ---", &mut glyphs, &context.draw_state, memory_viewer_base, graphics);
 
@@ -300,14 +301,10 @@ fn main() {
                     rectangle(color, [0.0, 0.0, 22.0, 17.0], pos.trans(-2.0, -14.0), graphics);
 
                     if byte == 0 {
-                        //dim_text.draw(&format!("{:02X}", byte),
-                        //    &mut glyphs, &context.draw_state, pos, graphics);
-                        dim_text.draw("XX",
+                        dim_text.draw(&format!("{:02X}", byte),
                             &mut glyphs, &context.draw_state, pos, graphics);
                     } else {
-                        //bright_text.draw(&format!("{:02X}", byte),
-                        //    &mut glyphs, &context.draw_state, pos, graphics);
-                        bright_text.draw("XX",
+                        bright_text.draw(&format!("{:02X}", byte),
                             &mut glyphs, &context.draw_state, pos, graphics);
                     }
                 }

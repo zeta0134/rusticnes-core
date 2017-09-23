@@ -48,6 +48,7 @@ pub fn run_until_hblank(nes: &mut NesState) {
     while old_scanline == nes.ppu.current_scanline {
         step(nes);
     }
+    nes.apu.run_to_cycle(nes.master_clock / 12, &mut *nes.mapper);
 }
 
 pub fn run_until_vblank(nes: &mut NesState) {
