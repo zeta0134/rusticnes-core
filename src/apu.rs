@@ -160,15 +160,21 @@ impl PulseChannelState {
 
     pub fn output(&self) -> u16 {
         if self.length_counter.length > 0 {
-            let mut sample = ((self.duty >> self.sequence_counter) & 0b1) as u16;
-            sample *= self.envelope.current_volume() as u16;
-            return sample;
+            let target_period = self.target_period();
+            if target_period > 0x7FF || self.period_initial < 8 {
+                // Sweep unit mutes the channel, because the period is out of range
+                return 0;
+            } else {
+                let mut sample = ((self.duty >> self.sequence_counter) & 0b1) as u16;
+                sample *= self.envelope.current_volume() as u16;
+                return sample;
+            }
         } else {
-            return 0
+            return 0;
         }
     }
 
-    pub fn target_period(&mut self) -> u16 {
+    pub fn target_period(&self) -> u16 {
         let change_amount = self.period_initial >> self.sweep_shift;
         if self.sweep_negate {
             if self.sweep_ones_compliment {
