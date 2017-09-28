@@ -34,12 +34,19 @@ fn main() {
     //.exit_on_esc(true).opengl(OpenGL::V3_1).build().unwrap();
     //window.set_ups(60);
 
-    let mut window: PistonWindow = PistonWindow::new(OpenGL::V4_5, 0,
+    let mut window: PistonWindow = PistonWindow::new(OpenGL::V3_2, 0,
         WindowSettings::new("RusticNES", (1024, 800))
             .srgb(false)
             .build()
             .unwrap());
     window.set_ups(60);
+
+    let mut other_window: PistonWindow = PistonWindow::new(OpenGL::V3_2, 0,
+        WindowSettings::new("Another Window!", (640, 480))
+            .srgb(false)
+            .build()
+            .unwrap());
+    other_window.set_ups(60);
 
     let args: Vec<String> = env::args().collect();
     let filename = &args[1];
@@ -118,7 +125,6 @@ fn main() {
     let mut audiocanvas_texture = Texture::from_image(&mut window.factory, &audiocanvas_buffer,
         &texture_settings).unwrap();
 
-    let mut thingy = 0;
     let mut running = false;
     let mut memory_viewer_page = 0u16;
 
@@ -135,183 +141,189 @@ fn main() {
 
     debug::print_program_state(&mut nes);
 
-    while let Some(event) = window.next() {
-        if let Some(button) = event.press_args() {
-            // NES Key State
-            for i in 0 .. 8 {
-                if button == Keyboard(key_mappings[i]) {
-                    // Set the corresponding bit
-                    nes.p1_input |= 0x1 << i;
-                }
-            }
+    loop {
+        if let Some(other_event) = other_window.next() {
+            other_window.draw_2d(&other_event, |context, graphics| {
+                clear([0.5, 0.0, 0.0, 1.0], graphics);
+            });
         }
 
-        if let Some(button) = event.release_args() {
-            // NES Key State
-            for i in 0 .. 8 {
-                if button == Keyboard(key_mappings[i]) {
-                    // Clear the corresponding bit
-                    nes.p1_input &= (0x1 << i) ^ 0xFF;
-                }
-            }
-
-            // Keyboard input here
-            if button == Keyboard(Key::R) {
-                running = !running;
-            }
-
-            if button == Keyboard(Key::Space) {
-                // Run one opcode, then debug
-                nes::step(&mut nes);
-                debug::print_program_state(&mut nes);
-                nes.apu.run_to_cycle(nes.master_clock / 12, &mut *nes.mapper);
-            }
-
-            if button == Keyboard(Key::H) {
-                // Run one opcode, then debug
-                nes::run_until_hblank(&mut nes);
-                debug::print_program_state(&mut nes);
-            }
-
-            if button == Keyboard(Key::V) {
-                // Run one opcode, then debug
-                nes::run_until_vblank(&mut nes);
-                debug::print_program_state(&mut nes);
-            }
-
-            if button == Keyboard(Key::F5) {
-                nes.apu.pulse_1.debug_disable = !(nes.apu.pulse_1.debug_disable);
-            }
-            if button == Keyboard(Key::F6) {
-                nes.apu.pulse_2.debug_disable = !(nes.apu.pulse_2.debug_disable);
-            }
-            if button == Keyboard(Key::F7) {
-                nes.apu.triangle.debug_disable = !(nes.apu.triangle.debug_disable);
-            }
-            if button == Keyboard(Key::F8) {
-                nes.apu.noise.debug_disable = !(nes.apu.noise.debug_disable);
-            }
-            if button == Keyboard(Key::F9) {
-                nes.apu.dmc.debug_disable = !(nes.apu.dmc.debug_disable);
-            }
-
-            if button == Keyboard(Key::Comma ) {
-                memory_viewer_page = memory_viewer_page.wrapping_sub(0x100);
-                if memory_viewer_page == 0x1F00 {
-                    memory_viewer_page = 0x0700;
-                }
-                if memory_viewer_page == 0x3F00 {
-                    memory_viewer_page = 0x2000;
-                }
-            }
-            if button == Keyboard(Key::Period) {
-                memory_viewer_page = memory_viewer_page.wrapping_add(0x100);
-                if memory_viewer_page == 0x0800 {
-                    memory_viewer_page = 0x2000;
-                }
-                if memory_viewer_page == 0x2100 {
-                    memory_viewer_page = 0x4000;
-                }
-            }
-        }
-
-        if let Some(_) = event.update_args() {
-            // Debug draw some junk
-            for x in 0 .. 256 {
-                for y in 0 .. 240 {
-                    let palette_index = ((nes.ppu.screen[y * 256 + x]) as usize) * 3;
-                    screen_buffer.put_pixel(x as u32, y as u32, Rgba { data: [
-                        NTSC_PAL[palette_index + 0],
-                        NTSC_PAL[palette_index + 1],
-                        NTSC_PAL[palette_index + 2],
-                        255] });
-                }
-            }
-            let _ = screen_texture.update(&mut window.encoder, &screen_buffer);
-            debug::generate_nametables(&mut *nes.mapper, &mut nes.ppu, &mut nametables_buffer);
-            debug::generate_chr_pattern(&mut *nes.mapper, 0x0000, &mut pattern_0_buffer);
-            debug::generate_chr_pattern(&mut *nes.mapper, 0x1000, &mut pattern_1_buffer);
-            let _ = nametables_texture.update(&mut window.encoder, &nametables_buffer);
-            let _ = pattern_0_texture.update(&mut window.encoder, &pattern_0_buffer);
-            let _ = pattern_1_texture.update(&mut window.encoder, &pattern_1_buffer);
-
-            if running {
-                nes::run_until_vblank(&mut nes);
-            }
-
-            debug::draw_audio_samples(&nes.apu, &mut audiocanvas_buffer);
-            let _ = audiocanvas_texture.update(&mut window.encoder, &audiocanvas_buffer);
-            // */
-        }
-
-        window.draw_2d(&event, |context, graphics| {
-            clear([0.8; 4], graphics);
-            let base_transform = context.transform.scale(2.0, 2.0);
-            image(&screen_texture, base_transform, graphics);
-
-            let pattern_0_transform = base_transform.trans(256.0, 0.0);
-            let pattern_1_transform = base_transform.trans(256.0 + 128.0, 0.0);
-            image(&pattern_0_texture, pattern_0_transform, graphics);
-            image(&pattern_1_texture, pattern_1_transform, graphics);
-
-            let nametables_transform = context.transform.trans(512.0, 256.0);
-            image(&nametables_texture, nametables_transform, graphics);
-
-            let audiocanvas_transform = base_transform.trans(0.0, 240.0);
-            image(&audiocanvas_texture, audiocanvas_transform, graphics);
-
-            /*
-            let memory_viewer_base = base_text_transform.trans(0.0, 480.0);
-            black_text.draw("--- MEMORY ---", &mut glyphs, &context.draw_state, memory_viewer_base, graphics);
-
-            for y in 0 .. 16 {
-                black_text.draw(&format!("0x{:04X}:", memory_viewer_page + y * 16),
-                    &mut glyphs, &context.draw_state, memory_viewer_base.trans(0.0, y as f64 * 17.0 + 16.0), graphics);
-                for x in 0 .. 16 {
-                    let mut color = [0.15, 0.15, 0.15, 1.0];
-                    if (x ^ y) & 0x1 != 0 {
-                        color = [0.25, 0.25, 0.25, 1.0];
+        if let Some(event) = window.next() {
+            if let Some(button) = event.press_args() {
+                // NES Key State
+                for i in 0 .. 8 {
+                    if button == Keyboard(key_mappings[i]) {
+                        // Set the corresponding bit
+                        nes.p1_input |= 0x1 << i;
                     }
-                    let address = (y * 16 + x) as u16 + memory_viewer_page;
-                    if address == nes.registers.pc {
-                        color = [0.5, 0.1, 0.1, 1.0];
-                    } else if address == (nes.registers.s as u16 + 0x100) {
-                        color = [0.1, 0.1, 0.5, 1.0];
-                    } else if nes.memory.recent_reads.contains(&address) {
-                        for i in 0 .. nes.memory.recent_reads.len() {
-                            if nes.memory.recent_reads[i] == address {
-                                let brightness = 0.6 - (0.02 * i as f32);
-                                color = [0.3, brightness, 0.3, 1.0];
-                                break;
+                }
+            }
+
+            if let Some(button) = event.release_args() {
+                // NES Key State
+                for i in 0 .. 8 {
+                    if button == Keyboard(key_mappings[i]) {
+                        // Clear the corresponding bit
+                        nes.p1_input &= (0x1 << i) ^ 0xFF;
+                    }
+                }
+
+                // Keyboard input here
+                if button == Keyboard(Key::R) {
+                    running = !running;
+                }
+
+                if button == Keyboard(Key::Space) {
+                    // Run one opcode, then debug
+                    nes::step(&mut nes);
+                    debug::print_program_state(&mut nes);
+                    nes.apu.run_to_cycle(nes.master_clock / 12, &mut *nes.mapper);
+                }
+
+                if button == Keyboard(Key::H) {
+                    // Run one opcode, then debug
+                    nes::run_until_hblank(&mut nes);
+                    debug::print_program_state(&mut nes);
+                }
+
+                if button == Keyboard(Key::V) {
+                    // Run one opcode, then debug
+                    nes::run_until_vblank(&mut nes);
+                    debug::print_program_state(&mut nes);
+                }
+
+                if button == Keyboard(Key::F5) {
+                    nes.apu.pulse_1.debug_disable = !(nes.apu.pulse_1.debug_disable);
+                }
+                if button == Keyboard(Key::F6) {
+                    nes.apu.pulse_2.debug_disable = !(nes.apu.pulse_2.debug_disable);
+                }
+                if button == Keyboard(Key::F7) {
+                    nes.apu.triangle.debug_disable = !(nes.apu.triangle.debug_disable);
+                }
+                if button == Keyboard(Key::F8) {
+                    nes.apu.noise.debug_disable = !(nes.apu.noise.debug_disable);
+                }
+                if button == Keyboard(Key::F9) {
+                    nes.apu.dmc.debug_disable = !(nes.apu.dmc.debug_disable);
+                }
+
+                if button == Keyboard(Key::Comma ) {
+                    memory_viewer_page = memory_viewer_page.wrapping_sub(0x100);
+                    if memory_viewer_page == 0x1F00 {
+                        memory_viewer_page = 0x0700;
+                    }
+                    if memory_viewer_page == 0x3F00 {
+                        memory_viewer_page = 0x2000;
+                    }
+                }
+                if button == Keyboard(Key::Period) {
+                    memory_viewer_page = memory_viewer_page.wrapping_add(0x100);
+                    if memory_viewer_page == 0x0800 {
+                        memory_viewer_page = 0x2000;
+                    }
+                    if memory_viewer_page == 0x2100 {
+                        memory_viewer_page = 0x4000;
+                    }
+                }
+            }
+
+            if let Some(_) = event.update_args() {
+                // Debug draw some junk
+                for x in 0 .. 256 {
+                    for y in 0 .. 240 {
+                        let palette_index = ((nes.ppu.screen[y * 256 + x]) as usize) * 3;
+                        screen_buffer.put_pixel(x as u32, y as u32, Rgba { data: [
+                            NTSC_PAL[palette_index + 0],
+                            NTSC_PAL[palette_index + 1],
+                            NTSC_PAL[palette_index + 2],
+                            255] });
+                    }
+                }
+                let _ = screen_texture.update(&mut window.encoder, &screen_buffer);
+                debug::generate_nametables(&mut *nes.mapper, &mut nes.ppu, &mut nametables_buffer);
+                debug::generate_chr_pattern(&mut *nes.mapper, 0x0000, &mut pattern_0_buffer);
+                debug::generate_chr_pattern(&mut *nes.mapper, 0x1000, &mut pattern_1_buffer);
+                let _ = nametables_texture.update(&mut window.encoder, &nametables_buffer);
+                let _ = pattern_0_texture.update(&mut window.encoder, &pattern_0_buffer);
+                let _ = pattern_1_texture.update(&mut window.encoder, &pattern_1_buffer);
+
+                if running {
+                    nes::run_until_vblank(&mut nes);
+                }
+
+                debug::draw_audio_samples(&nes.apu, &mut audiocanvas_buffer);
+                let _ = audiocanvas_texture.update(&mut window.encoder, &audiocanvas_buffer);
+                // */
+            }
+
+            window.draw_2d(&event, |context, graphics| {
+                clear([0.8; 4], graphics);
+                let base_transform = context.transform.scale(2.0, 2.0);
+                image(&screen_texture, base_transform, graphics);
+
+                let pattern_0_transform = base_transform.trans(256.0, 0.0);
+                let pattern_1_transform = base_transform.trans(256.0 + 128.0, 0.0);
+                image(&pattern_0_texture, pattern_0_transform, graphics);
+                image(&pattern_1_texture, pattern_1_transform, graphics);
+
+                let nametables_transform = context.transform.trans(512.0, 256.0);
+                image(&nametables_texture, nametables_transform, graphics);
+
+                let audiocanvas_transform = base_transform.trans(0.0, 240.0);
+                image(&audiocanvas_texture, audiocanvas_transform, graphics);
+
+                /*
+                let memory_viewer_base = base_text_transform.trans(0.0, 480.0);
+                black_text.draw("--- MEMORY ---", &mut glyphs, &context.draw_state, memory_viewer_base, graphics);
+
+                for y in 0 .. 16 {
+                    black_text.draw(&format!("0x{:04X}:", memory_viewer_page + y * 16),
+                        &mut glyphs, &context.draw_state, memory_viewer_base.trans(0.0, y as f64 * 17.0 + 16.0), graphics);
+                    for x in 0 .. 16 {
+                        let mut color = [0.15, 0.15, 0.15, 1.0];
+                        if (x ^ y) & 0x1 != 0 {
+                            color = [0.25, 0.25, 0.25, 1.0];
+                        }
+                        let address = (y * 16 + x) as u16 + memory_viewer_page;
+                        if address == nes.registers.pc {
+                            color = [0.5, 0.1, 0.1, 1.0];
+                        } else if address == (nes.registers.s as u16 + 0x100) {
+                            color = [0.1, 0.1, 0.5, 1.0];
+                        } else if nes.memory.recent_reads.contains(&address) {
+                            for i in 0 .. nes.memory.recent_reads.len() {
+                                if nes.memory.recent_reads[i] == address {
+                                    let brightness = 0.6 - (0.02 * i as f32);
+                                    color = [0.3, brightness, 0.3, 1.0];
+                                    break;
+                                }
+                            }
+                        } else if nes.memory.recent_writes.contains(&address) {
+                            for i in 0 .. nes.memory.recent_writes.len() {
+                                if nes.memory.recent_writes[i] == address {
+                                    let brightness = 0.6 - (0.02 * i as f32);
+                                    color = [brightness, brightness, 0.2, 1.0];
+                                    break;
+                                }
                             }
                         }
-                    } else if nes.memory.recent_writes.contains(&address) {
-                        for i in 0 .. nes.memory.recent_writes.len() {
-                            if nes.memory.recent_writes[i] == address {
-                                let brightness = 0.6 - (0.02 * i as f32);
-                                color = [brightness, brightness, 0.2, 1.0];
-                                break;
-                            }
+                        let byte = memory::passively_read_byte(&mut nes, address);
+                        let tx = x as f64 * 22.0 + 80.0;
+                        let ty = y as f64 * 17.0 + 16.0;
+                        let pos = memory_viewer_base.trans(tx, ty);
+                        rectangle(color, [0.0, 0.0, 22.0, 17.0], pos.trans(-2.0, -14.0), graphics);
+
+                        if byte == 0 {
+                            dim_text.draw(&format!("{:02X}", byte),
+                                &mut glyphs, &context.draw_state, pos, graphics);
+                        } else {
+                            bright_text.draw(&format!("{:02X}", byte),
+                                &mut glyphs, &context.draw_state, pos, graphics);
                         }
                     }
-                    let byte = memory::passively_read_byte(&mut nes, address);
-                    let tx = x as f64 * 22.0 + 80.0;
-                    let ty = y as f64 * 17.0 + 16.0;
-                    let pos = memory_viewer_base.trans(tx, ty);
-                    rectangle(color, [0.0, 0.0, 22.0, 17.0], pos.trans(-2.0, -14.0), graphics);
-
-                    if byte == 0 {
-                        dim_text.draw(&format!("{:02X}", byte),
-                            &mut glyphs, &context.draw_state, pos, graphics);
-                    } else {
-                        bright_text.draw(&format!("{:02X}", byte),
-                            &mut glyphs, &context.draw_state, pos, graphics);
-                    }
                 }
-            }
-            // */
-
-            thingy = thingy + 1;
-        });
+                // */
+            });
+        }
     }
 }

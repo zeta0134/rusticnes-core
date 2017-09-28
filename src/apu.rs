@@ -458,7 +458,6 @@ impl DmcState {
     }
 }
 
-
 pub struct ApuState {
     pub current_cycle: u64,
 
@@ -476,6 +475,8 @@ pub struct ApuState {
     pub dmc: DmcState,
 
     pub sample_buffer: [u16; 4096],
+    pub output_buffer: [u16; 4096],
+    pub buffer_full: bool,
     pub sample_rate: u64,
     pub cpu_clock_rate: u64,
     pub buffer_index: usize,
@@ -499,6 +500,8 @@ impl ApuState {
             noise: NoiseChannelState::new(),
             dmc: DmcState::new(),
             sample_buffer: [0u16; 4096],
+            output_buffer: [0u16; 4096],
+            buffer_full: false,
             sample_rate: 44100,
             cpu_clock_rate: 1_786_860,
             buffer_index: 0,
@@ -825,7 +828,9 @@ impl ApuState {
                 self.next_sample_at = ((self.generated_samples + 1) * self.cpu_clock_rate) / self.sample_rate;
 
                 if self.buffer_index == 0 {
-                    self.dump_sample_buffer();
+                    //self.dump_sample_buffer();
+                    self.output_buffer.copy_from_slice(&self.sample_buffer);
+                    self.buffer_full = true;
                 }
             }
 
