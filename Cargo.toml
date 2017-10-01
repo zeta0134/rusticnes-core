@@ -2,8 +2,3 @@
 name = "rusticnes-core"
 version = "0.1.0"
 authors = ["Nicholas Flynt <thegamefreak0134@gmail.com>"]
-
-[dependencies]
-find_folder = "*"
-image = "*"
-piston_window = "*"
