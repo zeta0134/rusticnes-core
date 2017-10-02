@@ -1,12 +1,15 @@
 use apu::ApuState;
 use cpu;
+use cycle_cpu;
 use cpu::Registers;
+use cycle_cpu::CpuState;
 use memory::CpuMemory;
 use ppu::PpuState;
 use mmc::mapper::Mapper;
 
 pub struct NesState {
     pub apu: ApuState,
+    pub cpu: CpuState,
     pub memory: CpuMemory,
     pub ppu: PpuState,
     pub registers: Registers,
@@ -23,6 +26,7 @@ impl NesState {
     pub fn new(m: Box<Mapper>) -> NesState {
         return NesState {
             apu: ApuState::new(),
+            cpu: CpuState::new(),
             memory: CpuMemory::new(),
             ppu: PpuState::new(),
             registers: Registers::new(),
@@ -37,10 +41,21 @@ impl NesState {
     }
 }
 
-pub fn step(nes: &mut NesState) {
-    cpu::process_instruction(nes);
-    nes.ppu.run_to_cycle(&mut *nes.mapper, nes.master_clock);
+pub fn cycle(nes: &mut NesState) {
+    //cpu::process_instruction(nes);
+    cycle_cpu::run_one_clock(nes);
     nes.master_clock = nes.master_clock + 12;
+    nes.ppu.run_to_cycle(&mut *nes.mapper, nes.master_clock);
+    nes.apu.run_to_cycle(nes.master_clock / 12, &mut *nes.mapper);
+}
+
+pub fn step(nes: &mut NesState) {
+    // Start this instruction
+    cycle(nes);
+    while nes.cpu.tick > 1 && nes.cpu.tick < 10 {
+        // Continue until this instruction terminates or halts
+        cycle(nes);
+    }
 }
 
 pub fn run_until_hblank(nes: &mut NesState) {
@@ -48,7 +63,6 @@ pub fn run_until_hblank(nes: &mut NesState) {
     while old_scanline == nes.ppu.current_scanline {
         step(nes);
     }
-    nes.apu.run_to_cycle(nes.master_clock / 12, &mut *nes.mapper);
 }
 
 pub fn run_until_vblank(nes: &mut NesState) {
@@ -58,5 +72,4 @@ pub fn run_until_vblank(nes: &mut NesState) {
     while nes.ppu.current_scanline != 242 {
         step(nes);
     }
-    nes.apu.run_to_cycle(nes.master_clock / 12, &mut *nes.mapper);
 }

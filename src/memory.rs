@@ -167,7 +167,6 @@ pub fn write_byte(nes: &mut NesState, address: u16, data: u8) {
             }
         },
         0x4000 ... 0x4013 => {
-            nes.apu.run_to_cycle(nes.master_clock / 12, &mut *nes.mapper);
             nes.apu.write_register(address, data);
         },
         0x4014 => {
@@ -179,7 +178,6 @@ pub fn write_byte(nes: &mut NesState, address: u16, data: u8) {
             }
         },
         0x4015 => {
-            nes.apu.run_to_cycle(nes.master_clock / 12, &mut *nes.mapper);
             nes.apu.write_register(address, data);
         },
         0x4016 => {
@@ -191,7 +189,6 @@ pub fn write_byte(nes: &mut NesState, address: u16, data: u8) {
             }
         },
         0x4017 => {
-            nes.apu.run_to_cycle(nes.master_clock / 12, &mut *nes.mapper);
             nes.apu.write_register(address, data);
         },
         0x4020 ... 0xFFFF => nes.mapper.write_byte(address, data),
