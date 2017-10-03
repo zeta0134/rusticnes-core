@@ -1,8 +1,8 @@
 use cpu;
 use cpu::Registers;
-use memory::write_byte;
 use memory::read_byte;
 use nes::NesState;
+use opcodes;
 
 pub struct CpuState {
   pub tick: u8,
@@ -20,65 +20,6 @@ impl CpuState {
   }
 }
 
-// ######## Opcodes ########
-
-// Logical inclusive OR
-fn ora(registers: &mut Registers, data: u8) {
-    registers.a = registers.a | data;
-    registers.flags.zero = registers.a == 0;
-    registers.flags.negative = registers.a & 0x80 != 0;
-}
-
-fn and(registers: &mut Registers, data: u8) {
-    registers.a = registers.a & data;
-    registers.flags.zero = registers.a == 0;
-    registers.flags.negative = registers.a & 0x80 != 0;
-}
-
-// Exclusive OR
-fn eor(registers: &mut Registers, data: u8) {
-    registers.a = registers.a ^ data;
-    registers.flags.zero = registers.a == 0;
-    registers.flags.negative = registers.a & 0x80 != 0;
-}
-
-// Add with Carry
-fn adc(registers: &mut Registers, data: u8) {
-    let result: u16 = registers.a as u16 + data as u16 + registers.flags.carry as u16;
-    registers.flags.carry = result > 0xFF;
-    registers.flags.overflow = cpu::overflow(registers.a, data, result as u8);
-    registers.a = (result & 0xFF) as u8;
-    registers.flags.zero = registers.a == 0;
-    registers.flags.negative = registers.a & 0x80 != 0;
-}
-
-// Store Accumulator
-fn sta(registers: &mut Registers) -> u8 {
-    return registers.a
-}
-
-// Load Accumulator
-fn lda(registers: &mut Registers, data: u8) {
-    registers.a = data;
-    registers.flags.zero = registers.a == 0;
-    registers.flags.negative = registers.a & 0x80 != 0;
-}
-
-// Compare Accumulator
-fn cmp(registers: &mut Registers, data: u8) {
-    registers.flags.carry = registers.a >= data;
-    let result: u8 = registers.a.wrapping_sub(data);
-    registers.flags.zero = result == 0;
-    registers.flags.negative = result & 0x80 != 0;
-}
-
-// Subtract with Carry
-fn sbc(registers: &mut Registers, data: u8) {
-    // Preload the carry into bit 8
-    let inverted_data = data ^ 0xFF;
-    adc(registers, inverted_data);
-}
-
 // ######## Addressing Modes ########
 
 type ReadOpcode = fn(&mut Registers, u8);
@@ -94,19 +35,19 @@ struct AddressingMode {
 // Note: These will be REMOVED eventually, they are here so we can test code partially.
 // Not to be confused with the NOP versions below, which help to group some of the
 // processor's unusual behavior with undefined opcodes.
-pub fn unimplemented_read(nes: &mut NesState, opcode_func: ReadOpcode) {
+pub fn unimplemented_read(nes: &mut NesState, _: ReadOpcode) {
   nes.registers.pc = nes.registers.pc.wrapping_sub(1);
   cpu::process_instruction(nes);
   nes.cpu.tick = 1;
 }
 
-pub fn unimplemented_write(nes: &mut NesState, opcode_func: WriteOpcode) {
+pub fn unimplemented_write(nes: &mut NesState, _: WriteOpcode) {
   nes.registers.pc = nes.registers.pc.wrapping_sub(1);
   cpu::process_instruction(nes);
   nes.cpu.tick = 1;
 }
 
-pub fn unimplemented_rmw(nes: &mut NesState, opcode_func: RmwOpcode) {
+pub fn unimplemented_rmw(nes: &mut NesState, _: RmwOpcode) {
   nes.registers.pc = nes.registers.pc.wrapping_sub(1);
   cpu::process_instruction(nes);
   nes.cpu.tick = 1;
@@ -121,7 +62,7 @@ pub fn immediate_read(nes: &mut NesState, opcode_func: ReadOpcode) {
 
 // Called by STA in #imm mode, this has the effect of a two-byte NOP
 // which skips the data byte. but still takes just 2 cycles.
-pub fn nop_write(nes: &mut NesState, opcode_func: WriteOpcode) {
+pub fn nop_write(nes: &mut NesState, _: WriteOpcode) {
   nes.registers.pc = nes.registers.pc.wrapping_add(1);
   nes.cpu.tick = 1;
 }
@@ -170,14 +111,14 @@ pub fn run_one_clock(nes: &mut NesState) {
       };
 
       match opcode_index {
-        0b000 => {(addressing_mode.read)(nes, ora)},
-        0b001 => {(addressing_mode.read)(nes, and)},
-        0b010 => {(addressing_mode.read)(nes, eor)},
-        0b011 => {(addressing_mode.read)(nes, adc)},
-        0b100 => {(addressing_mode.write)(nes, sta)},
-        0b101 => {(addressing_mode.read)(nes, lda)},
-        0b110 => {(addressing_mode.read)(nes, cmp)},
-        0b111 => {(addressing_mode.read)(nes, sbc)},
+        0b000 => {(addressing_mode.read)(nes, opcodes::ora)},
+        0b001 => {(addressing_mode.read)(nes, opcodes::and)},
+        0b010 => {(addressing_mode.read)(nes, opcodes::eor)},
+        0b011 => {(addressing_mode.read)(nes, opcodes::adc)},
+        0b100 => {(addressing_mode.write)(nes, opcodes::sta)},
+        0b101 => {(addressing_mode.read)(nes, opcodes::lda)},
+        0b110 => {(addressing_mode.read)(nes, opcodes::cmp)},
+        0b111 => {(addressing_mode.read)(nes, opcodes::sbc)},
         _ => ()
       };
     },

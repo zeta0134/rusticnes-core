@@ -1,5 +1,4 @@
 use apu::ApuState;
-use cpu;
 use cycle_cpu;
 use cpu::Registers;
 use cycle_cpu::CpuState;
