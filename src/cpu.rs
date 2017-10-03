@@ -83,7 +83,7 @@ fn set_status_from_byte(registers: &mut Registers, data: u8) {
 }
 
 // OPCODES
-fn overflow(a: u8, b: u8, result: u8) -> bool {
+pub fn overflow(a: u8, b: u8, result: u8) -> bool {
     return (((!(a ^ b)) & (a ^ result)) & 0x80) != 0
 }
 
