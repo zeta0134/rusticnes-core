@@ -103,6 +103,79 @@ pub fn absolute_write(nes: &mut NesState, opcode_func: WriteOpcode) {
   }
 }
 
+// Zero Page mode
+pub fn zero_page_read(nes: &mut NesState, opcode_func: ReadOpcode) {
+  match nes.cpu.tick {
+    2 => {
+      // data1 is already filled
+      nes.registers.pc = nes.registers.pc.wrapping_add(1);}
+    3 => {
+      let address = nes.cpu.data1 as u16;
+      let data = read_byte(nes, address);
+      opcode_func(&mut nes.registers, data);
+      nes.cpu.tick = 0;
+    },
+    _ => ()
+  }
+}
+
+pub fn zero_page_write(nes: &mut NesState, opcode_func: WriteOpcode) {
+  match nes.cpu.tick {
+    2 => {
+      // data1 is already filled
+      nes.registers.pc = nes.registers.pc.wrapping_add(1);}
+    3 => {
+      let address = nes.cpu.data1 as u16;
+      let data = opcode_func(&mut nes.registers);
+      write_byte(nes, address, data);
+      nes.cpu.tick = 0;
+    },
+    _ => ()
+  }
+}
+
+// Zero Page Indexed (X)
+pub fn zero_page_indexed_x_read(nes: &mut NesState, opcode_func: ReadOpcode) {
+  match nes.cpu.tick {
+    2 => {
+      // data1 is already filled
+      nes.registers.pc = nes.registers.pc.wrapping_add(1);}
+    3 => {
+      // Dummy read from original address, discarded
+      let address = nes.cpu.data1 as u16;
+      let _ = read_byte(nes, address);
+      nes.cpu.data1 = nes.cpu.data1.wrapping_add(nes.registers.x);
+    },
+    4 => {
+      let effective_address = nes.cpu.data1 as u16;
+      let data = read_byte(nes, effective_address);
+      opcode_func(&mut nes.registers, data);
+      nes.cpu.tick = 0;
+    },
+    _ => ()
+  }
+}
+
+pub fn zero_page_indexed_x_write(nes: &mut NesState, opcode_func: WriteOpcode) {
+  match nes.cpu.tick {
+    2 => {
+      // data1 is already filled
+      nes.registers.pc = nes.registers.pc.wrapping_add(1);}
+    3 => {
+      // Dummy read from original address, discarded
+      let address = nes.cpu.data1 as u16;
+      let _ = read_byte(nes, address);
+      nes.cpu.data1 = nes.cpu.data1.wrapping_add(nes.registers.x);
+    },
+    4 => {
+      let effective_address = nes.cpu.data1 as u16;
+      let data = opcode_func(&mut nes.registers);
+      write_byte(nes, effective_address, data);
+      nes.cpu.tick = 0;
+    },
+    _ => ()
+  }
+}
 
 // Called by STA in #imm mode, this has the effect of a two-byte NOP
 // which skips the data byte. but still takes just 2 cycles.
@@ -141,6 +214,11 @@ pub fn run_one_clock(nes: &mut NesState) {
   match logic_block {
     0b01 => {
       let addressing_mode = match addressing_mode_index {
+        // Zero Page Mode
+        0b001 => AddressingMode{
+          read: zero_page_read,
+          write: zero_page_write,
+          rmw: unimplemented_rmw},
         // Immediate Mode
         0b010 => AddressingMode{
           read: immediate_read, 
@@ -150,6 +228,11 @@ pub fn run_one_clock(nes: &mut NesState) {
         0b011 => AddressingMode{
           read: absolute_read,
           write: absolute_write,
+          rmw: unimplemented_rmw},
+        // Zero Page, X
+        0b101 => AddressingMode{
+          read: zero_page_indexed_x_read,
+          write: zero_page_indexed_x_write,
           rmw: unimplemented_rmw},
         // Not implemented yet
         _ => AddressingMode{
