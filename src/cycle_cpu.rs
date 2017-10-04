@@ -58,10 +58,11 @@ pub fn run_one_clock(nes: &mut NesState) {
     0b01 => {
       let addressing_mode = match addressing_mode_index {
         // Zero Page Mode
-        0b000 => &addressing::INDIRECT_X,
+        0b000 => &addressing::INDEXED_INDIRECT_X,
         0b001 => &addressing::ZERO_PAGE,
         0b010 => &addressing::IMMEDIATE,
         0b011 => &addressing::ABSOLUTE,
+        0b100 => &addressing::INDIRECT_INDEXED_Y,
         0b101 => &addressing::ZERO_PAGE_INDEXED_X,
 
         // Not implemented yet

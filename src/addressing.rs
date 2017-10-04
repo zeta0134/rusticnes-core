@@ -193,7 +193,7 @@ pub static ZERO_PAGE_INDEXED_X: AddressingMode = AddressingMode{
   rmw: unimplemented_rmw
 };
 
-pub fn indirect_x_read(nes: &mut NesState, opcode_func: ReadOpcode) {
+pub fn indexed_indirect_x_read(nes: &mut NesState, opcode_func: ReadOpcode) {
   match nes.cpu.tick {
     2 => {
       // data1 is already filled
@@ -225,7 +225,7 @@ pub fn indirect_x_read(nes: &mut NesState, opcode_func: ReadOpcode) {
   }
 }
 
-pub fn indirect_x_write(nes: &mut NesState, opcode_func: WriteOpcode) {
+pub fn indexed_indirect_x_write(nes: &mut NesState, opcode_func: WriteOpcode) {
   match nes.cpu.tick {
     2 => {
       // data1 is already filled
@@ -257,8 +257,101 @@ pub fn indirect_x_write(nes: &mut NesState, opcode_func: WriteOpcode) {
   }
 }
 
-pub static INDIRECT_X: AddressingMode = AddressingMode{
-  read: indirect_x_read,
-  write: indirect_x_write,
+pub static INDEXED_INDIRECT_X: AddressingMode = AddressingMode{
+  read: indexed_indirect_x_read,
+  write: indexed_indirect_x_write,
+  rmw: unimplemented_rmw
+};
+
+pub fn indirect_indexed_y_read(nes: &mut NesState, opcode_func: ReadOpcode) {
+  match nes.cpu.tick {
+    2 => {
+      // data1 is already filled
+      nes.registers.pc = nes.registers.pc.wrapping_add(1);}
+    3 => {
+      // Read low byte of indirect address
+      let pointer_low = nes.cpu.data1 as u16;
+      nes.cpu.temp_address = read_byte(nes, pointer_low) as u16;
+      nes.cpu.data1 = nes.cpu.data1.wrapping_add(1);
+    },
+    4 => {
+      // Read high byte of indirect address
+      let pointer_high = nes.cpu.data1 as u16;
+      nes.cpu.temp_address = ((read_byte(nes, pointer_high) as u16) << 8) | nes.cpu.temp_address;
+    },
+    5 => {
+      // Add Y to LOW BYTE of the effective address
+      // Accuracy note: technically this occurs in cycle 4, but as it has no effect on emulation, I've
+      // moved it to the beginning of cycle 5, as it makes the early escape detection more straightforward.
+      let low_byte = (nes.cpu.temp_address & 0xFF) + (nes.registers.y as u16);
+      nes.cpu.temp_address = (nes.cpu.temp_address & 0xFF00) | (low_byte & 0xFF);
+      // Read from this new address
+      let temp_address = nes.cpu.temp_address;
+      let data = read_byte(nes, temp_address);
+      // If the new address doesn't need adjustment, run the opcode now and bail early, intentionally
+      // skipping cycle 6
+      if low_byte <= 0xFF {
+        opcode_func(&mut nes.registers, data);
+        nes.cpu.tick = 0;
+      } else {
+        // Fix the high byte of the address by adding 1 to it
+        nes.cpu.temp_address = nes.cpu.temp_address.wrapping_add(0x100);  
+      }
+    },
+    6 => {
+      // Read from the final address and run this opcode
+      let temp_address = nes.cpu.temp_address;
+      let data = read_byte(nes, temp_address);
+      opcode_func(&mut nes.registers, data);
+      nes.cpu.tick = 0;
+    },
+    _ => {}
+  }
+}
+
+pub fn indirect_indexed_y_write(nes: &mut NesState, opcode_func: WriteOpcode) {
+  match nes.cpu.tick {
+    2 => {
+      // data1 is already filled
+      nes.registers.pc = nes.registers.pc.wrapping_add(1);}
+    3 => {
+      // Read low byte of indirect address
+      let pointer_low = nes.cpu.data1 as u16;
+      nes.cpu.temp_address = read_byte(nes, pointer_low) as u16;
+      nes.cpu.data1 = nes.cpu.data1.wrapping_add(1);
+    },
+    4 => {
+      // Read high byte of indirect address
+      let pointer_high = nes.cpu.data1 as u16;
+      nes.cpu.temp_address = ((read_byte(nes, pointer_high) as u16) << 8) | nes.cpu.temp_address;
+    },
+    5 => {
+      // Add Y to LOW BYTE of the effective address
+      // Accuracy note: technically this occurs in cycle 4, but as it has no effect on emulation, I've
+      // moved it to the beginning of cycle 5, as it makes the early escape detection more straightforward.
+      let low_byte = (nes.cpu.temp_address & 0xFF) + (nes.registers.y as u16);
+      nes.cpu.temp_address = (nes.cpu.temp_address & 0xFF00) | (low_byte & 0xFF);
+      let temp_address = nes.cpu.temp_address;
+      // Dummy read from the new address before it is fixed
+      let _ = read_byte(nes, temp_address);
+      if low_byte > 0xFF {
+        // Fix the high byte of the address by adding 1 to it
+        nes.cpu.temp_address = nes.cpu.temp_address.wrapping_add(0x100);
+      }
+    },
+    6 => {
+      // Write the result of this opcode to the final address
+      let temp_address = nes.cpu.temp_address;
+      let data = opcode_func(&mut nes.registers);
+      write_byte(nes, temp_address, data);
+      nes.cpu.tick = 0;
+    },
+    _ => {}
+  }
+}
+
+pub static INDIRECT_INDEXED_Y: AddressingMode = AddressingMode{
+  read: indirect_indexed_y_read,
+  write: indirect_indexed_y_write,
   rmw: unimplemented_rmw
 };
