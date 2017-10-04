@@ -64,6 +64,8 @@ pub fn run_one_clock(nes: &mut NesState) {
         0b011 => &addressing::ABSOLUTE,
         0b100 => &addressing::INDIRECT_INDEXED_Y,
         0b101 => &addressing::ZERO_PAGE_INDEXED_X,
+        0b110 => &addressing::ABSOLUTE_INDEXED_Y,
+        0b111 => &addressing::ABSOLUTE_INDEXED_X,
 
         // Not implemented yet
         _ => &addressing::UNIMPLEMENTED,
