@@ -192,3 +192,73 @@ pub static ZERO_PAGE_INDEXED_X: AddressingMode = AddressingMode{
   write: zero_page_indexed_x_write,
   rmw: unimplemented_rmw
 };
+
+pub fn indirect_x_read(nes: &mut NesState, opcode_func: ReadOpcode) {
+  match nes.cpu.tick {
+    2 => {
+      // data1 is already filled
+      nes.registers.pc = nes.registers.pc.wrapping_add(1);}
+    3 => {
+      // Dummy read from original address, discarded
+      let address = nes.cpu.data1 as u16;
+      let _ = read_byte(nes, address);
+      nes.cpu.data1 = nes.cpu.data1.wrapping_add(nes.registers.x);
+    },
+    4 => {
+      // Read low byte of indirect address
+      let effective_address = nes.cpu.data1 as u16;
+      nes.cpu.temp_address = read_byte(nes, effective_address) as u16;
+      nes.cpu.data1 = nes.cpu.data1.wrapping_add(1);
+    },
+    5 => {
+      // Read high byte of indirect address
+      let effective_address = nes.cpu.data1 as u16;
+      nes.cpu.temp_address = ((read_byte(nes, effective_address) as u16) << 8) | nes.cpu.temp_address;
+    },
+    6 => {
+      let temp_address = nes.cpu.temp_address;
+      let data = read_byte(nes, temp_address);
+      opcode_func(&mut nes.registers, data);
+      nes.cpu.tick = 0;
+    },
+    _ => {}
+  }
+}
+
+pub fn indirect_x_write(nes: &mut NesState, opcode_func: WriteOpcode) {
+  match nes.cpu.tick {
+    2 => {
+      // data1 is already filled
+      nes.registers.pc = nes.registers.pc.wrapping_add(1);}
+    3 => {
+      // Dummy read from original address, discarded
+      let address = nes.cpu.data1 as u16;
+      let _ = read_byte(nes, address);
+      nes.cpu.data1 = nes.cpu.data1.wrapping_add(nes.registers.x);
+    },
+    4 => {
+      // Read low byte of indirect address
+      let effective_address = nes.cpu.data1 as u16;
+      nes.cpu.temp_address = read_byte(nes, effective_address) as u16;
+      nes.cpu.data1 = nes.cpu.data1.wrapping_add(1);
+    },
+    5 => {
+      // Read high byte of indirect address
+      let effective_address = nes.cpu.data1 as u16;
+      nes.cpu.temp_address = ((read_byte(nes, effective_address) as u16) << 8) | nes.cpu.temp_address;
+    },
+    6 => {
+      let temp_address = nes.cpu.temp_address;
+      let data = opcode_func(&mut nes.registers);
+      write_byte(nes, temp_address, data);
+      nes.cpu.tick = 0;
+    },
+    _ => {}
+  }
+}
+
+pub static INDIRECT_X: AddressingMode = AddressingMode{
+  read: indirect_x_read,
+  write: indirect_x_write,
+  rmw: unimplemented_rmw
+};

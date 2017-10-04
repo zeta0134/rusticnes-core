@@ -1,3 +1,8 @@
+// Documentation for this 6502 implementation came from many sources, but the following
+// two guides served as the primary inspiration:
+// http://www.llx.com/~nparker/a2/opcodes.html - For opcode decoding structure
+// http://nesdev.com/6502_cpu.txt - for information on cycle timings for each addressing mode
+
 use addressing;
 use cpu;
 use memory::read_byte;
@@ -9,6 +14,7 @@ pub struct CpuState {
   pub opcode: u8,
   pub data1: u8,
   pub data2: u8,
+  pub temp_address: u16,
 }
 
 impl CpuState {
@@ -18,6 +24,7 @@ impl CpuState {
       opcode: 0,
       data1: 0,
       data2: 0,
+      temp_address: 0,
     }
   }
 }
@@ -51,10 +58,12 @@ pub fn run_one_clock(nes: &mut NesState) {
     0b01 => {
       let addressing_mode = match addressing_mode_index {
         // Zero Page Mode
+        0b000 => &addressing::INDIRECT_X,
         0b001 => &addressing::ZERO_PAGE,
         0b010 => &addressing::IMMEDIATE,
         0b011 => &addressing::ABSOLUTE,
         0b101 => &addressing::ZERO_PAGE_INDEXED_X,
+
         // Not implemented yet
         _ => &addressing::UNIMPLEMENTED,
       };
