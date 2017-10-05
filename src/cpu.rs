@@ -49,19 +49,19 @@ impl Registers {
 // Initial reference implementation based on http://obelisk.me.uk/6502/reference.html
 
 // Memory Utilities
-fn push(nes: &mut NesState, data: u8) {
+pub fn push(nes: &mut NesState, data: u8) {
     let address = (nes.registers.s as u16) + 0x0100;
     write_byte(nes, address, data);
     nes.registers.s = nes.registers.s.wrapping_sub(1);
 }
 
-fn pop(nes: &mut NesState) -> u8 {
+pub fn pop(nes: &mut NesState) -> u8 {
     nes.registers.s = nes.registers.s.wrapping_add(1);
     let address = (nes.registers.s as u16) + 0x0100;
     return read_byte(nes, address);
 }
 
-fn status_as_byte(registers: &mut Registers, s_flag: bool) -> u8 {
+pub fn status_as_byte(registers: &mut Registers, s_flag: bool) -> u8 {
     return (registers.flags.carry     as u8) +
            ((registers.flags.zero      as u8) << 1) +
            ((registers.flags.interrupts_disabled as u8) << 2) +
@@ -72,7 +72,7 @@ fn status_as_byte(registers: &mut Registers, s_flag: bool) -> u8 {
            ((registers.flags.negative  as u8) << 7)
 }
 
-fn set_status_from_byte(registers: &mut Registers, data: u8) {
+pub fn set_status_from_byte(registers: &mut Registers, data: u8) {
     registers.flags.carry =    data & (1 << 0) != 0;
     registers.flags.zero =     data & (1 << 1) != 0;
     registers.flags.interrupts_disabled = data & (1 << 2) != 0;
@@ -606,6 +606,8 @@ pub fn service_nmi(nes: &mut NesState) {
 
 pub fn process_instruction(nes: &mut NesState) {
     // Are conditions ripe for an NMI? Then do that instead.
+    // Edit: NOPE, this is now becoming deprecated, don't do this.
+    /*
     let current_nmi = nmi_signal(&nes);
     let last_nmi = nes.registers.flags.last_nmi;
     nes.registers.flags.last_nmi = current_nmi;
@@ -614,6 +616,7 @@ pub fn process_instruction(nes: &mut NesState) {
         nes.registers.flags.last_nmi = current_nmi;
         return;
     }
+    */
 
     let pc = nes.registers.pc;
     let opcode = read_byte(nes, pc);
