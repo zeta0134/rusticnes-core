@@ -369,6 +369,7 @@ pub struct DmcState {
     pub bytes_remaining: u16,
     pub silence_flag: bool,
 
+    pub interrupt_enabled: bool,
     pub interrupt_flag: bool,
 }
 
@@ -392,6 +393,7 @@ impl DmcState {
             bits_remaining: 8,
             bytes_remaining: 0,
             silence_flag: false,
+            interrupt_enabled: true,
             interrupt_flag: false,
         }
     }
@@ -513,6 +515,40 @@ impl ApuState {
             buffer_index: 0,
             generated_samples: 0,
             next_sample_at: 0,
+        }
+    }
+
+    pub fn read_register(&mut self, address: u16) -> u8 {
+        match address {
+            0x4015 => {
+                let mut status = 0;
+                if self.pulse_1.length_counter.length > 0 {
+                    status += 0b0000_0001;
+                }
+                if self.pulse_2.length_counter.length > 0 {
+                    status += 0b0000_0010;
+                }
+                if self.triangle.length_counter.length > 0 {
+                    status += 0b0000_0100;
+                }
+                if self.noise.length_counter.length > 0 {
+                    status += 0b0000_1000;
+                }
+                if self.dmc.bytes_remaining > 0 {
+                    status += 0b0001_0000;
+                }
+
+                if self.frame_interrupt {
+                    status += 0b0100_0000;
+                }
+                if self.dmc.interrupt_flag {
+                    status += 0b1000_0000;   
+                }
+                // Reading from this register resets frame_interrupt:
+                self.frame_interrupt = false;
+                return status;
+            },
+            _ => return 0
         }
     }
 
@@ -647,6 +683,11 @@ impl ApuState {
                 let period_table = [
                     428, 380, 340, 320, 286, 254, 226, 214, 190, 160, 142, 128, 106,  84,  72,  54];
                 self.dmc.looping = (data & 0b0100_0000) != 0;
+                self.dmc.interrupt_enabled = (data & 0b1000_0000) != 0;
+                if !self.dmc.interrupt_enabled {
+                    // If the enable bit was cleared, clear the flag also.
+                    self.dmc.interrupt_flag = false;
+                }
                 let period_index = data & 0b0000_1111;
                 self.dmc.period_initial = period_table[period_index as usize] / 2;
             },
@@ -696,6 +737,10 @@ impl ApuState {
                 self.frame_sequencer_mode = (data & 0b1000_0000) >> 7;
                 self.disable_interrupt =    (data & 0b0100_0000) != 0;
                 self.frame_reset_delay = 4;
+                // If interrupts are disabled, clear the flag too:
+                if self.disable_interrupt {
+                    self.frame_interrupt = false;
+                }
             }
 
             _ => ()
@@ -728,14 +773,22 @@ impl ApuState {
                     self.clock_half_frame();
                 },
                 22371 => self.clock_quarter_frame(),
-                29828 => self.frame_interrupt = true,
+                29828 => {
+                    if !self.disable_interrupt {
+                        self.frame_interrupt = true;
+                    }
+                },
                 29829 => {
-                    self.frame_interrupt = true;
+                    if !self.disable_interrupt {
+                        self.frame_interrupt = true;
+                    }
                     self.clock_quarter_frame();
                     self.clock_half_frame();
                 },
                 29830 => {
-                    self.frame_interrupt = true;
+                    if !self.disable_interrupt {
+                        self.frame_interrupt = true;
+                    }
                     self.frame_sequencer = 0;
                 },
                 _ => ()
@@ -862,5 +915,9 @@ impl ApuState {
         }
 
         let _ = file.write_all(&buffer);
+    }
+
+    pub fn irq_signal(&self) -> bool {
+        return self.frame_interrupt || self.dmc.interrupt_flag;
     }
 }

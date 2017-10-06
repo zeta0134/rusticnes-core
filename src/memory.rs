@@ -78,6 +78,9 @@ fn _read_byte(nes: &mut NesState, address: u16, side_effects: bool) -> u8 {
                 _ => return 0
             }
         },
+        0x4015 => {
+            return nes.apu.read_register(address);
+        },
         0x4016 => {
             if nes.input_latch {
                 // strobe register is high, so copy input data to latch (probably bad if this

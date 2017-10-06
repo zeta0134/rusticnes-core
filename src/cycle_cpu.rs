@@ -40,7 +40,11 @@ pub fn nmi_signal(nes: &NesState) -> bool {
 }
 
 pub fn irq_signal(nes: &NesState) -> bool {
-  return false; // Not implemented! Yay!
+  if nes.registers.flags.interrupts_disabled {
+    return false;
+  } else {
+    return nes.apu.irq_signal();
+  }
 }
 
 pub fn poll_for_interrupts(nes: &mut NesState) {
