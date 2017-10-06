@@ -412,7 +412,9 @@ impl DmcState {
             self.current_address = self.starting_address;
             self.bytes_remaining = self.sample_length;
         } else {
-            self.interrupt_flag = true;
+            if self.interrupt_enabled {
+                self.interrupt_flag = true;
+            }
         }
         self.sample_buffer_empty = false;
     }
@@ -751,8 +753,6 @@ impl ApuState {
     // updates this way. Documentation: https://wiki.nesdev.com/w/index.php/APU_Frame_Counter
 
     pub fn clock_frame_sequencer(&mut self) {
-        self.frame_sequencer += 1;
-
         if self.frame_reset_delay > 0 {
             self.frame_reset_delay -= 1;
             if self.frame_reset_delay == 0 {
@@ -805,13 +805,13 @@ impl ApuState {
                 37281 => {
                     self.clock_quarter_frame();
                     self.clock_half_frame();
-                },
-                37282 => {
                     self.frame_sequencer = 0;
                 },
                 _ => ()
             }
         }
+        
+        self.frame_sequencer += 1;
     }
 
     pub fn clock_quarter_frame(&mut self) {
