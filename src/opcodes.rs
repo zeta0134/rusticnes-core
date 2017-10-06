@@ -60,6 +60,73 @@ pub fn sbc(registers: &mut Registers, data: u8) {
   adc(registers, inverted_data);
 }
 
+// Arithmetic Shift Left
+pub fn asl(registers: &mut Registers, data: u8) -> u8 {
+    registers.flags.carry = data & 0x80 != 0;
+    let result = (data & 0x7F) << 1;
+    registers.flags.zero = result == 0;
+    registers.flags.negative = result & 0x80 != 0;
+    return result;
+}
+
+// Logical shift right
+pub fn lsr(registers: &mut Registers, data: u8) -> u8 {
+    registers.flags.carry = data & 0x1 != 0;
+    let result: u8 = data >> 1;
+    registers.flags.zero = result == 0;
+    registers.flags.negative = false;
+    return result;
+}
+
+// Rotate left
+pub fn rol(registers: &mut Registers, data: u8) -> u8 {
+    let old_carry = registers.flags.carry;
+    registers.flags.carry = (data & 0x80) != 0;
+    let result = (data << 1) | (old_carry as u8);
+    registers.flags.zero = result == 0;
+    registers.flags.negative = (result & 0x80) != 0;
+    return result;
+}
+
+// Rotate Right
+pub fn ror(registers: &mut Registers, data: u8) -> u8 {
+    let old_carry = registers.flags.carry;
+    registers.flags.carry = (data & 0x01) != 0;
+    let result = (data >> 1) | ((old_carry as u8) << 7);
+    registers.flags.zero = result == 0;
+    registers.flags.negative = (result & 0x80) != 0;
+    return result;
+}
+
+// Store X
+pub fn stx(registers: &mut Registers) -> u8 {
+    return registers.x
+}
+
+// Load X
+pub fn ldx(registers: &mut Registers, data: u8) {
+    registers.x = data;
+    registers.flags.zero = registers.x == 0;
+    registers.flags.negative = registers.x & 0x80 != 0;
+}
+
+// Increment Memory
+pub fn inc(registers: &mut Registers, data: u8) -> u8 {
+    let result: u8 = data.wrapping_add(1);
+    registers.flags.zero = result == 0;
+    registers.flags.negative = result & 0x80 != 0;
+    return result;
+}
+
+// Decrement Memory
+pub fn dec(registers: &mut Registers, data: u8) -> u8 {
+    let result: u8 = data.wrapping_sub(1);
+    registers.flags.zero = result == 0;
+    registers.flags.negative = result & 0x80 != 0;
+    return result;
+}
+
+
 // Branch
 pub fn branch(nes: &mut NesState) {
   // Note: the documentation for branch timing, located at http://nesdev.com/6502_cpu.txt includes

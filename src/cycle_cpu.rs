@@ -219,6 +219,27 @@ pub fn run_one_clock(nes: &mut NesState) {
         _ => ()
       };
     },
+    0b10 => {
+      let addressing_mode = match addressing_mode_index {
+        // Zero Page Mode
+        0b001 => &addressing::ZERO_PAGE,
+
+        // Not implemented yet
+        _ => &addressing::UNIMPLEMENTED,
+      };
+
+      match opcode_index {
+        0b000 => {(addressing_mode.modify)(nes, opcodes::asl)},
+        0b001 => {(addressing_mode.modify)(nes, opcodes::rol)},
+        0b010 => {(addressing_mode.modify)(nes, opcodes::lsr)},
+        0b011 => {(addressing_mode.modify)(nes, opcodes::ror)},
+        0b100 => {(addressing_mode.write)(nes, opcodes::stx)},
+        0b101 => {(addressing_mode.read)(nes, opcodes::ldx)},
+        0b110 => {(addressing_mode.modify)(nes, opcodes::dec)},
+        0b111 => {(addressing_mode.modify)(nes, opcodes::inc)},
+        _ => ()
+      };
+    }
     _ => {
       // We don't have this block implemented! Fall back to old behavior.
       nes.registers.pc = nes.registers.pc.wrapping_sub(1);
