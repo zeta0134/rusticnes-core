@@ -93,7 +93,8 @@ pub fn absolute_write(nes: &mut NesState, opcode_func: WriteOpcode) {
     3 => {
       let pc = nes.registers.pc;
       nes.cpu.data2 = read_byte(nes, pc);
-      nes.registers.pc = nes.registers.pc.wrapping_add(1);}
+      nes.registers.pc = nes.registers.pc.wrapping_add(1);
+    },
     4 => {
       let address = ((nes.cpu.data2 as u16) << 8) | (nes.cpu.data1 as u16);
       let data = opcode_func(&mut nes.registers);
@@ -104,10 +105,46 @@ pub fn absolute_write(nes: &mut NesState, opcode_func: WriteOpcode) {
   }
 }
 
+pub fn absolute_modify(nes: &mut NesState, opcode_func: ModifyOpcode) {
+  match nes.cpu.tick {
+    2 => {
+      // data1 is already filled
+      nes.registers.pc = nes.registers.pc.wrapping_add(1);
+    },
+    3 => {
+      let pc = nes.registers.pc;
+      nes.cpu.data2 = read_byte(nes, pc);
+      nes.registers.pc = nes.registers.pc.wrapping_add(1);
+      nes.cpu.temp_address = ((nes.cpu.data2 as u16) << 8) | (nes.cpu.data1 as u16);
+    },
+    4 => {
+      let effective_address = nes.cpu.temp_address;
+      nes.cpu.data1 = read_byte(nes, effective_address);
+    },
+    5 => {
+      // Dummy write the original value back to the effective address
+      let effective_address = nes.cpu.temp_address;
+      let data = nes.cpu.data1;
+      write_byte(nes, effective_address, data);
+      // Run the opcode on the data
+      nes.cpu.data1 = opcode_func(&mut nes.registers, data);
+    },
+    6 => {
+      // Write the modified data back out to the effective address
+      let effective_address = nes.cpu.temp_address;
+      let data = nes.cpu.data1;
+      write_byte(nes, effective_address, data);
+      // All done
+      nes.cpu.tick = 0;
+    },
+    _ => ()
+  }
+}
+
 pub static ABSOLUTE: AddressingMode = AddressingMode{
   read: absolute_read,
   write: absolute_write,
-  modify: unimplemented_modify
+  modify: absolute_modify
 };
 
 // Zero Page mode

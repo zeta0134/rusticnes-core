@@ -126,6 +126,17 @@ pub fn dec(registers: &mut Registers, data: u8) -> u8 {
     return result;
 }
 
+// NOP - Read and Write variants
+pub fn nop_read(_: &mut Registers, _: u8) {
+}
+
+pub fn nop_write(_: &mut Registers) -> u8 {
+  return 0; // Meant to be discarded
+}
+
+pub fn nop_modify(_: &mut Registers, data: u8) -> u8 {
+  return data;
+}
 
 // Branch
 pub fn branch(nes: &mut NesState) {

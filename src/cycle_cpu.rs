@@ -190,6 +190,27 @@ pub fn run_one_clock(nes: &mut NesState) {
   let addressing_mode_index = (nes.cpu.opcode & 0b0001_1100) >> 2;
   let opcode_index = (nes.cpu.opcode & 0b1110_0000) >> 5;
 
+  // These opcodes don't follow a particularly consistent pattern, so here we just match and process
+  // then individually.
+  match nes.cpu.opcode {
+    // Certain opcodes may be vital to your success. THESE opcodes are not, however,
+    // and more or less consistently HALT the emulator. Which we'll emulate by complaining once,
+    // then setting the tick to 10.
+    0x02 | 0x22 | 0x42 | 0x62 | 0x12 | 0x32 | 0x52 | 0x72 | 0x92 | 0xB2 | 0xD2 | 0xF2 => {
+      // HALT the CPU. It died, jim.
+      if nes.cpu.tick < 10 {
+        println!("STP opcode encountered: {}", nes.cpu.opcode);
+        println!("Proceeding to lock up CPU. Goodbye, cruel world!");
+      }
+      nes.cpu.tick = 10;
+      return;
+    },
+    // NOPs
+    0x80 | 0x82 | 0xC2 | 0xE2 => (addressing::IMMEDIATE.read) (nes, opcodes::nop_read),
+
+    _ => ()
+  }
+
   match logic_block {
     0b01 => {
       let addressing_mode = match addressing_mode_index {
@@ -223,6 +244,7 @@ pub fn run_one_clock(nes: &mut NesState) {
       let addressing_mode = match addressing_mode_index {
         // Zero Page Mode
         0b001 => &addressing::ZERO_PAGE,
+        0b011 => &addressing::ABSOLUTE,
 
         // Not implemented yet
         _ => &addressing::UNIMPLEMENTED,
