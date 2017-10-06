@@ -51,7 +51,7 @@ pub fn cycle(nes: &mut NesState) {
 pub fn step(nes: &mut NesState) {
     // Start this instruction
     cycle(nes);
-    while nes.cpu.tick > 1 && nes.cpu.tick < 10 {
+    while nes.cpu.tick >= 1 && nes.cpu.tick < 10 {
         // Continue until this instruction terminates or halts
         cycle(nes);
     }

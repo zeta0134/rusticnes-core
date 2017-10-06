@@ -180,6 +180,11 @@ pub fn run_one_clock(nes: &mut NesState) {
     nes.cpu.data1 = read_byte(nes, pc);
   }
 
+  // Branch instructions are of the form xxy10000
+  if (nes.cpu.opcode & 0b1_1111) == 0b1_0000 {
+    return opcodes::branch(nes);
+  }
+
   // Decode this opcode into its component parts
   let logic_block = nes.cpu.opcode & 0b0000_0011;
   let addressing_mode_index = (nes.cpu.opcode & 0b0001_1100) >> 2;
