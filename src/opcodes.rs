@@ -370,3 +370,25 @@ pub fn jmp_absolute(nes: &mut NesState) {
     _ => ()
   }
 }
+
+pub fn jmp_indirect(nes: &mut NesState) {
+  match nes.cpu.tick {
+    2 => addressing::read_address_low(nes),
+    3 => addressing::read_address_high(nes),
+    4 => {
+      let temp_address = nes.cpu.temp_address;
+      nes.cpu.data1 = read_byte(nes, temp_address);
+    },
+    5 => {
+      // Add 1 to temp address's low byte only (don't cross page boundary)
+      let mut temp_address = nes.cpu.temp_address;
+      temp_address = (temp_address & 0xFF00) | ((temp_address + 1) & 0x00FF);
+      nes.cpu.data2 = read_byte(nes, temp_address);
+      // Set PC to the combined address and exit
+      nes.registers.pc = ((nes.cpu.data2 as u16) << 8) | (nes.cpu.data1 as u16);
+      nes.cpu.tick = 0;
+    },
+
+    _ => ()
+  }
+}

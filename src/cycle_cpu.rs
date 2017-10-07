@@ -170,6 +170,9 @@ pub fn control_block(nes: &mut NesState) {
     0xB4 => (addressing::ZERO_PAGE_INDEXED_X.read)  (nes, opcodes::ldy),
     0xBC => (addressing::ABSOLUTE_INDEXED_X.read)  (nes, opcodes::ldy),
 
+    0x4C => opcodes::jmp_absolute(nes),
+    0x6C => opcodes::jmp_indirect(nes),
+
     _ => {
       // Unimplemented, fall back on old behavior
       nes.registers.pc = nes.registers.pc.wrapping_sub(1);
