@@ -1,3 +1,4 @@
+use addressing;
 use cpu;
 use cpu::Registers;
 use nes::NesState;
@@ -354,6 +355,18 @@ pub fn brk(nes: &mut NesState) {
       cpu::push(nes, status_byte);
     },
     6 ... 7 => service_interrupt(nes),
+    _ => ()
+  }
+}
+
+pub fn jmp_absolute(nes: &mut NesState) {
+  match nes.cpu.tick {
+    2 => addressing::read_address_low(nes),
+    3 => {
+      addressing::read_address_high(nes);
+      nes.registers.pc = nes.cpu.temp_address;
+      nes.cpu.tick = 0;
+    },
     _ => ()
   }
 }

@@ -22,12 +22,12 @@ fn read_data1(nes: &mut NesState) {
   nes.registers.pc = nes.registers.pc.wrapping_add(1);
 }
 
-fn read_address_low(nes: &mut NesState) {
+pub fn read_address_low(nes: &mut NesState) {
   // Just read data1 here, we'll combine when reading the high byte
   read_data1(nes);
 }
 
-fn read_address_high(nes: &mut NesState) {
+pub fn read_address_high(nes: &mut NesState) {
   let pc = nes.registers.pc;
   nes.cpu.data2 = read_byte(nes, pc);
   nes.registers.pc = nes.registers.pc.wrapping_add(1);
