@@ -258,7 +258,7 @@ pub fn branch(nes: &mut NesState) {
       let pc = nes.registers.pc;
       let opcode = read_byte(nes, pc);
 
-      if nes.registers.pc & 0xFF != ((nes.cpu.data2 as u16) << 8) {
+      if (nes.registers.pc & 0xFF00) != ((nes.cpu.data2 as u16) << 8) {
         nes.registers.pc = (nes.registers.pc & 0xFF) | ((nes.cpu.data2 as u16) << 8);
       } else {
         // PCH didn't need fixing, so bail early, using the opcode we read
