@@ -169,9 +169,8 @@ pub fn alu_block(nes: &mut NesState, addressing_mode_index: u8, opcode_index: u8
 
 pub fn rmw_block(nes: &mut NesState, addressing_mode_index: u8, opcode_index: u8) {
   // First, handle some block 10 opcodes that break the mold
-  // Block 10 opcodes that don't fit the mold
   match nes.cpu.opcode {
-    // 
+    // Assorted NOPs
     0x82 | 0xC2 | 0xE2 => (addressing::IMMEDIATE.read) (nes, opcodes::nop_read),
     0x1A | 0x3A | 0x5A | 0x7A | 0xDA | 0xEA | 0xFA => addressing::implied(nes, opcodes::nop),
     // Certain opcodes may be vital to your success. THESE opcodes are not.
@@ -220,6 +219,25 @@ pub fn rmw_block(nes: &mut NesState, addressing_mode_index: u8, opcode_index: u8
   };
 }
 
+pub fn control_block(nes: &mut NesState) {
+  // Branch instructions are of the form xxy10000
+  if (nes.cpu.opcode & 0b1_1111) == 0b1_0000 {
+    return opcodes::branch(nes);
+  }
+
+  // Everything else is pretty irregular, so we'll just match the whole opcode
+  match nes.cpu.opcode {
+    0x00 => brk(nes),
+    0x80 => (addressing::IMMEDIATE.read) (nes, opcodes::nop_read),
+    _ => {
+      // Unimplemented, fall back on old behavior
+      nes.registers.pc = nes.registers.pc.wrapping_sub(1);
+      cpu::process_instruction(nes);
+      nes.cpu.tick = 0;
+    }
+  };
+}
+
 pub fn run_one_clock(nes: &mut NesState) {
   nes.cpu.tick += 1;
 
@@ -247,12 +265,6 @@ pub fn run_one_clock(nes: &mut NesState) {
     return; // all done
   }
 
-  // Several control instructions are unique and irregular, so detect and process those here
-  match nes.cpu.opcode {
-    0x00 => {return brk(nes);},
-    _ => (),
-  }
-
   // The remaining opcodes follow a somewhat regular pattern.
   // Every instruction performs this read, regardless of whether
   // the data is used.
@@ -262,35 +274,20 @@ pub fn run_one_clock(nes: &mut NesState) {
     nes.cpu.data1 = read_byte(nes, pc);
   }
 
-  // Branch instructions are of the form xxy10000
-  if (nes.cpu.opcode & 0b1_1111) == 0b1_0000 {
-    return opcodes::branch(nes);
-  }
-
   // Decode this opcode into its component parts
   let logic_block = nes.cpu.opcode & 0b0000_0011;
   let addressing_mode_index = (nes.cpu.opcode & 0b0001_1100) >> 2;
   let opcode_index = (nes.cpu.opcode & 0b1110_0000) >> 5;
 
-  // These opcodes don't follow a particularly consistent pattern, so here we just match and process
-  // then individually.
-  match nes.cpu.opcode {
-    // Assorted NOPs
-    0x80 => (addressing::IMMEDIATE.read) (nes, opcodes::nop_read),
-    
-
-    // Everything else should 
+  match logic_block {
+    0b00 => control_block(nes),
+    0b01 => alu_block(nes, addressing_mode_index, opcode_index),
+    0b10 => rmw_block(nes, addressing_mode_index, opcode_index),
     _ => {
-      match logic_block {
-        0b01 => alu_block(nes, addressing_mode_index, opcode_index),
-        0b10 => rmw_block(nes, addressing_mode_index, opcode_index),
-        _ => {
-          // We don't have this block implemented! Fall back to old behavior.
-          nes.registers.pc = nes.registers.pc.wrapping_sub(1);
-          cpu::process_instruction(nes);
-          nes.cpu.tick = 0;
-        }
-      }
+      // We don't have this block implemented! Fall back to old behavior.
+      nes.registers.pc = nes.registers.pc.wrapping_sub(1);
+      cpu::process_instruction(nes);
+      nes.cpu.tick = 0;
     }
   }
 }
