@@ -252,8 +252,36 @@ pub fn zero_page_indexed_x_write(nes: &mut NesState, opcode_func: WriteOpcode) {
   }
 }
 
+pub fn zero_page_indexed_x_modify(nes: &mut NesState, opcode_func: ModifyOpcode) {
+  match nes.cpu.tick {
+    2 => read_data1(nes),
+    3 => {let offset = nes.registers.x; add_to_zero_page_address(nes, offset)},
+    4 => {
+      // Read the value at our effective address for processing
+      let effective_address = nes.cpu.data1 as u16;
+      nes.cpu.data2 = read_byte(nes, effective_address);
+    },
+    5 => {
+      // Dummy write back to effective address
+      let effective_address = nes.cpu.data1 as u16;
+      let data = nes.cpu.data2;
+      write_byte(nes, effective_address, data);
+      // Perform the operation
+      nes.cpu.data2 = opcode_func(&mut nes.registers, data);
+    },
+    6 => {
+      // Write the modified data to the effective address
+      let effective_address = nes.cpu.data1 as u16;
+      let data = nes.cpu.data2;
+      write_byte(nes, effective_address, data);
+      nes.cpu.tick = 0;
+    },
+    _ => ()
+  }
+}
+
 pub static ZERO_PAGE_INDEXED_X: AddressingMode = AddressingMode{
-  read: zero_page_indexed_x_read, write: zero_page_indexed_x_write, modify: unimplemented_modify };
+  read: zero_page_indexed_x_read, write: zero_page_indexed_x_write, modify: zero_page_indexed_x_modify };
 
 // Zero Page Indexed (Y)
 pub fn zero_page_indexed_y_read(nes: &mut NesState, opcode_func: ReadOpcode) {
@@ -284,8 +312,36 @@ pub fn zero_page_indexed_y_write(nes: &mut NesState, opcode_func: WriteOpcode) {
   }
 }
 
+pub fn zero_page_indexed_y_modify(nes: &mut NesState, opcode_func: ModifyOpcode) {
+  match nes.cpu.tick {
+    2 => read_data1(nes),
+    3 => {let offset = nes.registers.y; add_to_zero_page_address(nes, offset)},
+    4 => {
+      // Read the value at our effective address for processing
+      let effective_address = nes.cpu.data1 as u16;
+      nes.cpu.data2 = read_byte(nes, effective_address);
+    },
+    5 => {
+      // Dummy write back to effective address
+      let effective_address = nes.cpu.data1 as u16;
+      let data = nes.cpu.data2;
+      write_byte(nes, effective_address, data);
+      // Perform the operation
+      nes.cpu.data2 = opcode_func(&mut nes.registers, data);
+    },
+    6 => {
+      // Write the modified data to the effective address
+      let effective_address = nes.cpu.data1 as u16;
+      let data = nes.cpu.data2;
+      write_byte(nes, effective_address, data);
+      nes.cpu.tick = 0;
+    },
+    _ => ()
+  }
+}
+
 pub static ZERO_PAGE_INDEXED_Y: AddressingMode = AddressingMode{
-  read: zero_page_indexed_y_read, write: zero_page_indexed_y_write, modify: unimplemented_modify };
+  read: zero_page_indexed_y_read, write: zero_page_indexed_y_write, modify: zero_page_indexed_y_modify };
 
 pub fn indexed_indirect_x_read(nes: &mut NesState, opcode_func: ReadOpcode) {
   match nes.cpu.tick {
