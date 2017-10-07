@@ -182,7 +182,8 @@ pub fn branch(nes: &mut NesState) {
   // instead of zero, so we don't execute the fetch step a second time when we're done.
   match nes.cpu.tick {
     2 => {
-      // data1 is already filled
+      let pc = nes.registers.pc;
+      nes.cpu.data1 = read_byte(nes, pc);
       nes.registers.pc = nes.registers.pc.wrapping_add(1);
     },
     3 => {

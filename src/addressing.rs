@@ -17,7 +17,8 @@ pub struct AddressingMode {
 
 // Common helper functions used on many instruction cycles
 fn read_data1(nes: &mut NesState) {
-  // data1 is already filled
+  let pc = nes.registers.pc;
+  nes.cpu.data1 = read_byte(nes, pc);
   nes.registers.pc = nes.registers.pc.wrapping_add(1);
 }
 
@@ -84,7 +85,8 @@ pub static ACCUMULATOR: AddressingMode = AddressingMode{
 
 // Immediate mode only supports reading data
 pub fn immediate_read(nes: &mut NesState, opcode_func: ReadOpcode) {
-  let data = nes.cpu.data1;
+  let pc = nes.registers.pc;
+  let data = read_byte(nes, pc);
   opcode_func(&mut nes.registers, data);
   nes.registers.pc = nes.registers.pc.wrapping_add(1);
   nes.cpu.tick = 0;
@@ -310,12 +312,7 @@ pub fn indexed_indirect_x_read(nes: &mut NesState, opcode_func: ReadOpcode) {
 pub fn indexed_indirect_x_write(nes: &mut NesState, opcode_func: WriteOpcode) {
   match nes.cpu.tick {
     2 => read_data1(nes),
-    3 => {
-      // Dummy read from original address, discarded
-      let address = nes.cpu.data1 as u16;
-      let _ = read_byte(nes, address);
-      nes.cpu.data1 = nes.cpu.data1.wrapping_add(nes.registers.x);
-    },
+    3 => {let offset = nes.registers.x; add_to_zero_page_address(nes, offset)},
     4 => {
       // Read low byte of indirect address
       let effective_address = nes.cpu.data1 as u16;

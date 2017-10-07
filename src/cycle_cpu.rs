@@ -187,15 +187,6 @@ pub fn run_one_clock(nes: &mut NesState) {
     return; // all done
   }
 
-  // The remaining opcodes follow a somewhat regular pattern.
-  // Every instruction performs this read, regardless of whether
-  // the data is used.
-  if nes.cpu.tick == 2 {
-    // Fetch data byte from memory
-    let pc = nes.registers.pc;
-    nes.cpu.data1 = read_byte(nes, pc);
-  }
-
   // Decode this opcode into its component parts
   let logic_block = nes.cpu.opcode & 0b0000_0011;
   let addressing_mode_index = (nes.cpu.opcode & 0b0001_1100) >> 2;
