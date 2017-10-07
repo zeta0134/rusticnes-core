@@ -193,9 +193,7 @@ pub fn run_one_clock(nes: &mut NesState) {
   // These opcodes don't follow a particularly consistent pattern, so here we just match and process
   // then individually.
   match nes.cpu.opcode {
-    // Certain opcodes may be vital to your success. THESE opcodes are not, however,
-    // and more or less consistently HALT the emulator. Which we'll emulate by complaining once,
-    // then setting the tick to 10.
+    // Certain opcodes may be vital to your success. THESE opcodes are not.
     0x02 | 0x22 | 0x42 | 0x62 | 0x12 | 0x32 | 0x52 | 0x72 | 0x92 | 0xB2 | 0xD2 | 0xF2 => {
       // HALT the CPU. It died, jim.
       if nes.cpu.tick < 10 {
@@ -203,70 +201,89 @@ pub fn run_one_clock(nes: &mut NesState) {
         println!("Proceeding to lock up CPU. Goodbye, cruel world!");
       }
       nes.cpu.tick = 10;
-      return;
     },
-    // NOPs
-    0x80 | 0x82 | 0xC2 | 0xE2 => (addressing::IMMEDIATE.read) (nes, opcodes::nop_read),
+    // Immediate NOPs
+    0x80 | 0x82 | 0x89 | 0xC2 | 0xE2 => (addressing::IMMEDIATE.read) (nes, opcodes::nop_read),
+    // Implied NOPs
+    0x1A | 0x3A | 0x5A | 0x7A | 0xDA | 0xFA => addressing::implied(nes, opcodes::nop),
 
-    _ => ()
-  }
+    // Block 10 opcodes that don't fit the mold
+    0xA2 => {(addressing::IMMEDIATE.read)(nes, opcodes::ldx)},
+    0x8A => addressing::implied(nes, opcodes::txa),
+    0xAA => addressing::implied(nes, opcodes::tax),
+    0xCA => addressing::implied(nes, opcodes::dex),
+    0xEA => addressing::implied(nes, opcodes::nop),
+    0x9A => addressing::implied(nes, opcodes::txs),
+    0xBA => addressing::implied(nes, opcodes::tsx),
+    0x96 => {(addressing::ZERO_PAGE_INDEXED_Y.write)(nes, opcodes::stx)},
+    0xB6 => {(addressing::ZERO_PAGE_INDEXED_Y.read)(nes, opcodes::ldx)},
+    0xBE => {(addressing::ABSOLUTE_INDEXED_Y.read)(nes, opcodes::ldx)},
 
-  match logic_block {
-    0b01 => {
-      let addressing_mode = match addressing_mode_index {
-        // Zero Page Mode
-        0b000 => &addressing::INDEXED_INDIRECT_X,
-        0b001 => &addressing::ZERO_PAGE,
-        0b010 => &addressing::IMMEDIATE,
-        0b011 => &addressing::ABSOLUTE,
-        0b100 => &addressing::INDIRECT_INDEXED_Y,
-        0b101 => &addressing::ZERO_PAGE_INDEXED_X,
-        0b110 => &addressing::ABSOLUTE_INDEXED_Y,
-        0b111 => &addressing::ABSOLUTE_INDEXED_X,
 
-        // Not implemented yet
-        _ => &addressing::UNIMPLEMENTED,
-      };
-
-      match opcode_index {
-        0b000 => {(addressing_mode.read)(nes, opcodes::ora)},
-        0b001 => {(addressing_mode.read)(nes, opcodes::and)},
-        0b010 => {(addressing_mode.read)(nes, opcodes::eor)},
-        0b011 => {(addressing_mode.read)(nes, opcodes::adc)},
-        0b100 => {(addressing_mode.write)(nes, opcodes::sta)},
-        0b101 => {(addressing_mode.read)(nes, opcodes::lda)},
-        0b110 => {(addressing_mode.read)(nes, opcodes::cmp)},
-        0b111 => {(addressing_mode.read)(nes, opcodes::sbc)},
-        _ => ()
-      };
-    },
-    0b10 => {
-      let addressing_mode = match addressing_mode_index {
-        // Zero Page Mode
-        0b001 => &addressing::ZERO_PAGE,
-        0b011 => &addressing::ABSOLUTE,
-
-        // Not implemented yet
-        _ => &addressing::UNIMPLEMENTED,
-      };
-
-      match opcode_index {
-        0b000 => {(addressing_mode.modify)(nes, opcodes::asl)},
-        0b001 => {(addressing_mode.modify)(nes, opcodes::rol)},
-        0b010 => {(addressing_mode.modify)(nes, opcodes::lsr)},
-        0b011 => {(addressing_mode.modify)(nes, opcodes::ror)},
-        0b100 => {(addressing_mode.write)(nes, opcodes::stx)},
-        0b101 => {(addressing_mode.read)(nes, opcodes::ldx)},
-        0b110 => {(addressing_mode.modify)(nes, opcodes::dec)},
-        0b111 => {(addressing_mode.modify)(nes, opcodes::inc)},
-        _ => ()
-      };
-    }
     _ => {
-      // We don't have this block implemented! Fall back to old behavior.
-      nes.registers.pc = nes.registers.pc.wrapping_sub(1);
-      cpu::process_instruction(nes);
-      nes.cpu.tick = 0;
+      match logic_block {
+        0b01 => {
+          let addressing_mode = match addressing_mode_index {
+            // Zero Page Mode
+            0b000 => &addressing::INDEXED_INDIRECT_X,
+            0b001 => &addressing::ZERO_PAGE,
+            0b010 => &addressing::IMMEDIATE,
+            0b011 => &addressing::ABSOLUTE,
+            0b100 => &addressing::INDIRECT_INDEXED_Y,
+            0b101 => &addressing::ZERO_PAGE_INDEXED_X,
+            0b110 => &addressing::ABSOLUTE_INDEXED_Y,
+            0b111 => &addressing::ABSOLUTE_INDEXED_X,
+
+            // Not implemented yet
+            _ => &addressing::UNIMPLEMENTED,
+          };
+
+          match opcode_index {
+            0b000 => {(addressing_mode.read)(nes, opcodes::ora)},
+            0b001 => {(addressing_mode.read)(nes, opcodes::and)},
+            0b010 => {(addressing_mode.read)(nes, opcodes::eor)},
+            0b011 => {(addressing_mode.read)(nes, opcodes::adc)},
+            0b100 => {(addressing_mode.write)(nes, opcodes::sta)},
+            0b101 => {(addressing_mode.read)(nes, opcodes::lda)},
+            0b110 => {(addressing_mode.read)(nes, opcodes::cmp)},
+            0b111 => {(addressing_mode.read)(nes, opcodes::sbc)},
+            _ => ()
+          };
+        },
+        0b10 => {
+          let addressing_mode = match addressing_mode_index {
+            // Zero Page Mode
+            0b001 => &addressing::ZERO_PAGE,
+            0b010 => &addressing::ACCUMULATOR, // Note: masked for 8A, AA, CA, and EA above
+            0b011 => &addressing::ABSOLUTE,
+            0b101 => &addressing::ZERO_PAGE_INDEXED_X,
+            0b111 => &addressing::ABSOLUTE_INDEXED_X,
+
+            // Not implemented yet
+            _ => &addressing::UNIMPLEMENTED,
+          };
+
+          match opcode_index {
+            0b000 => {(addressing_mode.modify)(nes, opcodes::asl)},
+            0b001 => {(addressing_mode.modify)(nes, opcodes::rol)},
+            0b010 => {(addressing_mode.modify)(nes, opcodes::lsr)},
+            0b011 => {(addressing_mode.modify)(nes, opcodes::ror)},
+            0b100 => {(addressing_mode.write)(nes, opcodes::stx)},
+            0b101 => {(addressing_mode.read)(nes, opcodes::ldx)},
+            0b110 => {(addressing_mode.modify)(nes, opcodes::dec)},
+            0b111 => {(addressing_mode.modify)(nes, opcodes::inc)},
+            _ => ()
+          };
+        }
+        _ => {
+          // We don't have this block implemented! Fall back to old behavior.
+          nes.registers.pc = nes.registers.pc.wrapping_sub(1);
+          cpu::process_instruction(nes);
+          nes.cpu.tick = 0;
+        }
+      }
     }
   }
+
+  
 }

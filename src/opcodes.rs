@@ -126,6 +126,43 @@ pub fn dec(registers: &mut Registers, data: u8) -> u8 {
     return result;
 }
 
+// Decrement X
+pub fn dex(registers: &mut Registers) {
+    registers.x = registers.x.wrapping_sub(1);
+    registers.flags.zero = registers.x == 0;
+    registers.flags.negative = registers.x & 0x80 != 0;
+}
+
+// Transfer A -> X
+pub fn tax(registers: &mut Registers) {
+    registers.x = registers.a;
+    registers.flags.zero = registers.x == 0;
+    registers.flags.negative = registers.x & 0x80 != 0;
+}
+
+// Transfer X -> A
+pub fn txa(registers: &mut Registers) {
+    registers.a = registers.x;
+    registers.flags.zero = registers.a == 0;
+    registers.flags.negative = registers.a & 0x80 != 0;
+}
+
+// Transfer X -> S
+pub fn txs(registers: &mut Registers) {
+    registers.s = registers.x;
+}
+
+// Transfer S -> X
+pub fn tsx(registers: &mut Registers) {
+    registers.x = registers.s;
+    registers.flags.zero = registers.x == 0;
+    registers.flags.negative = registers.x & 0x80 != 0;
+}
+
+// NOP (implemented with an implied signature, for consistency)
+pub fn nop(_: &mut Registers) {
+}
+
 // NOP - Read and Write variants
 pub fn nop_read(_: &mut Registers, _: u8) {
 }

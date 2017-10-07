@@ -4,6 +4,7 @@ use memory::read_byte;
 use memory::write_byte;
 use nes::NesState;
 
+type ImpliedOpcode = fn(&mut Registers);
 type ReadOpcode = fn(&mut Registers, u8);
 type WriteOpcode = fn(&mut Registers) -> u8;
 type ModifyOpcode = fn(&mut Registers, u8) -> u8;
@@ -12,6 +13,13 @@ pub struct AddressingMode {
   pub read: fn(&mut NesState, ReadOpcode),
   pub write: fn(&mut NesState, WriteOpcode),
   pub modify: fn(&mut NesState, ModifyOpcode),
+}
+
+// Simplest possible opcode, immediately changes register state and
+// exits on cycle 2
+pub fn implied(nes: &mut NesState, opcode_func: ImpliedOpcode) {
+  opcode_func(&mut nes.registers);
+  nes.cpu.tick = 0;
 }
 
 // Note: These will be REMOVED eventually, they are here so we can test code partially.
@@ -46,6 +54,20 @@ pub static UNIMPLEMENTED: AddressingMode = AddressingMode{
   read: unimplemented_read,
   write: unimplemented_write,
   modify: unimplemented_modify
+};
+
+// Accumulator mode is used by instructions which modify the accumulator without reading memory.
+pub fn accumulator_modify(nes: &mut NesState, opcode_func: ModifyOpcode) {
+  let a = nes.registers.a;
+  let result = opcode_func(&mut nes.registers, a);
+  nes.registers.a = result;
+  nes.cpu.tick = 0;
+}
+
+pub static ACCUMULATOR: AddressingMode = AddressingMode{
+  read: unimplemented_read,
+  write: unimplemented_write,
+  modify: accumulator_modify
 };
 
 // Immediate mode only supports reading data
@@ -264,6 +286,55 @@ pub fn zero_page_indexed_x_write(nes: &mut NesState, opcode_func: WriteOpcode) {
 pub static ZERO_PAGE_INDEXED_X: AddressingMode = AddressingMode{
   read: zero_page_indexed_x_read,
   write: zero_page_indexed_x_write,
+  modify: unimplemented_modify
+};
+
+// Zero Page Indexed (Y)
+pub fn zero_page_indexed_y_read(nes: &mut NesState, opcode_func: ReadOpcode) {
+  match nes.cpu.tick {
+    2 => {
+      // data1 is already filled
+      nes.registers.pc = nes.registers.pc.wrapping_add(1);}
+    3 => {
+      // Dummy read from original address, discarded
+      let address = nes.cpu.data1 as u16;
+      let _ = read_byte(nes, address);
+      nes.cpu.data1 = nes.cpu.data1.wrapping_add(nes.registers.y);
+    },
+    4 => {
+      let effective_address = nes.cpu.data1 as u16;
+      let data = read_byte(nes, effective_address);
+      opcode_func(&mut nes.registers, data);
+      nes.cpu.tick = 0;
+    },
+    _ => ()
+  }
+}
+
+pub fn zero_page_indexed_y_write(nes: &mut NesState, opcode_func: WriteOpcode) {
+  match nes.cpu.tick {
+    2 => {
+      // data1 is already filled
+      nes.registers.pc = nes.registers.pc.wrapping_add(1);}
+    3 => {
+      // Dummy read from original address, discarded
+      let address = nes.cpu.data1 as u16;
+      let _ = read_byte(nes, address);
+      nes.cpu.data1 = nes.cpu.data1.wrapping_add(nes.registers.y);
+    },
+    4 => {
+      let effective_address = nes.cpu.data1 as u16;
+      let data = opcode_func(&mut nes.registers);
+      write_byte(nes, effective_address, data);
+      nes.cpu.tick = 0;
+    },
+    _ => ()
+  }
+}
+
+pub static ZERO_PAGE_INDEXED_Y: AddressingMode = AddressingMode{
+  read: zero_page_indexed_y_read,
+  write: zero_page_indexed_y_write,
   modify: unimplemented_modify
 };
 
