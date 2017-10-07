@@ -173,6 +173,11 @@ pub fn control_block(nes: &mut NesState) {
     0x4C => opcodes::jmp_absolute(nes),
     0x6C => opcodes::jmp_indirect(nes),
 
+    0x08 => opcodes::php(nes),
+    0x28 => opcodes::plp(nes),
+    0x48 => opcodes::pha(nes),
+    0x68 => opcodes::pla(nes),
+
     _ => {
       // Unimplemented, fall back on old behavior
       nes.registers.pc = nes.registers.pc.wrapping_sub(1);

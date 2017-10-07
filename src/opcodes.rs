@@ -3,6 +3,7 @@ use cpu;
 use cpu::Registers;
 use nes::NesState;
 use memory::read_byte;
+use memory::write_byte;
 
 // Logical inclusive OR
 pub fn ora(registers: &mut Registers, data: u8) {
@@ -390,5 +391,71 @@ pub fn jmp_indirect(nes: &mut NesState) {
     },
 
     _ => ()
+  }
+}
+
+// Memory Utilities
+pub fn push(nes: &mut NesState, data: u8) {
+    let address = (nes.registers.s as u16) + 0x0100;
+    write_byte(nes, address, data);
+    nes.registers.s = nes.registers.s.wrapping_sub(1);
+}
+
+pub fn pop(nes: &mut NesState) -> u8 {
+    nes.registers.s = nes.registers.s.wrapping_add(1);
+    let address = (nes.registers.s as u16) + 0x0100;
+    return read_byte(nes, address);
+}
+
+// Opcodes which access the stack
+pub fn pha(nes: &mut NesState) {
+  match nes.cpu.tick {
+    2 => addressing::dummy_data1(nes),
+    3 => {
+      let a = nes.registers.a;
+      push(nes, a);
+      nes.cpu.tick = 0;
+    },
+    _ => (),
+  }
+}
+
+pub fn php(nes: &mut NesState) {
+  match nes.cpu.tick {
+    2 => addressing::dummy_data1(nes),
+    3 => {
+      let status = cpu::status_as_byte(&mut nes.registers, true);
+      push(nes, status);
+      nes.cpu.tick = 0;
+    },
+    _ => (),
+  }
+}
+
+pub fn pla(nes: &mut NesState) {
+  match nes.cpu.tick {
+    2 => addressing::dummy_data1(nes),
+    3 => {/* Increment S */},
+    4 => {
+      let a = pop(nes);
+      nes.registers.a = a;
+      nes.registers.flags.zero = nes.registers.a == 0;
+      nes.registers.flags.negative = nes.registers.a & 0x80 != 0;
+      nes.cpu.tick = 0;
+    },
+    _ => (),
+  }
+}
+
+pub fn plp(nes: &mut NesState) {
+  match nes.cpu.tick {
+    2 => addressing::dummy_data1(nes),
+    3 => {/* Increment S */},
+    4 => {
+      let s = pop(nes);
+      cpu::set_status_from_byte(&mut nes.registers, s);
+      nes.cpu.tick = 0;
+    },
+    _ => (),
   }
 }

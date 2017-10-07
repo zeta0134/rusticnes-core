@@ -16,10 +16,17 @@ pub struct AddressingMode {
 }
 
 // Common helper functions used on many instruction cycles
-fn read_data1(nes: &mut NesState) {
+pub fn read_data1(nes: &mut NesState) {
   let pc = nes.registers.pc;
   nes.cpu.data1 = read_byte(nes, pc);
   nes.registers.pc = nes.registers.pc.wrapping_add(1);
+}
+
+// Every instruction reads the byte after PC, but not all instructions use the
+// data. This is the memory access for those instructions which don't.
+pub fn dummy_data1(nes: &mut NesState) {
+  let pc = nes.registers.pc;
+  let _ = read_byte(nes, pc);
 }
 
 pub fn read_address_low(nes: &mut NesState) {
