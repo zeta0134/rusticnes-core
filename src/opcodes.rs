@@ -159,6 +159,42 @@ pub fn tsx(registers: &mut Registers) {
     registers.flags.negative = registers.x & 0x80 != 0;
 }
 
+// Load Y
+pub fn ldy(registers: &mut Registers, data: u8) {
+    registers.y = data;
+    registers.flags.zero = registers.y == 0;
+    registers.flags.negative = registers.y & 0x80 != 0;
+}
+
+// Store Y
+pub fn sty(registers: &mut Registers) -> u8 {
+    return registers.y
+}
+
+// Compare Y
+pub fn cpy(registers: &mut Registers, data: u8) {
+    registers.flags.carry = registers.y >= data;
+    let result: u8 = registers.y.wrapping_sub(data);
+    registers.flags.zero = result == 0;
+    registers.flags.negative = result & 0x80 != 0;
+}
+
+// Compare X
+pub fn cpx(registers: &mut Registers, data: u8) {
+    registers.flags.carry = registers.x >= data;
+    let result: u8 = registers.x.wrapping_sub(data);
+    registers.flags.zero = result == 0;
+    registers.flags.negative = result & 0x80 != 0;
+}
+
+// Bit Test
+pub fn bit(registers: &mut Registers, data: u8) {
+    let result: u8 = registers.a & data;
+    registers.flags.zero = result == 0;
+    registers.flags.overflow = data & 0x40 != 0;
+    registers.flags.negative = data & 0x80 != 0;
+}
+
 // NOP (implemented with an implied signature, for consistency)
 pub fn nop(_: &mut Registers) {
 }

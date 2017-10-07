@@ -150,7 +150,26 @@ pub fn control_block(nes: &mut NesState) {
   // Everything else is pretty irregular, so we'll just match the whole opcode
   match nes.cpu.opcode {
     0x00 => opcodes::brk(nes),
-    0x80 => (addressing::IMMEDIATE.read) (nes, opcodes::nop_read),
+    0x80 => (addressing::IMMEDIATE.read)  (nes, opcodes::nop_read),
+
+    // Opcodes with similar addressing modes
+    0xA0 => (addressing::IMMEDIATE.read)  (nes, opcodes::ldy),
+    0xC0 => (addressing::IMMEDIATE.read)  (nes, opcodes::cpy),
+    0xE0 => (addressing::IMMEDIATE.read)  (nes, opcodes::cpx),
+    0x24 => (addressing::ZERO_PAGE.read)  (nes, opcodes::bit),
+    0x84 => (addressing::ZERO_PAGE.write) (nes, opcodes::sty),
+    0xA4 => (addressing::ZERO_PAGE.read)  (nes, opcodes::ldy),
+    0xC4 => (addressing::ZERO_PAGE.read)  (nes, opcodes::cpy),
+    0xE4 => (addressing::ZERO_PAGE.read)  (nes, opcodes::cpx),
+    0x2C => (addressing::ABSOLUTE.read)  (nes, opcodes::bit),
+    0x8C => (addressing::ABSOLUTE.write) (nes, opcodes::sty),
+    0xAC => (addressing::ABSOLUTE.read)  (nes, opcodes::ldy),
+    0xCC => (addressing::ABSOLUTE.read)  (nes, opcodes::cpy),
+    0xEC => (addressing::ABSOLUTE.read)  (nes, opcodes::cpx),
+    0x94 => (addressing::ZERO_PAGE_INDEXED_X.write) (nes, opcodes::sty),
+    0xB4 => (addressing::ZERO_PAGE_INDEXED_X.read)  (nes, opcodes::ldy),
+    0xBC => (addressing::ABSOLUTE_INDEXED_X.read)  (nes, opcodes::ldy),
+
     _ => {
       // Unimplemented, fall back on old behavior
       nes.registers.pc = nes.registers.pc.wrapping_sub(1);

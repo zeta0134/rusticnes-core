@@ -34,6 +34,25 @@ fn read_address_high(nes: &mut NesState) {
   nes.cpu.temp_address = ((nes.cpu.data2 as u16) << 8) | (nes.cpu.data1 as u16);
 }
 
+fn read_opcode_from_temp_address(nes: &mut NesState, opcode_func: ReadOpcode, last_cycle: bool) {
+  let temp_address = nes.cpu.temp_address;
+  let data = read_byte(nes, temp_address);
+  opcode_func(&mut nes.registers, data);
+  if last_cycle { 
+    nes.cpu.tick = 0;
+  }
+}
+
+fn write_opcode_to_temp_address(nes: &mut NesState, opcode_func: WriteOpcode, last_cycle: bool) {
+  // Write the result of this opcode to the final address
+  let temp_address = nes.cpu.temp_address;
+  let data = opcode_func(&mut nes.registers);
+  write_byte(nes, temp_address, data);
+  if last_cycle { 
+    nes.cpu.tick = 0;
+  }
+}
+
 // Simplest possible opcode, immediately changes register state and
 // exits on cycle 2
 pub fn implied(nes: &mut NesState, opcode_func: ImpliedOpcode) {
@@ -358,12 +377,7 @@ pub fn indexed_indirect_x_read(nes: &mut NesState, opcode_func: ReadOpcode) {
       let effective_address = nes.cpu.data1 as u16;
       nes.cpu.temp_address = ((read_byte(nes, effective_address) as u16) << 8) | nes.cpu.temp_address;
     },
-    6 => {
-      let temp_address = nes.cpu.temp_address;
-      let data = read_byte(nes, temp_address);
-      opcode_func(&mut nes.registers, data);
-      nes.cpu.tick = 0;
-    },
+    6 => read_opcode_from_temp_address(nes, opcode_func, true),
     _ => {}
   }
 }
@@ -383,12 +397,7 @@ pub fn indexed_indirect_x_write(nes: &mut NesState, opcode_func: WriteOpcode) {
       let effective_address = nes.cpu.data1 as u16;
       nes.cpu.temp_address = ((read_byte(nes, effective_address) as u16) << 8) | nes.cpu.temp_address;
     },
-    6 => {
-      let temp_address = nes.cpu.temp_address;
-      let data = opcode_func(&mut nes.registers);
-      write_byte(nes, temp_address, data);
-      nes.cpu.tick = 0;
-    },
+    6 => write_opcode_to_temp_address(nes, opcode_func, true),
     _ => {}
   }
 }
@@ -429,13 +438,7 @@ pub fn indirect_indexed_y_read(nes: &mut NesState, opcode_func: ReadOpcode) {
         nes.cpu.temp_address = nes.cpu.temp_address.wrapping_add(0x100);  
       }
     },
-    6 => {
-      // Read from the final address and run this opcode
-      let temp_address = nes.cpu.temp_address;
-      let data = read_byte(nes, temp_address);
-      opcode_func(&mut nes.registers, data);
-      nes.cpu.tick = 0;
-    },
+    6 => read_opcode_from_temp_address(nes, opcode_func, true),
     _ => {}
   }
 }
@@ -468,13 +471,7 @@ pub fn indirect_indexed_y_write(nes: &mut NesState, opcode_func: WriteOpcode) {
         nes.cpu.temp_address = nes.cpu.temp_address.wrapping_add(0x100);
       }
     },
-    6 => {
-      // Write the result of this opcode to the final address
-      let temp_address = nes.cpu.temp_address;
-      let data = opcode_func(&mut nes.registers);
-      write_byte(nes, temp_address, data);
-      nes.cpu.tick = 0;
-    },
+    6 => write_opcode_to_temp_address(nes, opcode_func, true),
     _ => {}
   }
 }
@@ -504,13 +501,7 @@ pub fn absolute_indexed_x_read(nes: &mut NesState, opcode_func: ReadOpcode) {
         nes.cpu.temp_address = nes.cpu.temp_address.wrapping_add(0x100);  
       }
     },
-    5 => {
-      // Read from the final address and run this opcode
-      let temp_address = nes.cpu.temp_address;
-      let data = read_byte(nes, temp_address);
-      opcode_func(&mut nes.registers, data);
-      nes.cpu.tick = 0;
-    },
+    5 => read_opcode_from_temp_address(nes, opcode_func, true),
     _ => ()
   }
 }
@@ -533,13 +524,7 @@ pub fn absolute_indexed_x_write(nes: &mut NesState, opcode_func: WriteOpcode) {
         nes.cpu.temp_address = nes.cpu.temp_address.wrapping_add(0x100);
       }
     },
-    5 => {
-      // Write the result of this opcode to the final address
-      let temp_address = nes.cpu.temp_address;
-      let data = opcode_func(&mut nes.registers);
-      write_byte(nes, temp_address, data);
-      nes.cpu.tick = 0;
-    },
+    5 => write_opcode_to_temp_address(nes, opcode_func, true),
     _ => {}
   }
 }
@@ -590,14 +575,8 @@ pub static ABSOLUTE_INDEXED_X: AddressingMode = AddressingMode{
 
 pub fn absolute_indexed_y_read(nes: &mut NesState, opcode_func: ReadOpcode) {
   match nes.cpu.tick {
-    2 => read_data1(nes),
-    3 => {
-      // read the high byte into data 2
-      let pc = nes.registers.pc;
-      nes.cpu.data2 = read_byte(nes, pc);
-      nes.registers.pc = nes.registers.pc.wrapping_add(1);
-      nes.cpu.temp_address = ((nes.cpu.data2 as u16) << 8) | (nes.cpu.data1 as u16);
-    },
+    2 => read_address_low(nes),
+    3 => read_address_high(nes),
     4 => {
       // Add X to LOW BYTE of the effective address
       // Accuracy note: technically this occurs in cycle 3
@@ -616,27 +595,15 @@ pub fn absolute_indexed_y_read(nes: &mut NesState, opcode_func: ReadOpcode) {
         nes.cpu.temp_address = nes.cpu.temp_address.wrapping_add(0x100);  
       }
     },
-    5 => {
-      // Read from the final address and run this opcode
-      let temp_address = nes.cpu.temp_address;
-      let data = read_byte(nes, temp_address);
-      opcode_func(&mut nes.registers, data);
-      nes.cpu.tick = 0;
-    },
+    5 => read_opcode_from_temp_address(nes, opcode_func, true),
     _ => ()
   }
 }
 
 pub fn absolute_indexed_y_write(nes: &mut NesState, opcode_func: WriteOpcode) {
   match nes.cpu.tick {
-    2 => read_data1(nes),
-    3 => {
-      // read the high byte into data 2
-      let pc = nes.registers.pc;
-      nes.cpu.data2 = read_byte(nes, pc);
-      nes.registers.pc = nes.registers.pc.wrapping_add(1);
-      nes.cpu.temp_address = ((nes.cpu.data2 as u16) << 8) | (nes.cpu.data1 as u16);
-    },
+    2 => read_address_low(nes),
+    3 => read_address_high(nes),
     4 => {
       // Add X to LOW BYTE of the effective address
       // Accuracy note: technically this occurs in cycle 4, but as it has no effect on emulation, I've
@@ -651,13 +618,7 @@ pub fn absolute_indexed_y_write(nes: &mut NesState, opcode_func: WriteOpcode) {
         nes.cpu.temp_address = nes.cpu.temp_address.wrapping_add(0x100);
       }
     },
-    5 => {
-      // Write the result of this opcode to the final address
-      let temp_address = nes.cpu.temp_address;
-      let data = opcode_func(&mut nes.registers);
-      write_byte(nes, temp_address, data);
-      nes.cpu.tick = 0;
-    },
+    5 => write_opcode_to_temp_address(nes, opcode_func, true),
     _ => {}
   }
 }
