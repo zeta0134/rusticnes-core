@@ -45,18 +45,21 @@ pub fn implied(nes: &mut NesState, opcode_func: ImpliedOpcode) {
 // Not to be confused with the NOP versions below, which help to group some of the
 // processor's unusual behavior with undefined opcodes.
 pub fn unimplemented_read(nes: &mut NesState, _: ReadOpcode) {
+  println!("unimplemented read {:02X}", nes.cpu.opcode);
   nes.registers.pc = nes.registers.pc.wrapping_sub(1);
   cpu::process_instruction(nes);
   nes.cpu.tick = 0;
 }
 
 pub fn unimplemented_write(nes: &mut NesState, _: WriteOpcode) {
+  println!("unimplemented write {:02X}", nes.cpu.opcode);
   nes.registers.pc = nes.registers.pc.wrapping_sub(1);
   cpu::process_instruction(nes);
   nes.cpu.tick = 0;
 }
 
 pub fn unimplemented_modify(nes: &mut NesState, _: ModifyOpcode) {
+  println!("unimplemented modify: {:02X}", nes.cpu.opcode);
   nes.registers.pc = nes.registers.pc.wrapping_sub(1);
   cpu::process_instruction(nes);
   nes.cpu.tick = 0;
@@ -211,7 +214,7 @@ pub fn zero_page_modify(nes: &mut NesState, opcode_func: ModifyOpcode) {
 }
 
 pub static ZERO_PAGE: AddressingMode = AddressingMode{
-  read: zero_page_read, write: zero_page_write, modify: unimplemented_modify };
+  read: zero_page_read, write: zero_page_write, modify: zero_page_modify };
 
 pub fn add_to_zero_page_address(nes: &mut NesState, offset: u8) {
   let effective_address = nes.cpu.data1 as u16;
