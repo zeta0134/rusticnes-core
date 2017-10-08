@@ -410,7 +410,7 @@ pub fn jmp_indirect(nes: &mut NesState) {
 pub fn jsr(nes: &mut NesState) {
   match nes.cpu.tick {
     2 => addressing::read_address_low(nes),
-    3 => {/* Spin Wait */},
+    3 => {/* Internal Operation */},
     4 => {
       let pch = ((nes.registers.pc & 0xFF00) >> 8) as u8;
       push(nes, pch);
@@ -428,7 +428,49 @@ pub fn jsr(nes: &mut NesState) {
   };
 }
 
+pub fn rti(nes: &mut NesState) {
+  match nes.cpu.tick {
+    2 => addressing::dummy_data1(nes),
+    3 => {/* Would incremeent S here */},
+    4 => {
+      let s = pop(nes);
+      cpu::set_status_from_byte(&mut nes.registers, s);
+    },
+    5 => {
+      // Read PCL
+      nes.cpu.data1 = pop(nes);
+    },
+    6 => {
+      // Read PCH
+      let pch = pop(nes) as u16;
+      let pcl = nes.cpu.data1 as u16;
+      nes.registers.pc = (pch << 8) | pcl;
+      nes.cpu.tick = 0;
+    },
+    _ => ()
+  };
+}
 
+pub fn rts(nes: &mut NesState) {
+  match nes.cpu.tick {
+    2 => addressing::dummy_data1(nes),
+    3 => {/* Would incremeent S here */},
+    4 => {
+      // Read PCL
+      nes.cpu.data1 = pop(nes);
+    },
+    5 => {
+      let pch = pop(nes) as u16;
+      let pcl = nes.cpu.data1 as u16;
+      nes.registers.pc = (pch << 8) | pcl;
+    },
+    6 => {
+      nes.registers.pc = nes.registers.pc.wrapping_add(0x1);
+      nes.cpu.tick = 0;
+    },
+    _ => ()
+  };
+}
 
 // Opcodes which access the stack
 pub fn pha(nes: &mut NesState) {

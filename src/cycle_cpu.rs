@@ -179,6 +179,8 @@ pub fn control_block(nes: &mut NesState) {
     0x68 => opcodes::pla(nes),
 
     0x20 => opcodes::jsr(nes),
+    0x40 => opcodes::rti(nes),
+    0x60 => opcodes::rts(nes),
 
     _ => {
       // Unimplemented, fall back on old behavior
