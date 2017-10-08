@@ -178,6 +178,8 @@ pub fn control_block(nes: &mut NesState) {
     0x48 => opcodes::pha(nes),
     0x68 => opcodes::pla(nes),
 
+    0x20 => opcodes::jsr(nes),
+
     _ => {
       // Unimplemented, fall back on old behavior
       nes.registers.pc = nes.registers.pc.wrapping_sub(1);

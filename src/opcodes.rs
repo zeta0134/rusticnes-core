@@ -360,6 +360,19 @@ pub fn brk(nes: &mut NesState) {
   }
 }
 
+// Memory Utilities
+pub fn push(nes: &mut NesState, data: u8) {
+    let address = (nes.registers.s as u16) + 0x0100;
+    write_byte(nes, address, data);
+    nes.registers.s = nes.registers.s.wrapping_sub(1);
+}
+
+pub fn pop(nes: &mut NesState) -> u8 {
+    nes.registers.s = nes.registers.s.wrapping_add(1);
+    let address = (nes.registers.s as u16) + 0x0100;
+    return read_byte(nes, address);
+}
+
 pub fn jmp_absolute(nes: &mut NesState) {
   match nes.cpu.tick {
     2 => addressing::read_address_low(nes),
@@ -394,18 +407,28 @@ pub fn jmp_indirect(nes: &mut NesState) {
   }
 }
 
-// Memory Utilities
-pub fn push(nes: &mut NesState, data: u8) {
-    let address = (nes.registers.s as u16) + 0x0100;
-    write_byte(nes, address, data);
-    nes.registers.s = nes.registers.s.wrapping_sub(1);
+pub fn jsr(nes: &mut NesState) {
+  match nes.cpu.tick {
+    2 => addressing::read_address_low(nes),
+    3 => {/* Spin Wait */},
+    4 => {
+      let pch = ((nes.registers.pc & 0xFF00) >> 8) as u8;
+      push(nes, pch);
+    },
+    5 => {
+      let pcl = (nes.registers.pc & 0x00FF) as u8;
+      push(nes, pcl);
+    },
+    6 => {
+      addressing::read_address_high(nes);
+      nes.registers.pc = nes.cpu.temp_address;
+      nes.cpu.tick = 0;
+    },
+    _ => ()
+  };
 }
 
-pub fn pop(nes: &mut NesState) -> u8 {
-    nes.registers.s = nes.registers.s.wrapping_add(1);
-    let address = (nes.registers.s as u16) + 0x0100;
-    return read_byte(nes, address);
-}
+
 
 // Opcodes which access the stack
 pub fn pha(nes: &mut NesState) {
