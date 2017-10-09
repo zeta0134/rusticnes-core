@@ -196,7 +196,7 @@ pub fn run_one_clock(nes: &mut NesState) {
 
   // The ordering of these checks may seem a bit strange. The 6502 polls for interrupts
   // at the START of each cycle, not at the end. This means that whether an interrupt is
-  // serviced is determined right before the last cycle of a give instruction, not after
+  // serviced is determined right before the last cycle of a given instruction, not after
   // the last cycle as one might expect.
 
   if nes.cpu.tick == 1 && interrupt_requested(&nes) {

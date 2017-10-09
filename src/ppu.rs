@@ -37,6 +37,7 @@ pub struct PpuState {
     pub current_scanline: u16,
     pub scanline_cycles: u64,
     pub last_cycle: u64,
+    // 
 
     // Framebuffer
     pub screen: [u8; 256 * 240],
@@ -74,6 +75,8 @@ impl PpuState {
            oam_dma_high: 0,
            latch: 0,
            read_buffer: 0,
+
+
        };
     }
 

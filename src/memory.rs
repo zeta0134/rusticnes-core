@@ -135,6 +135,7 @@ pub fn write_byte(nes: &mut NesState, address: u16, data: u8) {
                 // OAMDATA
                 4 => {
                     nes.ppu.oam[nes.ppu.oam_addr as usize] = data;
+                    nes.ppu.oam_addr = nes.ppu.oam_addr.wrapping_add(1);
                 },
                 // PPU SCROLL
                 5 => {
