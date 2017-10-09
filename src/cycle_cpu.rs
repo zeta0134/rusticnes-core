@@ -4,7 +4,6 @@
 // http://nesdev.com/6502_cpu.txt - for information on cycle timings for each addressing mode
 
 use addressing;
-use cpu;
 use memory::read_byte;
 use nes::NesState;
 use opcodes;
@@ -198,8 +197,7 @@ pub fn control_block(nes: &mut NesState) {
 
     _ => {
       // Unimplemented, fall back on old behavior
-      nes.registers.pc = nes.registers.pc.wrapping_sub(1);
-      cpu::process_instruction(nes);
+      println!("Undefined (0x00) opcode: {:02X}", nes.cpu.opcode);
       nes.cpu.tick = 0;
     }
   };
@@ -242,9 +240,8 @@ pub fn run_one_clock(nes: &mut NesState) {
     0b01 => alu_block(nes, addressing_mode_index, opcode_index),
     0b10 => rmw_block(nes, addressing_mode_index, opcode_index),
     _ => {
-      // We don't have this block implemented! Fall back to old behavior.
-      nes.registers.pc = nes.registers.pc.wrapping_sub(1);
-      cpu::process_instruction(nes);
+      // We don't have this block implemented! Cry.
+      println!("Undefined (0x11) opcode: {:02X}", nes.cpu.opcode);
       nes.cpu.tick = 0;
     }
   }
