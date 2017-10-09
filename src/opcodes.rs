@@ -197,6 +197,76 @@ pub fn bit(registers: &mut Registers, data: u8) {
     registers.flags.negative = data & 0x80 != 0;
 }
 
+// Clear carry flag
+pub fn clc(registers: &mut Registers) {
+    registers.flags.carry = false
+}
+
+// Clear decimal flag
+pub fn cld(registers: &mut Registers) {
+    registers.flags.decimal = false
+}
+
+// Clear interrupt disable (enbales interrupts?)
+pub fn cli(registers: &mut Registers) {
+    registers.flags.interrupts_disabled = false
+}
+
+// Clear overflow flag
+pub fn clv(registers: &mut Registers) {
+    registers.flags.overflow = false
+}
+
+// Set Carry Flag
+pub fn sec(registers: &mut Registers) {
+    registers.flags.carry = true;
+}
+
+// Set Decimal Flag
+pub fn sed(registers: &mut Registers) {
+    registers.flags.decimal = true;
+}
+
+// Increment X
+pub fn inx(registers: &mut Registers) {
+    registers.x = registers.x.wrapping_add(1);
+    registers.flags.zero = registers.x == 0;
+    registers.flags.negative = registers.x & 0x80 != 0;
+}
+
+// Increment Y
+pub fn iny(registers: &mut Registers) {
+    registers.y = registers.y.wrapping_add(1);
+    registers.flags.zero = registers.y == 0;
+    registers.flags.negative = registers.y & 0x80 != 0;
+}
+
+// Decrement Y
+pub fn dey(registers: &mut Registers) {
+    registers.y = registers.y.wrapping_sub(1);
+    registers.flags.zero = registers.y == 0;
+    registers.flags.negative = registers.y & 0x80 != 0;
+}
+
+// Transfer A -> Y
+pub fn tay(registers: &mut Registers) {
+    registers.y = registers.a;
+    registers.flags.zero = registers.y == 0;
+    registers.flags.negative = registers.y & 0x80 != 0;
+}
+
+// Transfer Y -> A
+pub fn tya(registers: &mut Registers) {
+    registers.a = registers.y;
+    registers.flags.zero = registers.a == 0;
+    registers.flags.negative = registers.a & 0x80 != 0;
+}
+
+// Set Interrupt Disable Flag
+pub fn sei(registers: &mut Registers) {
+    registers.flags.interrupts_disabled = true;
+}
+
 // NOP (implemented with an implied signature, for consistency)
 pub fn nop(_: &mut Registers) {
 }

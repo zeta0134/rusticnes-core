@@ -831,70 +831,68 @@ impl ApuState {
         self.noise.length_counter.clock();
     }
 
-    pub fn run_to_cycle(&mut self, target_cycle: u64, mapper: &mut Mapper) {
-        while self.current_cycle < target_cycle {
-            self.clock_frame_sequencer();
+    pub fn clock_apu(&mut self, mapper: &mut Mapper) {
+        self.clock_frame_sequencer();
 
-            // Clock the triangle channel once per CPU cycle
-            self.triangle.clock();
+        // Clock the triangle channel once per CPU cycle
+        self.triangle.clock();
 
-            // Only clock Pulse channels on every other cycle
-            // (Most documentation calls this once per APU cycle)
-            if (self.current_cycle & 0b1) == 0 {
-                self.pulse_1.clock();
-                self.pulse_2.clock();
-                self.noise.clock();
-                self.dmc.clock(mapper);
-            }
-
-            if self.current_cycle >= self.next_sample_at {
-                // Mixing? Bah! Just throw the sample in the buffer.
-                let mut composite_sample: u16 = 0;
-                let pulse_1_sample = self.pulse_1.output();
-                self.pulse_1.debug_buffer[self.buffer_index] = pulse_1_sample;
-                if !(self.pulse_1.debug_disable) {
-                    composite_sample += pulse_1_sample * 512; // Sure, why not?
-                }
-
-                let pulse_2_sample = self.pulse_2.output();
-                self.pulse_2.debug_buffer[self.buffer_index] = pulse_2_sample;
-                if !(self.pulse_2.debug_disable) {
-                    composite_sample += pulse_2_sample * 512; // Sure, why not?
-                }
-
-                let triangle_sample = self.triangle.output();
-                self.triangle.debug_buffer[self.buffer_index] = triangle_sample;
-                if !(self.triangle.debug_disable) {
-                    composite_sample += triangle_sample * 512; // Sure, why not?
-                }
-
-                let noise_sample = self.noise.output();
-                self.noise.debug_buffer[self.buffer_index] = noise_sample;
-                if !(self.noise.debug_disable) {
-                    composite_sample += noise_sample * 512; // Sure, why not?
-                }
-
-                let dmc_sample = self.dmc.output();
-                self.dmc.debug_buffer[self.buffer_index] = dmc_sample;
-                if !(self.dmc.debug_disable) {
-                    composite_sample += dmc_sample * 128; // Sure, why not?
-                }
-
-                self.sample_buffer[self.buffer_index] = composite_sample;
-                self.buffer_index = (self.buffer_index + 1) % self.sample_buffer.len();
-
-                self.generated_samples += 1;
-                self.next_sample_at = ((self.generated_samples + 1) * self.cpu_clock_rate) / self.sample_rate;
-
-                if self.buffer_index == 0 {
-                    //self.dump_sample_buffer();
-                    self.output_buffer.copy_from_slice(&self.sample_buffer);
-                    self.buffer_full = true;
-                }
-            }
-
-            self.current_cycle += 1;
+        // Only clock Pulse channels on every other cycle
+        // (Most documentation calls this once per APU cycle)
+        if (self.current_cycle & 0b1) == 0 {
+            self.pulse_1.clock();
+            self.pulse_2.clock();
+            self.noise.clock();
+            self.dmc.clock(mapper);
         }
+
+        if self.current_cycle >= self.next_sample_at {
+            // Mixing? Bah! Just throw the sample in the buffer.
+            let mut composite_sample: u16 = 0;
+            let pulse_1_sample = self.pulse_1.output();
+            self.pulse_1.debug_buffer[self.buffer_index] = pulse_1_sample;
+            if !(self.pulse_1.debug_disable) {
+                composite_sample += pulse_1_sample * 512; // Sure, why not?
+            }
+
+            let pulse_2_sample = self.pulse_2.output();
+            self.pulse_2.debug_buffer[self.buffer_index] = pulse_2_sample;
+            if !(self.pulse_2.debug_disable) {
+                composite_sample += pulse_2_sample * 512; // Sure, why not?
+            }
+
+            let triangle_sample = self.triangle.output();
+            self.triangle.debug_buffer[self.buffer_index] = triangle_sample;
+            if !(self.triangle.debug_disable) {
+                composite_sample += triangle_sample * 512; // Sure, why not?
+            }
+
+            let noise_sample = self.noise.output();
+            self.noise.debug_buffer[self.buffer_index] = noise_sample;
+            if !(self.noise.debug_disable) {
+                composite_sample += noise_sample * 512; // Sure, why not?
+            }
+
+            let dmc_sample = self.dmc.output();
+            self.dmc.debug_buffer[self.buffer_index] = dmc_sample;
+            if !(self.dmc.debug_disable) {
+                composite_sample += dmc_sample * 128; // Sure, why not?
+            }
+
+            self.sample_buffer[self.buffer_index] = composite_sample;
+            self.buffer_index = (self.buffer_index + 1) % self.sample_buffer.len();
+
+            self.generated_samples += 1;
+            self.next_sample_at = ((self.generated_samples + 1) * self.cpu_clock_rate) / self.sample_rate;
+
+            if self.buffer_index == 0 {
+                //self.dump_sample_buffer();
+                self.output_buffer.copy_from_slice(&self.sample_buffer);
+                self.buffer_full = true;
+            }
+        }
+
+        self.current_cycle += 1;
     }
 
     pub fn dump_sample_buffer(&self) {

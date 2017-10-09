@@ -45,7 +45,7 @@ pub fn cycle(nes: &mut NesState) {
     cycle_cpu::run_one_clock(nes);
     nes.master_clock = nes.master_clock + 12;
     nes.ppu.run_to_cycle(&mut *nes.mapper, nes.master_clock);
-    nes.apu.run_to_cycle(nes.master_clock / 12, &mut *nes.mapper);
+    nes.apu.clock_apu(&mut *nes.mapper);
 }
 
 pub fn step(nes: &mut NesState) {

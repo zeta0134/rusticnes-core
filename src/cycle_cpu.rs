@@ -182,6 +182,20 @@ pub fn control_block(nes: &mut NesState) {
     0x40 => opcodes::rti(nes),
     0x60 => opcodes::rts(nes),
 
+    0x88 => addressing::implied(nes, opcodes::dey),
+    0xA8 => addressing::implied(nes, opcodes::tay),
+    0xC8 => addressing::implied(nes, opcodes::iny),
+    0xE8 => addressing::implied(nes, opcodes::inx),
+
+    0x18 => addressing::implied(nes, opcodes::clc),
+    0x58 => addressing::implied(nes, opcodes::cli),
+    0xB8 => addressing::implied(nes, opcodes::clv),
+    0xD8 => addressing::implied(nes, opcodes::cld),
+    0x38 => addressing::implied(nes, opcodes::sec),
+    0x78 => addressing::implied(nes, opcodes::sei),
+    0xF8 => addressing::implied(nes, opcodes::sed),
+    0x98 => addressing::implied(nes, opcodes::tya),
+
     _ => {
       // Unimplemented, fall back on old behavior
       nes.registers.pc = nes.registers.pc.wrapping_sub(1);

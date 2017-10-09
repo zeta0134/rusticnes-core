@@ -622,6 +622,8 @@ pub fn process_instruction(nes: &mut NesState) {
     let opcode = read_byte(nes, pc);
     nes.registers.pc = nes.registers.pc.wrapping_add(1);
 
+    println!("Old opcode code run for {:02X}", opcode);
+
     match opcode {
         // Add with Carry
         0x69 => { let address = immediate(&mut nes.registers);
