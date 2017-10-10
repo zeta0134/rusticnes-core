@@ -1,5 +1,4 @@
-use cpu;
-use cpu::Registers;
+use cycle_cpu::Registers;
 use memory::read_byte;
 use memory::write_byte;
 use nes::NesState;
@@ -67,28 +66,18 @@ pub fn implied(nes: &mut NesState, opcode_func: ImpliedOpcode) {
   nes.cpu.tick = 0;
 }
 
-// Note: These will be REMOVED eventually, they are here so we can test code partially.
-// Not to be confused with the NOP versions below, which help to group some of the
-// processor's unusual behavior with undefined opcodes.
+// Note: These should never be called. They exist to make some of the decoding logic easier
+// in cycle_cpu.rs. Any erroneous calls are therefore fatal.
 pub fn unimplemented_read(nes: &mut NesState, _: ReadOpcode) {
-  println!("unimplemented read {:02X}", nes.cpu.opcode);
-  nes.registers.pc = nes.registers.pc.wrapping_sub(1);
-  cpu::process_instruction(nes);
-  nes.cpu.tick = 0;
+  panic!("unimplemented read {:02X}", nes.cpu.opcode);
 }
 
 pub fn unimplemented_write(nes: &mut NesState, _: WriteOpcode) {
-  println!("unimplemented write {:02X}", nes.cpu.opcode);
-  nes.registers.pc = nes.registers.pc.wrapping_sub(1);
-  cpu::process_instruction(nes);
-  nes.cpu.tick = 0;
+  panic!("unimplemented write {:02X}", nes.cpu.opcode);
 }
 
 pub fn unimplemented_modify(nes: &mut NesState, _: ModifyOpcode) {
-  println!("unimplemented modify: {:02X}", nes.cpu.opcode);
-  nes.registers.pc = nes.registers.pc.wrapping_sub(1);
-  cpu::process_instruction(nes);
-  nes.cpu.tick = 0;
+  panic!("unimplemented modify {:02X}", nes.cpu.opcode);
 }
 
 // Called by STA in #imm mode, this has the effect of a two-byte NOP

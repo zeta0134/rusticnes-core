@@ -8,6 +8,71 @@ use memory::read_byte;
 use nes::NesState;
 use opcodes;
 
+#[derive(Copy, Clone)]
+pub struct Flags {
+    pub carry: bool,
+    pub zero: bool,
+    pub decimal: bool,
+    pub interrupts_disabled: bool,
+    pub overflow: bool,
+    pub negative: bool,
+
+    // internal only
+    pub last_nmi: bool,
+}
+
+#[derive(Copy, Clone)]
+pub struct Registers {
+    pub a: u8,
+    pub x: u8,
+    pub y: u8,
+    pub pc: u16,
+    pub s: u8,
+    pub flags: Flags,
+}
+
+impl Registers {
+    pub fn new() -> Registers {
+        return Registers {
+            a: 0,
+            x: 0,
+            y: 0,
+            pc: 0,
+            s: 0,
+            flags: Flags {
+                carry: false,
+                zero: false,
+                interrupts_disabled: false,
+                decimal: false,
+                overflow: false,
+                negative: false,
+                last_nmi: false,
+            }
+        }
+    }
+
+    pub fn status_as_byte(&self, s_flag: bool) -> u8 {
+        return (self.flags.carry     as u8) +
+               ((self.flags.zero      as u8) << 1) +
+               ((self.flags.interrupts_disabled as u8) << 2) +
+               ((self.flags.decimal   as u8) << 3) +
+               ((s_flag                    as u8) << 4) +
+               ((1u8                            ) << 5) + // always set
+               ((self.flags.overflow  as u8) << 6) +
+               ((self.flags.negative  as u8) << 7)
+    }
+
+    pub fn set_status_from_byte(&mut self, data: u8) {
+        self.flags.carry =    data & (1 << 0) != 0;
+        self.flags.zero =     data & (1 << 1) != 0;
+        self.flags.interrupts_disabled = data & (1 << 2) != 0;
+        self.flags.decimal =  data & (1 << 3) != 0;
+        // bits 4 and 5, the s_flag, do not actually exist
+        self.flags.overflow = data & (1 << 6) != 0;
+        self.flags.negative = data & (1 << 7) != 0;
+    }
+}
+
 pub struct CpuState {
   pub tick: u8,
   pub opcode: u8,
@@ -33,6 +98,8 @@ impl CpuState {
     }
   }
 }
+
+
 
 pub fn nmi_signal(nes: &NesState) -> bool {
     return ((nes.ppu.control & 0x80) & (nes.ppu.status & 0x80)) != 0;

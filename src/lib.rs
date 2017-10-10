@@ -1,7 +1,6 @@
 pub mod addressing;
 pub mod apu;
 pub mod cartridge;
-pub mod cpu;
 pub mod cycle_cpu;
 pub mod memory;
 pub mod mmc;

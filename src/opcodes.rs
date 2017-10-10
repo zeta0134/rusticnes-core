@@ -1,9 +1,26 @@
 use addressing;
-use cpu;
-use cpu::Registers;
+use cycle_cpu::Registers;
 use nes::NesState;
 use memory::read_byte;
 use memory::write_byte;
+
+// Memory Utilities
+pub fn push(nes: &mut NesState, data: u8) {
+    let address = (nes.registers.s as u16) + 0x0100;
+    write_byte(nes, address, data);
+    nes.registers.s = nes.registers.s.wrapping_sub(1);
+}
+
+pub fn pop(nes: &mut NesState) -> u8 {
+    nes.registers.s = nes.registers.s.wrapping_add(1);
+    let address = (nes.registers.s as u16) + 0x0100;
+    return read_byte(nes, address);
+}
+
+// Flag Utilities
+pub fn overflow(a: u8, b: u8, result: u8) -> bool {
+    return (((!(a ^ b)) & (a ^ result)) & 0x80) != 0
+}
 
 // Logical inclusive OR
 pub fn ora(registers: &mut Registers, data: u8) {
@@ -29,7 +46,7 @@ pub fn eor(registers: &mut Registers, data: u8) {
 pub fn adc(registers: &mut Registers, data: u8) {
   let result: u16 = registers.a as u16 + data as u16 + registers.flags.carry as u16;
   registers.flags.carry = result > 0xFF;
-  registers.flags.overflow = cpu::overflow(registers.a, data, result as u8);
+  registers.flags.overflow = overflow(registers.a, data, result as u8);
   registers.a = (result & 0xFF) as u8;
   registers.flags.zero = registers.a == 0;
   registers.flags.negative = registers.a & 0x80 != 0;
@@ -366,11 +383,11 @@ pub fn service_interrupt(nes: &mut NesState) {
     },
     3 => {
       let pc_high = ((nes.registers.pc & 0xFF00) >> 8) as u8;
-      cpu::push(nes, pc_high);
+      push(nes, pc_high);
     },
     4 => {
       let pc_low =  (nes.registers.pc & 0x00FF) as u8;
-      cpu::push(nes, pc_low);
+      push(nes, pc_low);
     },
     5 => {
       // At this point, NMI always takes priority, otherwise we run
@@ -381,8 +398,8 @@ pub fn service_interrupt(nes: &mut NesState) {
       } else {
         nes.cpu.temp_address = 0xFFFE;
       }
-      let status_byte = cpu::status_as_byte(&mut nes.registers, false);
-      cpu::push(nes, status_byte);
+      let status_byte = nes.registers.status_as_byte(false);
+      push(nes, status_byte);
     },
     6 => {
       // Read PCL from interrupt vector
@@ -422,25 +439,12 @@ pub fn brk(nes: &mut NesState) {
         nes.cpu.temp_address = 0xFFFE;
       }
       // Here we set the B flag to signal a BRK, even if we end up servicing an NMI instead.
-      let status_byte = cpu::status_as_byte(&mut nes.registers, true);
-      cpu::push(nes, status_byte);
+      let status_byte = nes.registers.status_as_byte(true);
+      push(nes, status_byte);
     },
     6 ... 7 => service_interrupt(nes),
     _ => ()
   }
-}
-
-// Memory Utilities
-pub fn push(nes: &mut NesState, data: u8) {
-    let address = (nes.registers.s as u16) + 0x0100;
-    write_byte(nes, address, data);
-    nes.registers.s = nes.registers.s.wrapping_sub(1);
-}
-
-pub fn pop(nes: &mut NesState) -> u8 {
-    nes.registers.s = nes.registers.s.wrapping_add(1);
-    let address = (nes.registers.s as u16) + 0x0100;
-    return read_byte(nes, address);
 }
 
 pub fn jmp_absolute(nes: &mut NesState) {
@@ -504,7 +508,7 @@ pub fn rti(nes: &mut NesState) {
     3 => {/* Would incremeent S here */},
     4 => {
       let s = pop(nes);
-      cpu::set_status_from_byte(&mut nes.registers, s);
+      nes.registers.set_status_from_byte(s);
     },
     5 => {
       // Read PCL
@@ -559,7 +563,7 @@ pub fn php(nes: &mut NesState) {
   match nes.cpu.tick {
     2 => addressing::dummy_data1(nes),
     3 => {
-      let status = cpu::status_as_byte(&mut nes.registers, true);
+      let status = nes.registers.status_as_byte(true);
       push(nes, status);
       nes.cpu.tick = 0;
     },
@@ -588,7 +592,7 @@ pub fn plp(nes: &mut NesState) {
     3 => {/* Increment S */},
     4 => {
       let s = pop(nes);
-      cpu::set_status_from_byte(&mut nes.registers, s);
+      nes.registers.set_status_from_byte(s);
       nes.cpu.tick = 0;
     },
     _ => (),

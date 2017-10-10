@@ -1,7 +1,7 @@
 use apu::ApuState;
 use cycle_cpu;
-use cpu::Registers;
 use cycle_cpu::CpuState;
+use cycle_cpu::Registers;
 use memory::CpuMemory;
 use ppu::PpuState;
 use mmc::mapper::Mapper;
