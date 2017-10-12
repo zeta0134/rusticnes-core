@@ -251,4 +251,12 @@ impl Mapper for Mmc1 {
             _ => {}
         }
     }
+
+    fn has_sram(&self) -> bool {
+        return true;
+    }
+
+    fn get_sram(&self) -> Vec<u8> {
+        return self.prg_ram.to_vec();
+    }
 }

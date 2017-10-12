@@ -8,6 +8,11 @@ use memory::CpuMemory;
 use ppu::PpuState;
 use mmc::mapper::Mapper;
 
+use std::error::Error;
+use std::fs::File;
+use std::io::Read;
+use std::io::Write;
+
 pub struct NesState {
     pub apu: ApuState,
     pub cpu: CpuState,
@@ -74,21 +79,38 @@ impl NesState {
             self.step();
         }
     }
+
+    pub fn write_sram(&mut self, file_path: &str) {
+        if self.mapper.has_sram() {
+            let file = File::create(file_path);
+            match file {
+                Err(why) => {
+                    println!("Couldn't open {}: {}", file_path, why.description());
+                },
+                Ok(mut file) => {
+                    let _ = file.write_all(&self.mapper.get_sram());
+                },
+            };
+        }
+    }
 }
 
-use std::error::Error;
-use std::fs::File;
-use std::io::Read;
-
 pub fn open_file(file_path: &str) -> Option<NesState> {
-    let mut file = match File::open(file_path) {
-        Err(why) => panic!("Couldn't open {}: {}", file_path, why.description()),
-        Ok(file) => file,
+    let file = File::open(file_path);
+    match file {
+        Err(why) => {
+            println!("Couldn't open {}: {}", file_path, why.description());
+            return None;
+        },
+        Ok(_) => (),
     };
     // Read the whole thing
     let mut cartridge = Vec::new();
-    match file.read_to_end(&mut cartridge) {
-        Err(why) => panic!("Couldn't read data: {}", why.description()),
+    match file.unwrap().read_to_end(&mut cartridge) {
+        Err(why) => {
+            println!("Couldn't read data: {}", why.description());
+            return None;
+        },
         Ok(bytes_read) => {
             println!("Data read successfully: {}", bytes_read);
 
@@ -110,5 +132,4 @@ pub fn open_file(file_path: &str) -> Option<NesState> {
             return Some(nes);
         },
     };
-    return None;
 }
