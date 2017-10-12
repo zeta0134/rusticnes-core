@@ -1,7 +1,7 @@
 use nes::NesState;
 
 pub struct CpuMemory {
-    pub iram_raw: [u8; 0x800],
+    pub iram_raw: Vec<u8>,
 
     pub recent_reads: Vec<u16>,
     pub recent_writes: Vec<u16>,
@@ -10,7 +10,7 @@ pub struct CpuMemory {
 impl CpuMemory {
     pub fn new() -> CpuMemory {
         return CpuMemory {
-            iram_raw: [0u8; 0x800],
+            iram_raw: vec!(0u8; 0x800),
             recent_reads: Vec::new(),
             recent_writes: Vec::new(),
         }
@@ -42,8 +42,7 @@ fn _read_byte(nes: &mut NesState, address: u16, side_effects: bool) -> u8 {
                 // PPUSTATUS
                 2 => {
                     if side_effects {
-                        nes.ppu.select_scroll_y = false;
-                        nes.ppu.select_low = false;
+                        nes.ppu.high_write_toggle = false;
                         nes.ppu.latch = (nes.ppu.status & 0xE0) + (nes.ppu.latch & 0x1F);
                         nes.ppu.status = nes.ppu.status & 0x7F; // Clear VBlank bit
                         return nes.ppu.latch;
@@ -139,22 +138,22 @@ pub fn write_byte(nes: &mut NesState, address: u16, data: u8) {
                 },
                 // PPU SCROLL
                 5 => {
-                    if nes.ppu.select_scroll_y {
+                    if nes.ppu.high_write_toggle {
                         nes.ppu.scroll_y = data;
-                        nes.ppu.select_scroll_y = false;
+                        nes.ppu.high_write_toggle = false;
                     } else {
                         nes.ppu.scroll_x = data;
-                        nes.ppu.select_scroll_y = true;
+                        nes.ppu.high_write_toggle = true;
                     }
                 },
                 // PPU ADDR
                 6 => {
-                    if nes.ppu.select_low {
+                    if nes.ppu.high_write_toggle {
                         nes.ppu.current_addr = (nes.ppu.current_addr & 0xFF00) + data as u16;
-                        nes.ppu.select_low = false;
+                        nes.ppu.high_write_toggle = false;
                     } else {
                         nes.ppu.current_addr = (nes.ppu.current_addr & 0xFF) + ((data as u16) << 8);
-                        nes.ppu.select_low = true;
+                        nes.ppu.high_write_toggle = true;
                     }
                 },
                 // PPUDATA
