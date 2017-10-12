@@ -93,6 +93,32 @@ impl NesState {
             };
         }
     }
+
+    pub fn read_sram(&mut self, file_path: &str) {
+        let file = File::open(file_path);
+        match file {
+            Err(why) => {
+                println!("Couldn't open {}: {}", file_path, why.description());
+                return;
+            },
+            Ok(_) => (),
+        };
+        // Read the whole thing
+        let mut sram_data = Vec::new();
+        match file.unwrap().read_to_end(&mut sram_data) {
+            Err(why) => {
+                println!("Couldn't read data: {}", why.description());
+                return;
+            },
+            Ok(bytes_read) => {
+                if bytes_read != self.mapper.get_sram().len() {
+                    println!("SRAM size mismatch, expected {} bytes but file is {} bytes!", bytes_read, self.mapper.get_sram().len());
+                } else {
+                    self.mapper.load_sram(sram_data);
+                }
+            }
+        }
+    }
 }
 
 pub fn open_file(file_path: &str) -> Option<NesState> {

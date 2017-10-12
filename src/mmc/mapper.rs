@@ -14,4 +14,5 @@ pub trait Mapper {
     fn mirroring(&self) -> Mirroring;
     fn has_sram(&self) -> bool {return false;}
     fn get_sram(&self) -> Vec<u8> {return vec![0u8; 0];}
+    fn load_sram(&mut self, _: Vec<u8>) {}
 }
