@@ -95,7 +95,7 @@ impl LengthCounterState{
 
 pub struct PulseChannelState {
     pub debug_disable: bool,
-    pub debug_buffer: [u16; 4096],
+    pub debug_buffer: Vec<u16>,
     pub envelope: VolumeEnvelopeState,
     pub length_counter: LengthCounterState,
 
@@ -120,7 +120,7 @@ impl PulseChannelState {
     pub fn new(sweep_ones_compliment: bool) -> PulseChannelState {
         return PulseChannelState {
             debug_disable: false,
-            debug_buffer: [0u16; 4096],
+            debug_buffer: vec!(0u16; 4096),
             envelope: VolumeEnvelopeState::new(),
             length_counter: LengthCounterState::new(),
 
@@ -204,7 +204,7 @@ impl PulseChannelState {
 
 pub struct TriangleChannelState {
     pub debug_disable: bool,
-    pub debug_buffer: [u16; 4096],
+    pub debug_buffer: Vec<u16>,
     pub length_counter: LengthCounterState,
 
     pub control_flag: bool,
@@ -222,7 +222,7 @@ impl TriangleChannelState {
     pub fn new() -> TriangleChannelState {
         return TriangleChannelState {
             debug_disable: false,
-            debug_buffer: [0u16; 4096],
+            debug_buffer: vec!(0u16; 4096),
             length_counter: LengthCounterState::new(),
             control_flag: false,
             linear_reload_flag: false,
@@ -288,7 +288,7 @@ impl TriangleChannelState {
 
 pub struct NoiseChannelState {
     pub debug_disable: bool,
-    pub debug_buffer: [u16; 4096],
+    pub debug_buffer: Vec<u16>,
     pub length: u8,
     pub length_halt_flag: bool,
 
@@ -307,7 +307,7 @@ impl NoiseChannelState {
     pub fn new() -> NoiseChannelState {
         return NoiseChannelState {
             debug_disable: false,
-            debug_buffer: [0u16; 4096],
+            debug_buffer: vec!(0u16; 4096),
             length: 0,
             length_halt_flag: false,
 
@@ -352,7 +352,7 @@ impl NoiseChannelState {
 
 pub struct DmcState {
     pub debug_disable: bool,
-    pub debug_buffer: [u16; 4096],
+    pub debug_buffer: Vec<u16>,
 
     pub looping: bool,
     pub period_initial: u16,
@@ -377,7 +377,7 @@ impl DmcState {
     pub fn new() -> DmcState {
         return DmcState {
             debug_disable: false,
-            debug_buffer: [0u16; 4096],
+            debug_buffer: vec!(0u16; 4096),
 
             looping: false,
             period_initial: 0,
@@ -484,8 +484,8 @@ pub struct ApuState {
     pub noise: NoiseChannelState,
     pub dmc: DmcState,
 
-    pub sample_buffer: [u16; 4096],
-    pub output_buffer: [u16; 4096],
+    pub sample_buffer: Vec<u16>,
+    pub output_buffer: Vec<u16>,
     pub buffer_full: bool,
     pub sample_rate: u64,
     pub cpu_clock_rate: u64,
@@ -509,8 +509,8 @@ impl ApuState {
             triangle: TriangleChannelState::new(),
             noise: NoiseChannelState::new(),
             dmc: DmcState::new(),
-            sample_buffer: [0u16; 4096],
-            output_buffer: [0u16; 4096],
+            sample_buffer: vec!(0u16; 4096),
+            output_buffer: vec!(0u16; 4096),
             buffer_full: false,
             sample_rate: 44100,
             cpu_clock_rate: 1_786_860,
