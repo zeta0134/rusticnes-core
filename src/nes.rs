@@ -38,39 +38,38 @@ impl NesState {
             mapper: m,
         }
     }
-}
 
-pub fn cycle(nes: &mut NesState) {
-    //cpu::process_instruction(nes);
-    cycle_cpu::run_one_clock(nes);
-    nes.master_clock = nes.master_clock + 12;
-    nes.ppu.run_to_cycle(&mut *nes.mapper, nes.master_clock);
-    nes.apu.clock_apu(&mut *nes.mapper);
-}
-
-pub fn step(nes: &mut NesState) {
-    // Start this instruction
-    cycle(nes);
-    let mut i = 0;
-    while nes.cpu.tick >= 1 && i < 10 {
-        // Continue until this instruction terminates or halts
-        cycle(nes);
-        i += 1;
+    pub fn cycle(&mut self) {
+        cycle_cpu::run_one_clock(self);
+        self.master_clock = self.master_clock + 12;
+        self.ppu.run_to_cycle(&mut *self.mapper, self.master_clock);
+        self.apu.clock_apu(&mut *self.mapper);
     }
-}
 
-pub fn run_until_hblank(nes: &mut NesState) {
-    let old_scanline = nes.ppu.current_scanline;
-    while old_scanline == nes.ppu.current_scanline {
-        step(nes);
+    pub fn step(&mut self) {
+        // Start this instruction
+        self.cycle();
+        let mut i = 0;
+        while self.cpu.tick >= 1 && i < 10 {
+            // Continue until this instruction terminates or halts
+            self.cycle();
+            i += 1;
+        }
     }
-}
 
-pub fn run_until_vblank(nes: &mut NesState) {
-    while nes.ppu.current_scanline == 242 {
-        step(nes);
+    pub fn run_until_hblank(&mut self) {
+        let old_scanline = self.ppu.current_scanline;
+        while old_scanline == self.ppu.current_scanline {
+            self.step();
+        }
     }
-    while nes.ppu.current_scanline != 242 {
-        step(nes);
+
+    pub fn run_until_vblank(&mut self) {
+        while self.ppu.current_scanline == 242 {
+            self.step();
+        }
+        while self.ppu.current_scanline != 242 {
+            self.step();
+        }
     }
 }
