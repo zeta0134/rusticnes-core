@@ -49,7 +49,11 @@ impl NesState {
     pub fn cycle(&mut self) {
         cycle_cpu::run_one_clock(self);
         self.master_clock = self.master_clock + 12;
-        self.ppu.run_to_cycle(&mut *self.mapper, self.master_clock);
+        //self.ppu.run_to_cycle(&mut *self.mapper, self.master_clock);
+        // Three PPU clocks per every 1 CPU clock
+        self.ppu.clock(&mut *self.mapper);
+        self.ppu.clock(&mut *self.mapper);
+        self.ppu.clock(&mut *self.mapper);
         self.apu.clock_apu(&mut *self.mapper);
     }
 

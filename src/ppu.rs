@@ -6,7 +6,7 @@ use mmc::mapper::*;
 
 pub struct PpuState {
     // PPU Memory (incl. cart CHR ROM for now)
-    pub internal_vram: Vec<u8>, // 4k for four-screen mirroring, most games only use upper 2k
+    pub internal_vram: Vec<u8>,
     pub oam: Vec<u8>,
     pub palette: Vec<u8>,
 
@@ -55,7 +55,7 @@ pub struct PpuState {
 impl PpuState {
     pub fn new() -> PpuState {
         return PpuState {
-           internal_vram: vec!(0u8; 0x1000),
+           internal_vram: vec!(0u8; 0x1000),  // 4k for four-screen mirroring, most games only use upper 2k
            oam: vec!(0u8; 0x100),
            palette: vec!(0u8; 0x20),
            current_frame: 0,
@@ -311,10 +311,9 @@ impl PpuState {
         }
     }
 
-    pub fn run_to_cycle(&mut self, mapper: &mut Mapper, current_cycle: u64) {
-        let cycles_per_scanline = 341 * 4;
-        self.scanline_cycles = self.scanline_cycles + (current_cycle - self.last_cycle);
-        self.last_cycle = current_cycle;
+    pub fn clock(&mut self, mapper: &mut Mapper) {
+        let cycles_per_scanline = 341;
+        self.scanline_cycles = self.scanline_cycles + 1;
         while self.scanline_cycles > cycles_per_scanline {
             self.process_scanline(mapper);
             self.current_scanline = self.current_scanline.wrapping_add(1);
