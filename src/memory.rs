@@ -42,7 +42,7 @@ fn _read_byte(nes: &mut NesState, address: u16, side_effects: bool) -> u8 {
                 // PPUSTATUS
                 2 => {
                     if side_effects {
-                        nes.ppu.high_write_toggle = false;
+                        nes.ppu.write_toggle = false;
                         nes.ppu.latch = (nes.ppu.status & 0xE0) + (nes.ppu.latch & 0x1F);
                         nes.ppu.status = nes.ppu.status & 0x7F; // Clear VBlank bit
                         return nes.ppu.latch;
@@ -118,6 +118,10 @@ pub fn write_byte(nes: &mut NesState, address: u16, data: u8) {
                 // PPUCTRL
                 0 => {
                     nes.ppu.control = data;
+                    // Shift the nametable select bits into the temporary vram address
+                    //                                  yyy_nn_YYYYY_XXXXX
+                    nes.ppu.temporary_vram_address &= 0b111_00_11111_11111;
+                    nes.ppu.temporary_vram_address |= (data as u16) << 10;
                 },
                 // PPU MASK
                 1 => {
@@ -138,22 +142,48 @@ pub fn write_byte(nes: &mut NesState, address: u16, data: u8) {
                 },
                 // PPU SCROLL
                 5 => {
-                    if nes.ppu.high_write_toggle {
-                        nes.ppu.scroll_y = data;
-                        nes.ppu.high_write_toggle = false;
+                    if nes.ppu.write_toggle {
+                        nes.ppu.scroll_y = data; // OLD
+
+                        // Set coarse Y into temporary address
+                        //                                  yyy_nn_YYYYY_XXXXX
+                        nes.ppu.temporary_vram_address &= 0b111_11_00000_11111;
+                        nes.ppu.temporary_vram_address |= ((data as u16) >> 3) << 5;
+                        // Set fine Y into temporary address as well
+                        //                                  yyy_nn_YYYYY_XXXXX
+                        nes.ppu.temporary_vram_address &= 0b000_11_11111_11111;
+                        nes.ppu.temporary_vram_address |= ((data as u16) & 0b111) << 12;
+
+                        nes.ppu.write_toggle = false;
                     } else {
-                        nes.ppu.scroll_x = data;
-                        nes.ppu.high_write_toggle = true;
+                        nes.ppu.scroll_x = data; // OLD
+
+                        // Set coarse X into temporary address
+                        //                                  yyy_nn_YYYYY_XXXXX
+                        nes.ppu.temporary_vram_address &= 0b111_11_11111_00000;
+                        nes.ppu.temporary_vram_address |= (data as u16) >> 3;
+                        // Set fine X immediately
+                        nes.ppu.fine_x = data & 0b111;
+
+                        nes.ppu.write_toggle = true;
                     }
                 },
                 // PPU ADDR
                 6 => {
-                    if nes.ppu.high_write_toggle {
-                        nes.ppu.current_addr = (nes.ppu.current_addr & 0xFF00) + data as u16;
-                        nes.ppu.high_write_toggle = false;
+                    if nes.ppu.write_toggle {
+                        nes.ppu.current_addr = (nes.ppu.current_addr & 0xFF00) + data as u16; // OLD
+                        nes.ppu.temporary_vram_address &= 0b1111_1111_0000_0000;
+                        nes.ppu.temporary_vram_address |= data as u16;
+                        // Apply the final vram address immediately
+                        nes.ppu.current_vram_address = nes.ppu.temporary_vram_address & 0b000_11_11111_11111;
+                        nes.ppu.fine_y = ((nes.ppu.temporary_vram_address & 0b111_00_00000_00000) >> 12) as u8;
+
+                        nes.ppu.write_toggle = false;
                     } else {
-                        nes.ppu.current_addr = (nes.ppu.current_addr & 0xFF) + ((data as u16) << 8);
-                        nes.ppu.high_write_toggle = true;
+                        nes.ppu.current_addr = (nes.ppu.current_addr & 0xFF) + ((data as u16) << 8); // OLD
+                        nes.ppu.temporary_vram_address &= 0b0000_0000_1111_1111;
+                        nes.ppu.temporary_vram_address |= ((data as u16) & 0b0011_1111) << 8;
+                        nes.ppu.write_toggle = true;
                     }
                 },
                 // PPUDATA

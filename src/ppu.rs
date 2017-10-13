@@ -44,12 +44,13 @@ pub struct PpuState {
     pub sprite_bg_priority: Vec<bool>,
     pub sprite_zero: Vec<bool>,
 
-    pub high_write_toggle: bool,
+    pub write_toggle: bool,
 
     // Internal State
     pub current_vram_address: u16,
     pub temporary_vram_address: u16,
     pub fine_x: u8,
+    pub fine_y: u8,
 }
 
 impl PpuState {
@@ -79,12 +80,13 @@ impl PpuState {
            latch: 0,
            read_buffer: 0,
 
-           high_write_toggle: false,
+           write_toggle: false,
 
            // Internal State
            current_vram_address: 0,
            temporary_vram_address: 0,
            fine_x: 0,
+           fine_y: 0,
        };
     }
 
