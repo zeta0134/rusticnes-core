@@ -6,9 +6,9 @@ use mmc::mapper::*;
 
 pub struct PpuState {
     // PPU Memory (incl. cart CHR ROM for now)
-    pub internal_vram: [u8; 0x1000], // 4k for four-screen mirroring, most games only use upper 2k
-    pub oam: [u8; 0x100],
-    pub palette: [u8; 0x20],
+    pub internal_vram: Vec<u8>, // 4k for four-screen mirroring, most games only use upper 2k
+    pub oam: Vec<u8>,
+    pub palette: Vec<u8>,
 
     // Memory Mapped Registers
     // PPU Registers
@@ -22,12 +22,10 @@ pub struct PpuState {
     pub oam_addr: u8,
 
     // Scrolling, which is implemented with a flip/flop register
-    pub select_scroll_y: bool,
     pub scroll_x: u8,
     pub scroll_y: u8,
 
     // PPU Address, similar to scrolling, has a high / low component
-    pub select_low: bool,
     pub current_addr: u16,
 
     pub oam_dma_high: u8,
@@ -40,43 +38,53 @@ pub struct PpuState {
     // 
 
     // Framebuffer
-    pub screen: [u8; 256 * 240],
-    pub sprite_color: [u8; 256],
-    pub sprite_index: [u8; 256],
-    pub sprite_bg_priority: [bool; 256],
-    pub sprite_zero: [bool; 256],
+    pub screen: Vec<u8>,
+    pub sprite_color: Vec<u8>,
+    pub sprite_index: Vec<u8>,
+    pub sprite_bg_priority: Vec<bool>,
+    pub sprite_zero: Vec<bool>,
+
+    pub high_write_toggle: bool,
+
+    // Internal State
+    pub current_vram_address: u16,
+    pub temporary_vram_address: u16,
+    pub fine_x: u8,
 }
 
 impl PpuState {
     pub fn new() -> PpuState {
         return PpuState {
-           internal_vram: [0u8; 0x1000],
-           oam: [0u8; 0x100],
-           palette: [0u8; 0x20],
+           internal_vram: vec!(0u8; 0x1000),
+           oam: vec!(0u8; 0x100),
+           palette: vec!(0u8; 0x20),
            current_frame: 0,
            current_scanline: 0,
            scanline_cycles: 0,
            last_cycle: 0,
-           screen: [0u8; 256 * 240],
-           sprite_color: [0u8; 256],
-           sprite_index: [0u8; 256],
-           sprite_bg_priority: [false; 256],
-           sprite_zero: [false; 256],
+           screen: vec!(0u8; 256 * 240),
+           sprite_color: vec!(0u8; 256),
+           sprite_index: vec!(0u8; 256),
+           sprite_bg_priority: vec!(false; 256),
+           sprite_zero: vec!(false; 256),
 
            control: 0,
            mask: 0,
            status: 0,
            oam_addr: 0,
-           select_scroll_y: false,
            scroll_x: 0,
            scroll_y: 0,
-           select_low: false,
            current_addr: 0,
            oam_dma_high: 0,
            latch: 0,
            read_buffer: 0,
 
+           high_write_toggle: false,
 
+           // Internal State
+           current_vram_address: 0,
+           temporary_vram_address: 0,
+           fine_x: 0,
        };
     }
 
@@ -140,10 +148,10 @@ impl PpuState {
 
     fn render_sprites(&mut self, mapper: &mut Mapper, scanline: u8) {
         // Init buffers
-        self.sprite_color = [0u8; 256];
-        self.sprite_index = [0u8; 256];
-        self.sprite_bg_priority = [false; 256];
-        self.sprite_zero = [false; 256];
+        self.sprite_color = vec!(0u8; 256);
+        self.sprite_index = vec!(0u8; 256);
+        self.sprite_bg_priority = vec!(false; 256);
+        self.sprite_zero = vec!(false; 256);
 
         let mut secondary_oam = [0xFFu8; 32];
         let mut secondary_index = 0;
