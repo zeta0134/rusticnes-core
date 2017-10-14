@@ -350,8 +350,8 @@ impl PpuState {
         // Use coarse X and coarse Y (tile indices) to determine which palette to use from
         // the attribute byte, and apply that to the palette latch
         //                                          nn yyyyy xxxxx
-        let attr_x =  self.current_vram_address & 0b00_00000_00001;
-        let attr_y = (self.current_vram_address & 0b00_00001_00000) >> 5;
+        let attr_x = (self.current_vram_address & 0b00_00000_00010) >> 1;
+        let attr_y = (self.current_vram_address & 0b00_00010_00000) >> 6;
         let palette_shift = ((attr_y << 1) | attr_x) * 2;
         self.palette_latch = (self.attribute_byte >> palette_shift) & 0b11;
     }
@@ -361,14 +361,14 @@ impl PpuState {
         let bg_x_bit = 0b1000_0000_0000_0000 >> self.fine_x;
         let bg_x_shift = 15 - self.fine_x;
         let palette_index = 
-            (self.tile_shift_high & bg_x_bit) >> (bg_x_shift - 1) | 
-            (self.tile_shift_low & bg_x_bit) >> bg_x_shift;
+            ((self.tile_shift_high & bg_x_bit) >> (bg_x_shift - 1)) | 
+            ((self.tile_shift_low & bg_x_bit) >> bg_x_shift);
 
         let attr_x_bit = 0b1000_0000 >> self.fine_x;
-        let attr_x_shift = 15 - self.fine_x;
+        let attr_x_shift = 7 - self.fine_x;
         let palette_number =
-            (self.palette_shift_high & attr_x_bit) >> (attr_x_shift - 1) | 
-            (self.palette_shift_low & attr_x_bit) >> attr_x_shift;
+            ((self.palette_shift_high & attr_x_bit) >> (attr_x_shift - 1)) | 
+            ((self.palette_shift_low & attr_x_bit) >> attr_x_shift);
 
         let bg_color = self._read_byte(mapper, (((palette_number as u16) << 2) + palette_index) as u16 + 0x3F00);
 
@@ -394,7 +394,7 @@ impl PpuState {
             coarse_y = 0;
             self.current_vram_address ^= 0b10_00000_00000;
         }
-        self.current_vram_address = self.current_vram_address & 0b11_00000_11111 | ((coarse_y & 0b11111) << 5);
+        self.current_vram_address = (self.current_vram_address & 0b11_00000_11111) | ((coarse_y & 0b11111) << 5);
     }
 
     fn increment_fine_y(&mut self) {

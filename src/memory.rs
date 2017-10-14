@@ -145,13 +145,10 @@ pub fn write_byte(nes: &mut NesState, address: u16, data: u8) {
                     if nes.ppu.write_toggle {
                         nes.ppu.scroll_y = data; // OLD
 
-                        // Set coarse Y into temporary address
+                        // Set coarse Y and fine y into temporary address
                         //                                  yyy_nn_YYYYY_XXXXX
-                        nes.ppu.temporary_vram_address &= 0b111_11_00000_11111;
-                        nes.ppu.temporary_vram_address |= ((data as u16) >> 3) << 5;
-                        // Set fine Y into temporary address as well
-                        //                                  yyy_nn_YYYYY_XXXXX
-                        nes.ppu.temporary_vram_address &= 0b000_11_11111_11111;
+                        nes.ppu.temporary_vram_address &= 0b000_11_00000_11111;
+                        nes.ppu.temporary_vram_address |= ((data as u16) & 0b1111_1000) << 2;
                         nes.ppu.temporary_vram_address |= ((data as u16) & 0b111) << 12;
 
                         nes.ppu.write_toggle = false;
