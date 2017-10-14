@@ -25,9 +25,6 @@ pub struct PpuState {
     pub scroll_x: u8,
     pub scroll_y: u8,
 
-    // PPU Address, similar to scrolling, has a high / low component
-    pub current_addr: u16,
-
     pub oam_dma_high: u8,
 
     // Internal
@@ -48,7 +45,6 @@ pub struct PpuState {
     pub current_vram_address: u16,
     pub temporary_vram_address: u16,
     pub fine_x: u8,
-    pub fine_y: u8,
     pub tile_shift_low: u16,
     pub tile_shift_high: u16,
     pub tile_low: u8,
@@ -81,7 +77,6 @@ impl PpuState {
             oam_addr: 0,
             scroll_x: 0,
             scroll_y: 0,
-            current_addr: 0,
             oam_dma_high: 0,
             latch: 0,
             read_buffer: 0,
@@ -92,7 +87,6 @@ impl PpuState {
             current_vram_address: 0,
             temporary_vram_address: 0,
             fine_x: 0,
-            fine_y: 0,
             tile_shift_low: 0,
             tile_shift_high: 0,
             tile_low: 0,
@@ -254,7 +248,7 @@ impl PpuState {
         }
     }
 
-    fn render_background(&mut self, mapper: &mut Mapper, scanline: u16) {
+    /*fn render_background(&mut self, mapper: &mut Mapper, scanline: u16) {
         let mut pattern_address = 0x0000;
         if (self.control & 0x10) != 0 {
             pattern_address = 0x1000;
@@ -301,7 +295,7 @@ impl PpuState {
                 }
             }
         }
-    }
+    }*/
 
     // Return value: NMI interrupt happened this cycle
     /*pub fn process_scanline(&mut self, mapper: &mut Mapper) {
@@ -376,7 +370,7 @@ impl PpuState {
         self.screen[((self.current_scanline * 256) + (self.current_scanline_cycle - 1)) as usize] = bg_color;
     }
 
-    fn increment_coarse_x(&mut self) {
+    pub fn increment_coarse_x(&mut self) {
         let mut coarse_x = self.current_vram_address & 0b00_00000_11111;
         coarse_x += 1;
         // If we overflowed Coarse X then
@@ -384,25 +378,32 @@ impl PpuState {
             // Switch to the adjacent horizontal nametable
             self.current_vram_address ^= 0b01_00000_00000;
         }
-        self.current_vram_address = self.current_vram_address & 0b11_11111_00000 | (coarse_x & 0b11111);
+        self.current_vram_address = (self.current_vram_address & 0b111_11_11111_00000) | (coarse_x & 0b11111);
     }
 
-    fn increment_coarse_y(&mut self) {
+    pub fn increment_coarse_y(&mut self) {
         let mut coarse_y = (self.current_vram_address & 0b00_11111_00000) >> 5;
         coarse_y += 1;
-        if coarse_y == 29 {
+        if coarse_y == 30 {
             coarse_y = 0;
             self.current_vram_address ^= 0b10_00000_00000;
         }
-        self.current_vram_address = (self.current_vram_address & 0b11_00000_11111) | ((coarse_y & 0b11111) << 5);
+        self.current_vram_address = (self.current_vram_address & 0b111_11_00000_11111) | ((coarse_y & 0b11111) << 5);
     }
 
-    fn increment_fine_y(&mut self) {
-        self.fine_y += 1;
-        if self.fine_y > 7 {
-            self.fine_y = 0;
+    pub fn fine_y(&self) -> u16 {
+        return (self.current_vram_address & 0b111_00_00000_00000) >> 12;
+    }
+
+    pub fn increment_fine_y(&mut self) {
+        let mut fine_y = self.fine_y();
+        fine_y += 1;
+        if fine_y > 7 {
+            fine_y = 0;
             self.increment_coarse_y();
         }
+        self.current_vram_address &= 0b000_11_11111_11111;
+        self.current_vram_address |= (fine_y & 0b111) << 12;
     }
 
     fn prerender_scanline(&mut self, mapper: &mut Mapper,) {
@@ -415,16 +416,15 @@ impl PpuState {
             257 => {
                 if self.rendering_enabled() {
                     // Reload the X scroll components
-                    self.current_vram_address &= 0b10_11111_00000;
+                    self.current_vram_address &= 0b111_10_11111_00000;
                     self.current_vram_address |= self.temporary_vram_address & 0b01_00000_11111;
                 }
             }
             280 ... 304 => {
                 if self.rendering_enabled() {
                     // Reload the Y scroll components
-                    self.current_vram_address &= 0b01_00000_11111;
-                    self.current_vram_address |= self.temporary_vram_address & 0b10_11111_00000;
-                    self.fine_y = ((self.temporary_vram_address & 0b111_00_00000_00000) >> 12) as u8;
+                    self.current_vram_address &= 0b000_01_00000_11111;
+                    self.current_vram_address |= self.temporary_vram_address & 0b111_10_11111_00000;
                 }
             }
             321 ... 336 => {
@@ -483,13 +483,13 @@ impl PpuState {
         4 => {
             let tile_low_address = pattern_address + 
                 (self.tile_index as u16 * 16) + 
-                 self.fine_y as u16;
+                 self.fine_y();
             self.tile_low = self._read_byte(mapper, tile_low_address);
         },
         6 => {
             let tile_high_address = pattern_address + 
                 (self.tile_index as u16 * 16) + 8 +
-                 self.fine_y as u16;
+                 self.fine_y();
             self.tile_high = self._read_byte(mapper, tile_high_address);
         },
         7 => {
@@ -517,7 +517,7 @@ impl PpuState {
                 257 ... 320 => {
                     if self.current_scanline_cycle == 257 {
                         // Reload the X scroll components
-                        self.current_vram_address &= 0b10_11111_00000;
+                        self.current_vram_address &= 0b111_10_11111_00000;
                         self.current_vram_address |= self.temporary_vram_address & 0b01_00000_11111;
                     }
                     // Sprite tile fetches

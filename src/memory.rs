@@ -61,13 +61,23 @@ fn _read_byte(nes: &mut NesState, address: u16, side_effects: bool) -> u8 {
                 },
                 // PPUDATA
                 7 => {
-                    let ppu_addr = nes.ppu.current_addr;
+                    let ppu_addr = nes.ppu.current_vram_address;
                     if side_effects {
                         nes.ppu.latch = nes.ppu.read_byte(&mut *nes.mapper, ppu_addr);
-                        if nes.ppu.control & 0x04 == 0 {
-                            nes.ppu.current_addr = nes.ppu.current_addr.wrapping_add(1);
+                        if nes.ppu.rendering_enabled() && 
+                        (nes.ppu.current_scanline == 261 ||
+                         nes.ppu.current_scanline <= 239) {
+                            // Glitchy increment, a fine y and a coarse x 
+                            nes.ppu.increment_coarse_x();
+                            nes.ppu.increment_fine_y();
                         } else {
-                            nes.ppu.current_addr = nes.ppu.current_addr.wrapping_add(32);
+                            // Normal incrementing behavior based on PPUCTRL
+                            if nes.ppu.control & 0x04 == 0 {
+                                nes.ppu.current_vram_address += 1;
+                            } else {
+                                nes.ppu.current_vram_address += 32;
+                            }
+                            nes.ppu.current_vram_address &= 0b0111_1111_1111_1111;
                         }
                         return nes.ppu.latch;
                     } else {
@@ -168,28 +178,37 @@ pub fn write_byte(nes: &mut NesState, address: u16, data: u8) {
                 // PPU ADDR
                 6 => {
                     if nes.ppu.write_toggle {
-                        nes.ppu.current_addr = (nes.ppu.current_addr & 0xFF00) + data as u16; // OLD
-                        nes.ppu.temporary_vram_address &= 0b1111_1111_0000_0000;
+                        nes.ppu.temporary_vram_address &= 0b0111_1111_0000_0000;
                         nes.ppu.temporary_vram_address |= data as u16;
                         // Apply the final vram address immediately
-                        nes.ppu.current_vram_address = nes.ppu.temporary_vram_address & 0b000_11_11111_11111;
-                        nes.ppu.fine_y = ((nes.ppu.temporary_vram_address & 0b111_00_00000_00000) >> 12) as u8;
+                        nes.ppu.current_vram_address = nes.ppu.temporary_vram_address;
 
                         nes.ppu.write_toggle = false;
                     } else {
-                        nes.ppu.current_addr = (nes.ppu.current_addr & 0xFF) + ((data as u16) << 8); // OLD
                         nes.ppu.temporary_vram_address &= 0b0000_0000_1111_1111;
+                        // Note: This is missing bit 14 on purpose! This is cleared by the real PPU during
+                        // the write to PPU ADDR for reasons unknown.
                         nes.ppu.temporary_vram_address |= ((data as u16) & 0b0011_1111) << 8;
                         nes.ppu.write_toggle = true;
                     }
                 },
                 // PPUDATA
                 7 => {
-                    let ppu_addr = nes.ppu.current_addr;
-                    if nes.ppu.control & 0x04 == 0 {
-                        nes.ppu.current_addr = nes.ppu.current_addr.wrapping_add(1);
+                    let ppu_addr = nes.ppu.current_vram_address;
+                    if nes.ppu.rendering_enabled() && 
+                    (nes.ppu.current_scanline == 261 ||
+                    nes.ppu.current_scanline <= 239) {
+                        // Glitchy increment, a fine y and a coarse x 
+                        nes.ppu.increment_coarse_x();
+                        nes.ppu.increment_fine_y();
                     } else {
-                        nes.ppu.current_addr = nes.ppu.current_addr.wrapping_add(32);
+                        // Normal incrementing behavior based on PPUCTRL
+                        if nes.ppu.control & 0x04 == 0 {
+                            nes.ppu.current_vram_address += 1;
+                        } else {
+                            nes.ppu.current_vram_address += 32;
+                        }
+                        nes.ppu.current_vram_address &= 0b0111_1111_1111_1111;
                     }
                     nes.ppu.write_byte(&mut *nes.mapper, ppu_addr, data);
                 },
