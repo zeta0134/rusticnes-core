@@ -300,7 +300,7 @@ impl PpuState {
         // Output a pixel based on the current background shifters
         let bg_x_bit = 0b1000_0000_0000_0000 >> self.fine_x;
         let bg_x_shift = 15 - self.fine_x;
-        let bg_palette_index = 
+        let mut bg_palette_index = 
             ((self.tile_shift_high & bg_x_bit) >> (bg_x_shift - 1)) | 
             ((self.tile_shift_low & bg_x_bit) >> bg_x_shift);
 
@@ -310,6 +310,11 @@ impl PpuState {
         let bg_palette_low  = (self.palette_shift_low  & attr_x_bit) >> attr_x_shift;
         let mut bg_palette_number = (bg_palette_high << 1) | bg_palette_low;
 
+        // If backgrounds are disabled, ignore all that work above, and switch to color 0
+        if self.mask & 0b0000_1000 == 0 {
+            bg_palette_index = 0;
+        }
+
         if bg_palette_index == 0 {
             // bg color 0 always uses the first palette
             bg_palette_number = 0;
@@ -317,23 +322,26 @@ impl PpuState {
 
         let mut pixel_color = self._read_byte(mapper, (((bg_palette_number as u16) << 2) + bg_palette_index) as u16 + 0x3F00);
 
-        // Iterate over sprites in reverse order, and find the lowest numbered sprite with an opaque pixel:
-        let mut sprite_index = 8;
-        for i in (0 .. self.secondary_oam_index).rev() {
-            if self.secondary_oam[i].active && self.secondary_oam[i].palette_index() != 0 {
-                // Mark this as the lowest active sprite
-                sprite_index = i;
+        // If sprites are enabled
+        if self.mask & 0b0001_0000 != 0 {
+            // Iterate over sprites in reverse order, and find the lowest numbered sprite with an opaque pixel:
+            let mut sprite_index = 8;
+            for i in (0 .. self.secondary_oam_index).rev() {
+                if self.secondary_oam[i].active && self.secondary_oam[i].palette_index() != 0 {
+                    // Mark this as the lowest active sprite
+                    sprite_index = i;
+                }
             }
-        }
-        if sprite_index < 8 {
-            if self.sprite_zero_on_scanline && sprite_index == 0 && bg_palette_index != 0 {
-                // Sprite zero hit!
-                self.status = self.status | 0x40;
-            }
-            if bg_palette_index == 0 || !self.secondary_oam[sprite_index].bg_priority() {
-                let sprite_palette_number = self.secondary_oam[sprite_index].palette() as u16;
-                let sprite_palette_index = self.secondary_oam[sprite_index].palette_index() as u16;
-                pixel_color = self._read_byte(mapper, (sprite_palette_number << 2) + sprite_palette_index + 0x3F10);
+            if sprite_index < 8 {
+                if self.sprite_zero_on_scanline && sprite_index == 0 && bg_palette_index != 0 {
+                    // Sprite zero hit!
+                    self.status = self.status | 0x40;
+                }
+                if bg_palette_index == 0 || !self.secondary_oam[sprite_index].bg_priority() {
+                    let sprite_palette_number = self.secondary_oam[sprite_index].palette() as u16;
+                    let sprite_palette_index = self.secondary_oam[sprite_index].palette_index() as u16;
+                    pixel_color = self._read_byte(mapper, (sprite_palette_number << 2) + sprite_palette_index + 0x3F10);
+                }
             }
         }
 
