@@ -131,7 +131,7 @@ pub fn write_byte(nes: &mut NesState, address: u16, data: u8) {
                     // Shift the nametable select bits into the temporary vram address
                     //                                  yyy_nn_YYYYY_XXXXX
                     nes.ppu.temporary_vram_address &= 0b111_00_11111_11111;
-                    nes.ppu.temporary_vram_address |= (data as u16) << 10;
+                    nes.ppu.temporary_vram_address |= (data as u16 & 0b11) << 10;
                 },
                 // PPU MASK
                 1 => {
@@ -153,8 +153,6 @@ pub fn write_byte(nes: &mut NesState, address: u16, data: u8) {
                 // PPU SCROLL
                 5 => {
                     if nes.ppu.write_toggle {
-                        nes.ppu.scroll_y = data; // OLD
-
                         // Set coarse Y and fine y into temporary address
                         //                                  yyy_nn_YYYYY_XXXXX
                         nes.ppu.temporary_vram_address &= 0b000_11_00000_11111;
@@ -163,8 +161,6 @@ pub fn write_byte(nes: &mut NesState, address: u16, data: u8) {
 
                         nes.ppu.write_toggle = false;
                     } else {
-                        nes.ppu.scroll_x = data; // OLD
-
                         // Set coarse X into temporary address
                         //                                  yyy_nn_YYYYY_XXXXX
                         nes.ppu.temporary_vram_address &= 0b111_11_11111_00000;
@@ -182,7 +178,6 @@ pub fn write_byte(nes: &mut NesState, address: u16, data: u8) {
                         nes.ppu.temporary_vram_address |= data as u16;
                         // Apply the final vram address immediately
                         nes.ppu.current_vram_address = nes.ppu.temporary_vram_address;
-
                         nes.ppu.write_toggle = false;
                     } else {
                         nes.ppu.temporary_vram_address &= 0b0000_0000_1111_1111;

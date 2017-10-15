@@ -21,10 +21,6 @@ pub struct PpuState {
     pub status: u8,
     pub oam_addr: u8,
 
-    // Scrolling, which is implemented with a flip/flop register
-    pub scroll_x: u8,
-    pub scroll_y: u8,
-
     pub oam_dma_high: u8,
 
     // Internal
@@ -75,8 +71,6 @@ impl PpuState {
             mask: 0,
             status: 0,
             oam_addr: 0,
-            scroll_x: 0,
-            scroll_y: 0,
             oam_dma_high: 0,
             latch: 0,
             read_buffer: 0,
