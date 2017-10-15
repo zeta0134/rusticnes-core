@@ -572,6 +572,16 @@ impl PpuState {
                 },
                 _ => ()
             }
+        } else {
+            match self.current_scanline_cycle {
+                // cycle 0 is a dummy cycle, nothing happens
+                1 ... 256 => {
+                    // The PPU is disabled, so output background pixel zero all the time
+                    let pixel_color = self._read_byte(mapper, 0x3F00);
+                    self.screen[((self.current_scanline * 256) + (self.current_scanline_cycle - 1)) as usize] = pixel_color;
+                },
+                _ => ()
+            }
         }
     }
 
