@@ -306,9 +306,10 @@ impl PpuState {
 
         let attr_x_bit = 0b1000_0000 >> self.fine_x;
         let attr_x_shift = 7 - self.fine_x;
-        let mut bg_palette_number =
-            ((self.palette_shift_high & attr_x_bit) >> (attr_x_shift - 1)) | 
-            ((self.palette_shift_low & attr_x_bit) >> attr_x_shift);
+        let bg_palette_high = (self.palette_shift_high & attr_x_bit) >> attr_x_shift;
+        let bg_palette_low  = (self.palette_shift_low  & attr_x_bit) >> attr_x_shift;
+        let mut bg_palette_number = (bg_palette_high << 1) | bg_palette_low;
+
         if bg_palette_index == 0 {
             // bg color 0 always uses the first palette
             bg_palette_number = 0;
