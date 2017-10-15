@@ -102,7 +102,7 @@ pub struct PpuState {
     pub current_scanline_cycle: u16,    
 
     // Framebuffer
-    pub screen: Vec<u8>,
+    pub screen: Vec<u16>,
     pub sprite_color: Vec<u8>,
     pub sprite_index: Vec<u8>,
     pub sprite_bg_priority: Vec<bool>,
@@ -138,7 +138,7 @@ impl PpuState {
             current_frame: 0,
             current_scanline: 0,
             current_scanline_cycle: 0,
-            screen: vec!(0u8; 256 * 240),
+            screen: vec!(0u16; 256 * 240),
             sprite_color: vec!(0u8; 256),
             sprite_index: vec!(0u8; 256),
             sprite_bg_priority: vec!(false; 256),
@@ -296,6 +296,12 @@ impl PpuState {
         self.palette_latch = (self.attribute_byte >> palette_shift) & 0b11;
     }
 
+    fn plot_pixel(&mut self, x: u16, y: u16, color: u8) {
+        let index = ((y as usize) * 256) + (x as usize);
+        let pixel_color = (((self.mask as u16) & 0b1110_0000) << 1) | ((color as u16) & 0b0011_1111);
+        self.screen[index] = pixel_color;
+    }
+
     fn draw_pixel(&mut self, mapper: &mut Mapper) {
         // Output a pixel based on the current background shifters
         let bg_x_bit = 0b1000_0000_0000_0000 >> self.fine_x;
@@ -345,8 +351,9 @@ impl PpuState {
             }
         }
 
-        // TODO: Include sprites here
-        self.screen[((self.current_scanline * 256) + (self.current_scanline_cycle - 1)) as usize] = pixel_color;
+        let px = self.current_scanline_cycle - 1;
+        let py = self.current_scanline;
+        self.plot_pixel(px, py, pixel_color);
     }
 
     pub fn increment_coarse_x(&mut self) {
@@ -578,7 +585,9 @@ impl PpuState {
                 1 ... 256 => {
                     // The PPU is disabled, so output background pixel zero all the time
                     let pixel_color = self._read_byte(mapper, 0x3F00);
-                    self.screen[((self.current_scanline * 256) + (self.current_scanline_cycle - 1)) as usize] = pixel_color;
+                    let px = self.current_scanline_cycle - 1;
+                    let py = self.current_scanline;
+                    self.plot_pixel(px, py, pixel_color);
                 },
                 _ => ()
             }
