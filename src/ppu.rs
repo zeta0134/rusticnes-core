@@ -432,7 +432,7 @@ impl PpuState {
             let mut pattern_address: u16 = 0x0000;
             // If we're using 8x16 sprites, set the pattern based on the sprite's tile index
             if sprite_size == 16 {
-                if (self.secondary_oam[sprite_index].tile_index & 0b1) != 0 {
+                if (tile_index & 0b1) != 0 {
                     pattern_address = 0x1000;
                 }
                 tile_index &= 0b1111_1110;
@@ -446,6 +446,11 @@ impl PpuState {
             let mut y_offset = self.current_scanline - self.secondary_oam[sprite_index].y_pos as u16;
             if self.secondary_oam[sprite_index].y_flip() {
                 y_offset = sprite_size - 1 - y_offset;
+            }
+
+            if y_offset >= 8 {
+                y_offset -= 8;
+                tile_index += 1;
             }
 
             let tile_address = pattern_address + (tile_index as u16 * 16) + y_offset;
