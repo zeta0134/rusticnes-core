@@ -5,6 +5,7 @@
 
 use addressing;
 use memory::read_byte;
+use memory::write_byte;
 use nes::NesState;
 use opcodes;
 
@@ -82,6 +83,10 @@ pub struct CpuState {
   pub service_routine_active: bool,
   pub nmi_requested: bool,
   pub last_nmi: bool,
+
+  pub oam_dma_active: bool,
+  pub oam_dma_cycle: u16,
+  pub oam_dma_address: u16,
 }
 
 impl CpuState {
@@ -95,6 +100,9 @@ impl CpuState {
       service_routine_active: false,
       nmi_requested: false,
       last_nmi: false,
+      oam_dma_active: false,
+      oam_dma_cycle: 0,
+      oam_dma_address: 0,
     }
   }
 }
@@ -270,7 +278,27 @@ pub fn control_block(nes: &mut NesState) {
   };
 }
 
+pub fn advance_oam_dma(nes: &mut NesState) {
+  if nes.cpu.oam_dma_cycle & 0b1 == 0 {
+    let address = nes.cpu.oam_dma_address;
+    let oam_byte = read_byte(nes, address);
+    write_byte(nes, 0x2004, oam_byte);
+    nes.cpu.oam_dma_address += 1;
+  }
+  
+  nes.cpu.oam_dma_cycle += 1;
+
+  if nes.cpu.oam_dma_cycle > 511 {
+    nes.cpu.oam_dma_active = false;
+  }
+}
+
 pub fn run_one_clock(nes: &mut NesState) {
+  if nes.cpu.oam_dma_active {
+    advance_oam_dma(nes);
+    return;
+  }
+
   nes.cpu.tick += 1;
 
   // The ordering of these checks may seem a bit strange. The 6502 polls for interrupts

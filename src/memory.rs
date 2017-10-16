@@ -215,11 +215,15 @@ pub fn write_byte(nes: &mut NesState, address: u16, data: u8) {
         },
         0x4014 => {
             // OAM DMA, for cheating just do this instantly and return
-            let read_address = (data as u16) << 8;
-            for i in 0 .. 256 {
-                let byte = read_byte(nes, read_address + i);
-                nes.ppu.oam[i as usize] = byte;
-            }
+            // OR NOT!
+            //let read_address = (data as u16) << 8;
+            //for i in 0 .. 256 {
+            //    let byte = read_byte(nes, read_address + i);
+            //    nes.ppu.oam[i as usize] = byte;
+            //}
+            nes.cpu.oam_dma_address = (data as u16) << 8;
+            nes.cpu.oam_dma_cycle = 0;
+            nes.cpu.oam_dma_active = true;
         },
         0x4015 => {
             nes.apu.write_register(address, data);
