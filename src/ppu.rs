@@ -701,7 +701,7 @@ pub fn nametable_address(read_address: u16, mirroring: Mirroring) -> u16 {
 
 // Given a pattern and tile / pixel coordinates, decodes the palette index and returns it
 // (Palette index will be between 0 .. 3)
-pub fn decode_chr_pixel(mapper: &Mapper, pattern_address: u16, tile: u8, pixel_x: u8, pixel_y: u8) -> u8 {
+pub fn decode_chr_pixel(mapper: &mut Mapper, pattern_address: u16, tile: u8, pixel_x: u8, pixel_y: u8) -> u8 {
     let low_addr = (tile as u16) * 16 + (pixel_y as u16);
     let high_addr = low_addr + 8;
     let low_bit = mapper.read_byte(pattern_address + low_addr) >> (7 - pixel_x) & 0x1;

@@ -74,7 +74,7 @@ impl Mapper for Mmc1 {
         return self.mirroring;
     }
 
-    fn read_byte(&self, address: u16) -> u8 {
+    fn read_byte(&mut self, address: u16) -> u8 {
         match address {
             // CHR Bank 0
             0x0000 ... 0x0FFF => {

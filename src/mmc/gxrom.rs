@@ -29,7 +29,7 @@ impl Mapper for GxRom {
         return self.mirroring;
     }
 
-    fn read_byte(&self, address: u16) -> u8 {
+    fn read_byte(&mut self, address: u16) -> u8 {
         match address {
             0x0000 ... 0x1FFF => {
                 let chr_rom_len = self.chr_rom.len();

@@ -117,7 +117,7 @@ pub fn irq_signal(nes: &NesState) -> bool {
   if nes.registers.flags.interrupts_disabled {
     return false;
   } else {
-    return nes.apu.irq_signal();
+    return nes.apu.irq_signal() || nes.mapper.irq_flag();
   }
 }
 

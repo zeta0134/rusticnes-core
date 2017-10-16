@@ -3,6 +3,7 @@ use mmc::axrom::AxRom;
 use mmc::gxrom::GxRom;
 use mmc::nrom::Nrom;
 use mmc::mmc1::Mmc1;
+use mmc::mmc3::Mmc3;
 use mmc::uxrom::UxRom;
 
 // iNES 1.0 Header. Flags and decoding documented here. 2.0 is not yet supported.
@@ -109,6 +110,7 @@ pub fn load_from_cartridge(nes_header: NesHeader, cartridge: &Vec<u8>) -> Box<Ma
         0 => Box::new(Nrom::new(header, chr_rom, prg_rom)),
         1 => Box::new(Mmc1::new(header, chr_rom, prg_rom)),
         2 => Box::new(UxRom::new(header, chr_rom, prg_rom)),
+        4 => Box::new(Mmc3::new(header, chr_rom, prg_rom)),
         7 => Box::new(AxRom::new(header, chr_rom, prg_rom)),
         66 => Box::new(GxRom::new(header, chr_rom, prg_rom)),
         _ => {

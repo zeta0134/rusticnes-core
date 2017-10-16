@@ -27,7 +27,7 @@ impl Mapper for Nrom {
         return self.mirroring;
     }
     
-    fn read_byte(&self, address: u16) -> u8 {
+    fn read_byte(&mut self, address: u16) -> u8 {
         match address {
             0x0000 ... 0x1FFF => return self.chr_rom[address as usize],
             0x6000 ... 0x7FFF => {
