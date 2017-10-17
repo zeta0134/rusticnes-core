@@ -211,7 +211,7 @@ impl PpuState {
     pub fn write_byte(&mut self, mapper: &mut Mapper, address: u16, data: u8) {
         let masked_address = address & 0x3FFF;
         match masked_address {
-            0x0000 ... 0x1FFF => mapper.write_byte(address, data),
+            0x0000 ... 0x1FFF => mapper.write_byte(masked_address, data),
             // Nametable 0
             0x2000 ... 0x2FFF => self.internal_vram[nametable_address(masked_address, mapper.mirroring()) as usize] = data,
             0x3000 ... 0x3EFF => self.write_byte(mapper, masked_address - 0x1000, data),
