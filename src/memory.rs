@@ -78,11 +78,12 @@ fn _read_byte(nes: &mut NesState, address: u16, side_effects: bool) -> u8 {
                                 nes.ppu.current_vram_address += 32;
                             }
                             nes.ppu.current_vram_address &= 0b0111_1111_1111_1111;
-                            // Perform a dummy read immediately, to simulte the behavior of the PPU
-                            // address lines changing, so the mapper can react accordingly
-                            let address = nes.ppu.current_vram_address;
-                            let _ = nes.ppu.read_byte(&mut *nes.mapper, address);
                         }
+                        // Perform a dummy read immediately, to simulte the behavior of the PPU
+                        // address lines changing, so the mapper can react accordingly
+                        let address = nes.ppu.current_vram_address;
+                        let _ = nes.ppu.read_byte(&mut *nes.mapper, address);
+
                         return nes.ppu.latch;
                     } else {
                         return nes.ppu.read_byte(&mut *nes.mapper, ppu_addr);
@@ -212,11 +213,12 @@ pub fn write_byte(nes: &mut NesState, address: u16, data: u8) {
                             nes.ppu.current_vram_address += 32;
                         }
                         nes.ppu.temporary_vram_address &= 0b0111_1111_0000_0000;
-                        // Perform a dummy read immediately, to simulte the behavior of the PPU
-                        // address lines changing, so the mapper can react accordingly
-                        let address = nes.ppu.current_vram_address;
-                        let _ = nes.ppu.read_byte(&mut *nes.mapper, address);
                     }
+                    // Perform a dummy read immediately, to simulte the behavior of the PPU
+                    // address lines changing, so the mapper can react accordingly
+                    let address = nes.ppu.current_vram_address;
+                    let _ = nes.ppu.read_byte(&mut *nes.mapper, address);
+                    
                     nes.ppu.write_byte(&mut *nes.mapper, ppu_addr, data);
                 },
                 _ => ()
