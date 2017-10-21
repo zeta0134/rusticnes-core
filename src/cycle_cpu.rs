@@ -282,7 +282,7 @@ pub fn control_block(nes: &mut NesState) {
 }
 
 pub fn advance_oam_dma(nes: &mut NesState) {
-  if nes.cpu.oam_dma_cycle & 0b1 == 0 {
+  if nes.cpu.oam_dma_cycle & 0b1 == 0 && nes.cpu.oam_dma_cycle <= 511 {
     let address = nes.cpu.oam_dma_address;
     let oam_byte = read_byte(nes, address);
     write_byte(nes, 0x2004, oam_byte);
