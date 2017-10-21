@@ -848,35 +848,35 @@ impl ApuState {
 
         if self.current_cycle >= self.next_sample_at {
             // Mixing? Bah! Just throw the sample in the buffer.
-            let mut composite_sample: i16 = -32768;
+            let mut composite_sample: i16 = 0;
             let pulse_1_sample = self.pulse_1.output();
             self.pulse_1.debug_buffer[self.buffer_index] = pulse_1_sample;
             if !(self.pulse_1.debug_disable) {
-                composite_sample += pulse_1_sample * 512; // Sure, why not?
+                composite_sample += pulse_1_sample * 256; // Sure, why not?
             }
 
             let pulse_2_sample = self.pulse_2.output();
             self.pulse_2.debug_buffer[self.buffer_index] = pulse_2_sample;
             if !(self.pulse_2.debug_disable) {
-                composite_sample += pulse_2_sample * 512; // Sure, why not?
+                composite_sample += pulse_2_sample * 256; // Sure, why not?
             }
 
             let triangle_sample = self.triangle.output();
             self.triangle.debug_buffer[self.buffer_index] = triangle_sample;
             if !(self.triangle.debug_disable) {
-                composite_sample += triangle_sample * 512; // Sure, why not?
+                composite_sample += triangle_sample * 256; // Sure, why not?
             }
 
             let noise_sample = self.noise.output();
             self.noise.debug_buffer[self.buffer_index] = noise_sample;
             if !(self.noise.debug_disable) {
-                composite_sample += noise_sample * 512; // Sure, why not?
+                composite_sample += noise_sample * 256; // Sure, why not?
             }
 
             let dmc_sample = self.dmc.output();
             self.dmc.debug_buffer[self.buffer_index] = dmc_sample;
             if !(self.dmc.debug_disable) {
-                composite_sample += dmc_sample * 128; // Sure, why not?
+                composite_sample += dmc_sample * 64; // Sure, why not?
             }
 
             self.sample_buffer[self.buffer_index] = composite_sample;
