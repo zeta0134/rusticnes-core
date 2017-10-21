@@ -82,6 +82,7 @@ pub struct CpuState {
   pub temp_address: u16,
   pub service_routine_active: bool,
   pub nmi_requested: bool,
+  pub irq_requested: bool,
   pub last_nmi: bool,
 
   pub oam_dma_active: bool,
@@ -100,6 +101,7 @@ impl CpuState {
       service_routine_active: false,
       nmi_requested: false,
       last_nmi: false,
+      irq_requested: false,
       oam_dma_active: false,
       oam_dma_cycle: 0,
       oam_dma_address: 0,
@@ -128,10 +130,11 @@ pub fn poll_for_interrupts(nes: &mut NesState) {
   if current_nmi && !last_nmi {
     nes.cpu.nmi_requested = true;
   }
+  nes.cpu.irq_requested = irq_signal(&nes);
 }
 
 pub fn interrupt_requested(nes: &NesState) -> bool {
-  return nes.cpu.nmi_requested || irq_signal(&nes);
+  return nes.cpu.nmi_requested || nes.cpu.irq_requested;
 }
 
 pub fn alu_block(nes: &mut NesState, addressing_mode_index: u8, opcode_index: u8) {
