@@ -212,7 +212,7 @@ pub fn write_byte(nes: &mut NesState, address: u16, data: u8) {
                         } else {
                             nes.ppu.current_vram_address += 32;
                         }
-                        nes.ppu.temporary_vram_address &= 0b0111_1111_0000_0000;
+                        nes.ppu.current_vram_address &= 0b0111_1111_1111_1111;
                     }
                     // Perform a dummy read immediately, to simulte the behavior of the PPU
                     // address lines changing, so the mapper can react accordingly

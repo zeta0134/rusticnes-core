@@ -490,33 +490,41 @@ impl PpuState {
             1 => {
                 // Clear vblank, sprite overflow and sprite zero hit
                 self.status = self.status & 0x1F;
-                self.fetch_bg_tile(mapper, 0);
+                if self.rendering_enabled() {
+                    self.fetch_bg_tile(mapper, 0);
+                }
             },
             2 ... 256 => {
-                let sub_cycle = (self.current_scanline_cycle - 1) % 8;
-                self.fetch_bg_tile(mapper, 0);  
+                if self.rendering_enabled() {
+                    let sub_cycle = (self.current_scanline_cycle - 1) % 8;
+                    self.fetch_bg_tile(mapper, sub_cycle);  
+                }
             },
             257 => {
                 if self.rendering_enabled() {
                     // Reload the X scroll components
                     self.current_vram_address &= 0b111_10_11111_00000;
                     self.current_vram_address |= self.temporary_vram_address & 0b01_00000_11111;
+                    self.fetch_sprite_tiles(mapper);
                 }
-                self.fetch_sprite_tiles(mapper);
             },
             258 ... 279 => {
-                self.fetch_sprite_tiles(mapper);
+                if self.rendering_enabled() {
+                    self.fetch_sprite_tiles(mapper);
+                }
             },
             280 ... 304 => {
                 if self.rendering_enabled() {
                     // Reload the Y scroll components
                     self.current_vram_address &= 0b000_01_00000_11111;
                     self.current_vram_address |= self.temporary_vram_address & 0b111_10_11111_00000;
+                    self.fetch_sprite_tiles(mapper);
                 }
-                self.fetch_sprite_tiles(mapper);
             },
             305 ... 320 => {
-                self.fetch_sprite_tiles(mapper);  
+                if self.rendering_enabled() {
+                    self.fetch_sprite_tiles(mapper);
+                }
             }
             321 ... 336 => {
                 if self.rendering_enabled() {
