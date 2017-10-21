@@ -291,7 +291,7 @@ pub fn advance_oam_dma(nes: &mut NesState) {
   
   nes.cpu.oam_dma_cycle += 1;
 
-  if nes.cpu.oam_dma_cycle > 511 {
+  if nes.cpu.oam_dma_cycle > 513 {
     nes.cpu.oam_dma_active = false;
   }
 }
