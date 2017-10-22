@@ -738,7 +738,11 @@ impl ApuState {
             0x4017 => {
                 self.frame_sequencer_mode = (data & 0b1000_0000) >> 7;
                 self.disable_interrupt =    (data & 0b0100_0000) != 0;
-                self.frame_reset_delay = 4;
+                if (self.current_cycle & 0b1) != 0 {
+                    self.frame_reset_delay = 3;
+                } else {
+                    self.frame_reset_delay = 4;
+                }
                 // If interrupts are disabled, clear the flag too:
                 if self.disable_interrupt {
                     self.frame_interrupt = false;
