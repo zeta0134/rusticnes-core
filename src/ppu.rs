@@ -229,21 +229,23 @@ impl PpuState {
         }
     }
 
+    fn initialize_secondary_oam(&mut self) {
+        for i in 0 .. 8 {
+            self.secondary_oam[i].tile_index = 0xFF;
+            self.secondary_oam[i].active = false;
+        }
+        self.secondary_oam_index = 0;
+    }
+
     fn evaluate_sprites(&mut self) {
         let scanline = self.current_scanline as u8;
-        self.secondary_oam_index = 0;
         let mut sprite_size = 8;
         if (self.control & 0x20) != 0 {
             sprite_size = 16;
         }
         self.sprite_zero_on_scanline = false;
 
-        // initialize
-        for i in 0 .. 8 {
-            // Necessary to emulate dummy fetches later
-            self.secondary_oam[i].tile_index = 0xFF;
-            self.secondary_oam[i].active = false;
-        }
+        self.initialize_secondary_oam();
 
         // Gather first 8 visible sprites (and pay attention if there are more)
         for i in 0 .. 64 {
@@ -316,8 +318,11 @@ impl PpuState {
         let bg_palette_low  = (self.palette_shift_low  & attr_x_bit) >> attr_x_shift;
         let mut bg_palette_number = (bg_palette_high << 1) | bg_palette_low;
 
+        let px = self.current_scanline_cycle - 1;
+        let py = self.current_scanline;
+
         // If backgrounds are disabled, ignore all that work above, and switch to color 0
-        if self.mask & 0b0000_1000 == 0 {
+        if self.mask & 0b0000_1000 == 0 || ((self.mask & 0b0000_0010 == 0) && px < 8) {
             bg_palette_index = 0;
         }
 
@@ -329,7 +334,7 @@ impl PpuState {
         let mut pixel_color = self._read_byte(mapper, (((bg_palette_number as u16) << 2) + bg_palette_index) as u16 + 0x3F00);
 
         // If sprites are enabled
-        if self.mask & 0b0001_0000 != 0 {
+        if self.mask & 0b0001_0000 != 0 && ((self.mask & 0b0000_0100 != 0) || px >= 8) {
             // Iterate over sprites in reverse order, and find the lowest numbered sprite with an opaque pixel:
             let mut sprite_index = 8;
             for i in (0 .. self.secondary_oam_index).rev() {
@@ -351,8 +356,6 @@ impl PpuState {
             }
         }
 
-        let px = self.current_scanline_cycle - 1;
-        let py = self.current_scanline;
         self.plot_pixel(px, py, pixel_color);
     }
 
@@ -505,6 +508,9 @@ impl PpuState {
                     // Reload the X scroll components
                     self.current_vram_address &= 0b111_10_11111_00000;
                     self.current_vram_address |= self.temporary_vram_address & 0b01_00000_11111;
+                    // Initialize the sprite table, so we don't end up drawing garbage
+                    // to the main display on the first scanline
+                    self.initialize_secondary_oam();
                     self.fetch_sprite_tiles(mapper);
                 }
             },
