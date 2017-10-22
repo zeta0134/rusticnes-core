@@ -193,7 +193,7 @@ impl PpuState {
             0x0000 ... 0x1FFF => return mapper.read_byte(masked_address),
             // Nametable 0 (top-left)
             0x2000 ... 0x2FFF => return self.internal_vram[nametable_address(masked_address, mapper.mirroring()) as usize],
-            0x3000 ... 0x3EFF => return self.read_byte(mapper, masked_address - 0x1000),
+            0x3000 ... 0x3EFF => return self._read_byte(mapper, masked_address - 0x1000),
             0x3F00 ... 0x3FFF => {
                 // Weird read buffer behavior
                 //self.read_buffer = self.read_byte((masked_address & 0x0FFF) + 0x2000);
