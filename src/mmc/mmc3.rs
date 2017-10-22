@@ -32,6 +32,9 @@ pub struct Mmc3 {
 
     pub last_a12: u8,
 
+    // Debug
+    pub last_chr_read: u16,
+
     pub mirroring: Mirroring,
 }
 
@@ -65,6 +68,7 @@ impl Mmc3 {
             irq_flag: false,
 
             last_a12: 0,
+            last_chr_read: 0,
 
             mirroring: Mirroring::Vertical,
         }
@@ -72,6 +76,13 @@ impl Mmc3 {
 }
 
 impl Mapper for Mmc3 {
+    fn print_debug_status(&self) {
+        println!("======= MMC3 =======");
+        println!("IRQ: Current: {}, Reload: {}", self.irq_counter, self.irq_reload);
+        println!("Last A12: {}, Last CHR Read: 0x{:04X}", self.last_a12, self.last_chr_read);
+        println!("====================");
+    }
+
     fn mirroring(&self) -> Mirroring {
         return self.mirroring;
     }
@@ -84,6 +95,7 @@ impl Mapper for Mmc3 {
         match address {
             // CHR
             0x0000 ... 0x1FFF => {
+                self.last_chr_read = address;
                 let current_a12 = ((address & 0b0001_0000_0000_0000) >> 12) as u8;
                 if current_a12 == 1 && self.last_a12 == 0 {
                     if self.irq_counter == 0 || self.irq_reload_requested {

@@ -471,7 +471,7 @@ impl PpuState {
                 tile_index += 1;
             }
 
-            let tile_address = pattern_address + (tile_index as u16 * 16) + y_offset;
+            let tile_address = (((tile_index as u16 * 16) + y_offset) & 0xFFF) | pattern_address;
 
             match sub_cycle {
                 4 => self.secondary_oam[sprite_index].bitmap_low  = self._read_byte(mapper, tile_address),
