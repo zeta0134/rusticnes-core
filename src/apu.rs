@@ -408,12 +408,14 @@ impl DmcState {
         self.sample_buffer = mapper.read_byte(0x8000 | (self.current_address & 0x7FFF));
         self.current_address = self.current_address.wrapping_add(1);
         self.bytes_remaining -= 1;
-        if self.bytes_remaining == 0 && self.looping {
-            self.current_address = self.starting_address;
-            self.bytes_remaining = self.sample_length;
-        } else {
-            if self.interrupt_enabled {
-                self.interrupt_flag = true;
+        if self.bytes_remaining == 0 {
+            if self.looping {
+                self.current_address = self.starting_address;
+                self.bytes_remaining = self.sample_length;
+            } else {
+                if self.interrupt_enabled {
+                    self.interrupt_flag = true;
+                }
             }
         }
         self.sample_buffer_empty = false;
