@@ -809,7 +809,9 @@ impl ApuState {
                 37281 => {
                     self.clock_quarter_frame();
                     self.clock_half_frame();
-                    self.frame_sequencer = 0;
+                },
+                37282 => {
+                  self.frame_sequencer = 0;  
                 },
                 _ => ()
             }
