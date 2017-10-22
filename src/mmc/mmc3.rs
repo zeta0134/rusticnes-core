@@ -73,42 +73,27 @@ impl Mmc3 {
             mirroring: Mirroring::Vertical,
         }
     }
-}
 
-impl Mapper for Mmc3 {
-    fn print_debug_status(&self) {
-        println!("======= MMC3 =======");
-        println!("IRQ: Current: {}, Reload: {}", self.irq_counter, self.irq_reload);
-        println!("Last A12: {}, Last CHR Read: 0x{:04X}", self.last_a12, self.last_chr_read);
-        println!("====================");
-    }
-
-    fn mirroring(&self) -> Mirroring {
-        return self.mirroring;
-    }
-
-    fn irq_flag(&self) -> bool {
-        return self.irq_flag;
-    }
-
-    fn read_byte(&mut self, address: u16) -> u8 {
+    fn _read_byte(&mut self, address: u16, side_effects: bool) -> u8 {
         match address {
             // CHR
             0x0000 ... 0x1FFF => {
-                self.last_chr_read = address;
-                let current_a12 = ((address & 0b0001_0000_0000_0000) >> 12) as u8;
-                if current_a12 == 1 && self.last_a12 == 0 {
-                    if self.irq_counter == 0 || self.irq_reload_requested {
-                        self.irq_counter = self.irq_reload;
-                        self.irq_reload_requested = false;
-                    } else {
-                        self.irq_counter -= 1;                        
+                if side_effects {
+                    self.last_chr_read = address;
+                    let current_a12 = ((address & 0b0001_0000_0000_0000) >> 12) as u8;
+                    if current_a12 == 1 && self.last_a12 == 0 {
+                        if self.irq_counter == 0 || self.irq_reload_requested {
+                            self.irq_counter = self.irq_reload;
+                            self.irq_reload_requested = false;
+                        } else {
+                            self.irq_counter -= 1;                        
+                        }
+                        if self.irq_counter == 0 && self.irq_enabled {
+                            self.irq_flag = true;                        
+                        }
                     }
-                    if self.irq_counter == 0 && self.irq_enabled {
-                        self.irq_flag = true;                        
-                    }
+                    self.last_a12 = current_a12;
                 }
-                self.last_a12 = current_a12;
                 if self.switch_chr_banks {
                     match address {
                         0x0000 ... 0x03FF => return self.chr_rom[(self.chr1_bank_2 * 0x400) + (address as usize -  0x000)],
@@ -158,8 +143,33 @@ impl Mapper for Mmc3 {
             _ => return 0
         }
     }
+}
 
-     fn write_byte(&mut self, address: u16, data: u8) {
+impl Mapper for Mmc3 {
+    fn print_debug_status(&self) {
+        println!("======= MMC3 =======");
+        println!("IRQ: Current: {}, Reload: {}", self.irq_counter, self.irq_reload);
+        println!("Last A12: {}, Last CHR Read: 0x{:04X}", self.last_a12, self.last_chr_read);
+        println!("====================");
+    }
+
+    fn mirroring(&self) -> Mirroring {
+        return self.mirroring;
+    }
+
+    fn irq_flag(&self) -> bool {
+        return self.irq_flag;
+    }
+
+    fn read_byte(&mut self, address: u16) -> u8 {
+        return self._read_byte(address, true);
+    }
+
+    fn debug_read_byte(&mut self, address: u16) -> u8 {
+        return self._read_byte(address, false);
+    }
+
+    fn write_byte(&mut self, address: u16, data: u8) {
         match address {
             // PRG RAM
             0x6000 ... 0x7FFF => {
