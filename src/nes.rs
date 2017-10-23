@@ -48,13 +48,23 @@ impl NesState {
 
     pub fn from_rom(cart_data: &[u8]) -> Result<NesState, String> {
         let nes_header = cartridge::extract_header(cart_data);
-        cartridge::print_header_info(nes_header);
-        let mapper = cartridge::load_from_cartridge(nes_header, cart_data);
-        let mut nes = NesState::new(mapper);
+        nes_header.print_info();
 
-        nes.power_on();
+        if !nes_header.magic_is_valid() {
+            return Err(format!("iNES Magic Header is wrong, this is not a valid NES ROM. Refusing to proceed."));
+        }
 
-        return Ok(nes);
+        let maybe_mapper = cartridge::load_from_cartridge(nes_header, cart_data);
+        match maybe_mapper {
+            Ok(mapper) => {
+                let mut nes = NesState::new(mapper);
+                nes.power_on();
+                return Ok(nes);
+            },
+            Err(why) => {
+                return Err(why);
+            }
+        }
     }
 
     pub fn power_on(&mut self) {

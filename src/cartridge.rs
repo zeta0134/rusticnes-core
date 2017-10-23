@@ -10,6 +10,7 @@ use mmc::uxrom::UxRom;
 // https://wiki.nesdev.com/w/index.php/INES
 #[derive(Copy, Clone)]
 pub struct NesHeader {
+  pub magic: [u8; 4],
   pub prg_rom_size: usize,
   pub chr_rom_size: usize,
   pub mapper_number: u8,
@@ -28,6 +29,7 @@ pub struct NesHeader {
 impl Default for NesHeader {
     fn default() -> NesHeader {
         NesHeader {
+            magic: [0u8; 4],
             prg_rom_size: 0,
             chr_rom_size: 0,
             mapper_number: 0,
@@ -38,6 +40,23 @@ impl Default for NesHeader {
             trainer: false,
             mirroring: Mirroring::Vertical,
         }
+    }
+}
+
+impl NesHeader {
+    pub fn print_info(&self) {
+        println!("PRG ROM: {0}", self.prg_rom_size);
+        println!("CHR ROM: {0}", self.chr_rom_size);
+        println!("PRG RAM: {0}", self.prg_ram_size);
+        println!("Mapper: {0}", self.mapper_number);
+    }
+
+    pub fn magic_is_valid(&self) -> bool {
+        return 
+          self.magic[0] as char == 'N' &&
+          self.magic[1] as char == 'E' &&
+          self.magic[2] as char == 'S' &&
+          self.magic[3] == 0x1A;
     }
 }
 
@@ -53,6 +72,7 @@ pub fn extract_header(cartridge: &[u8]) -> NesHeader {
     let ram_size = cartridge[8] as usize * 8 * 1024;
 
     let mut nes_header: NesHeader = NesHeader {
+        magic: [cartridge[0], cartridge[1], cartridge[2], cartridge[3]],
         prg_rom_size: prg_size,
         chr_rom_size: chr_size,
         mapper_number: mapper_number,
@@ -79,14 +99,7 @@ pub fn extract_header(cartridge: &[u8]) -> NesHeader {
     return nes_header;
 }
 
-pub fn print_header_info(header: NesHeader) {
-    println!("PRG ROM: {0}", header.prg_rom_size);
-    println!("CHR ROM: {0}", header.chr_rom_size);
-    println!("PRG RAM: {0}", header.prg_ram_size);
-    println!("Mapper: {0}", header.mapper_number);
-}
-
-pub fn load_from_cartridge(nes_header: NesHeader, cartridge: &[u8]) -> Box<Mapper> {
+pub fn load_from_cartridge(nes_header: NesHeader, cartridge: &[u8]) -> Result<Box<Mapper>, String> {
     let mut offset = 16;
     let mut header = nes_header;
 
@@ -114,11 +127,9 @@ pub fn load_from_cartridge(nes_header: NesHeader, cartridge: &[u8]) -> Box<Mappe
         7 => Box::new(AxRom::new(header, chr_rom, prg_rom)),
         66 => Box::new(GxRom::new(header, chr_rom, prg_rom)),
         _ => {
-            println!("Undefined mapper: {}", header.mapper_number);
-            println!("Will proceed as though this is NROM, which will LIKELY NOT WORK.");
-            return Box::new(Nrom::new(header, chr_rom, prg_rom));
+            return Err(format!("Unsupported iNES mapper: {}", header.mapper_number));
         }
     };
 
-    return mapper;
+    return Ok(mapper);
 }
