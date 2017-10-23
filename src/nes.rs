@@ -46,10 +46,46 @@ impl NesState {
         }
     }
 
+    pub fn from_rom(cart_data: &[u8]) -> Result<NesState, String> {
+        let nes_header = cartridge::extract_header(cart_data);
+        cartridge::print_header_info(nes_header);
+        let mapper = cartridge::load_from_cartridge(nes_header, cart_data);
+        let mut nes = NesState::new(mapper);
+        nes.apu.buffer_full = false;
+
+        nes.power_on();
+
+        return Ok(nes);
+    }
+
+    pub fn power_on(&mut self) {
+        // Initialize CPU register state for power-up sequence
+        self.registers.a = 0;
+        self.registers.y = 0;
+        self.registers.x = 0;
+        self.registers.s = 0xFD;
+
+        self.registers.set_status_from_byte(0x34);
+
+        let pc_low = memory::read_byte(self, 0xFFFC);
+        let pc_high = memory::read_byte(self, 0xFFFD);
+        self.registers.pc = pc_low as u16 + ((pc_high as u16) << 8);
+    }
+
+    pub fn reset(&mut self) {
+        self.registers.s = self.registers.s.wrapping_sub(3);
+        self.registers.flags.interrupts_disabled = true;
+        // Silence the APU
+        memory::write_byte(self, 0x4015, 0);
+
+        let pc_low = memory::read_byte(self, 0xFFFC);
+        let pc_high = memory::read_byte(self, 0xFFFD);
+        self.registers.pc = pc_low as u16 + ((pc_high as u16) << 8);
+    }
+
     pub fn cycle(&mut self) {
         cycle_cpu::run_one_clock(self);
         self.master_clock = self.master_clock + 12;
-        //self.ppu.run_to_cycle(&mut *self.mapper, self.master_clock);
         // Three PPU clocks per every 1 CPU clock
         self.ppu.clock(&mut *self.mapper);
         self.ppu.clock(&mut *self.mapper);
@@ -58,11 +94,12 @@ impl NesState {
     }
 
     pub fn step(&mut self) {
-        // Start this instruction
+        // Always run at least one cycle
         self.cycle();
         let mut i = 0;
+        // Continue until either we loop back around to cycle 0 (a new instruction)
+        // or this instruction has failed to reset (encountered a STP or an opcode bug)
         while self.cpu.tick >= 1 && i < 10 {
-            // Continue until this instruction terminates or halts
             self.cycle();
             i += 1;
         }
@@ -125,12 +162,11 @@ impl NesState {
     }
 }
 
-pub fn open_file(file_path: &str) -> Option<NesState> {
+pub fn open_file(file_path: &str) -> Result<NesState, String> {
     let file = File::open(file_path);
     match file {
         Err(why) => {
-            println!("Couldn't open {}: {}", file_path, why.description());
-            return None;
+            return Err(format!("Couldn't open {}: {}", file_path, why.description()));
         },
         Ok(_) => (),
     };
@@ -138,28 +174,11 @@ pub fn open_file(file_path: &str) -> Option<NesState> {
     let mut cartridge = Vec::new();
     match file.unwrap().read_to_end(&mut cartridge) {
         Err(why) => {
-            println!("Couldn't read data: {}", why.description());
-            return None;
+            return Err(format!("Couldn't read file data"));
         },
         Ok(bytes_read) => {
             println!("Data read successfully: {}", bytes_read);
-
-            let nes_header = cartridge::extract_header(&cartridge);
-            cartridge::print_header_info(nes_header);
-            let mapper = cartridge::load_from_cartridge(nes_header, &cartridge);
-            let mut nes = NesState::new(mapper);
-            nes.apu.buffer_full = false;
-
-            // Initialize CPU register state for power-up sequence
-            nes.registers.a = 0;
-            nes.registers.y = 0;
-            nes.registers.x = 0;
-            nes.registers.s = 0xFD;
-
-            let pc_low = memory::read_byte(&mut nes, 0xFFFC);
-            let pc_high = memory::read_byte(&mut nes, 0xFFFD);
-            nes.registers.pc = pc_low as u16 + ((pc_high as u16) << 8);
-            return Some(nes);
+            return NesState::from_rom(&cartridge);
         },
     };
 }

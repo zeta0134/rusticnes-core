@@ -41,7 +41,7 @@ impl Default for NesHeader {
     }
 }
 
-pub fn extract_header(cartridge: &Vec<u8>) -> NesHeader {
+pub fn extract_header(cartridge: &[u8]) -> NesHeader {
     // TODO: Detect if the magic header doesn't match and either bail, or print a warning.
     println!("Magic Header: {0}{1}{2} 0x{3:X}", cartridge[0] as char, cartridge[1] as char, cartridge[2] as char, cartridge[3]);
 
@@ -86,7 +86,7 @@ pub fn print_header_info(header: NesHeader) {
     println!("Mapper: {0}", header.mapper_number);
 }
 
-pub fn load_from_cartridge(nes_header: NesHeader, cartridge: &Vec<u8>) -> Box<Mapper> {
+pub fn load_from_cartridge(nes_header: NesHeader, cartridge: &[u8]) -> Box<Mapper> {
     let mut offset = 16;
     let mut header = nes_header;
 
