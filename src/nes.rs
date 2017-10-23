@@ -173,7 +173,7 @@ pub fn open_file(file_path: &str) -> Result<NesState, String> {
     let mut cartridge = Vec::new();
     match file.unwrap().read_to_end(&mut cartridge) {
         Err(why) => {
-            return Err(format!("Couldn't read file data"));
+            return Err(format!("Couldn't read from {}: {}", file_path, why.description()));
         },
         Ok(bytes_read) => {
             println!("Data read successfully: {}", bytes_read);
