@@ -310,11 +310,6 @@ pub fn branch(nes: &mut NesState) {
       let pc = nes.registers.pc;
       nes.cpu.data1 = read_byte(nes, pc);
       nes.registers.pc = nes.registers.pc.wrapping_add(1);
-    },
-    3 => {
-      // Fetch opcode of next instruction
-      let pc = nes.registers.pc;
-      let opcode = read_byte(nes, pc);
 
       // Determine if branch is to be taken
       let flag_index = (nes.cpu.opcode & 0b1100_0000) >> 6;
@@ -327,34 +322,41 @@ pub fn branch(nes: &mut NesState) {
         _ => {/* Impossible */ false},
       };
 
-      if branch_taken {
-        // Add the relative offset to PC, but store ONLY the low byte
-        let result = nes.registers.pc.wrapping_add((nes.cpu.data1 as i8) as u16);
-        nes.registers.pc = (nes.registers.pc & 0xFF00) | (result & 0xFF);
-
-        // store high byte of result into data2 for further processing
-        nes.cpu.data2 = (result >> 8) as u8;
-      } else {
-        // Actually use that opcode read, increment PC, and bail
-        nes.cpu.opcode = opcode;
-        nes.registers.pc = nes.registers.pc.wrapping_add(1);
-        nes.cpu.tick = 1;
+      if !branch_taken {
+        nes.cpu.tick = 0;
       }
     },
-    4 => {
-      // Fetch opcode of next instruction, possibly from the wrong address
+    3 => {
+      // Fetch opcode of next instruction (and throw it away)
       let pc = nes.registers.pc;
       let opcode = read_byte(nes, pc);
 
-      if (nes.registers.pc & 0xFF00) != ((nes.cpu.data2 as u16) << 8) {
-        nes.registers.pc = (nes.registers.pc & 0xFF) | ((nes.cpu.data2 as u16) << 8);
+      // Add the relative offset to PC, but store ONLY the low byte
+      let result = nes.registers.pc.wrapping_add((nes.cpu.data1 as i8) as u16);
+      nes.registers.pc = (nes.registers.pc & 0xFF00) | (result & 0xFF);
+
+      if (nes.registers.pc & 0xFF00) == (result & 0xFF00) {
+        // No need to adjust the high byte, so bail here
+        nes.cpu.tick = 0;
       } else {
-        // PCH didn't need fixing, so bail early, using the opcode we read
-        nes.cpu.opcode = opcode;
-        nes.registers.pc = nes.registers.pc.wrapping_add(1);
-        nes.cpu.tick = 1;
+        // store high byte of result into data2 for further processing
+        nes.cpu.data2 = (result >> 8) as u8;
       }
+
     },
+    4 => {
+      // Fetch opcode of next instruction, from the wrong address (and throw it away)
+      let pc = nes.registers.pc;
+      let opcode = read_byte(nes, pc);
+
+      // Apply fix to upper byte of PC
+      nes.registers.pc = (nes.registers.pc & 0xFF) | ((nes.cpu.data2 as u16) << 8);
+
+      // Finally done
+      nes.cpu.tick = 0;
+
+    },
+    /*
     5 => {
       // Fetch opcode of next instruction
       let pc = nes.registers.pc;
@@ -362,7 +364,7 @@ pub fn branch(nes: &mut NesState) {
       nes.registers.pc = nes.registers.pc.wrapping_add(1);
       // Finally done
       nes.cpu.tick = 1;
-    }
+    }*/
     _ => ()
   }
 }
