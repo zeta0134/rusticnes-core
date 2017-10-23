@@ -51,7 +51,6 @@ impl NesState {
         cartridge::print_header_info(nes_header);
         let mapper = cartridge::load_from_cartridge(nes_header, cart_data);
         let mut nes = NesState::new(mapper);
-        nes.apu.buffer_full = false;
 
         nes.power_on();
 
