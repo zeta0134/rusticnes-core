@@ -329,7 +329,7 @@ pub fn branch(nes: &mut NesState) {
     3 => {
       // Fetch opcode of next instruction (and throw it away)
       let pc = nes.registers.pc;
-      let opcode = read_byte(nes, pc);
+      let _ = read_byte(nes, pc);
 
       // Add the relative offset to PC, but store ONLY the low byte
       let result = nes.registers.pc.wrapping_add((nes.cpu.data1 as i8) as u16);
@@ -347,7 +347,7 @@ pub fn branch(nes: &mut NesState) {
     4 => {
       // Fetch opcode of next instruction, from the wrong address (and throw it away)
       let pc = nes.registers.pc;
-      let opcode = read_byte(nes, pc);
+      let _ = read_byte(nes, pc);
 
       // Apply fix to upper byte of PC
       nes.registers.pc = (nes.registers.pc & 0xFF) | ((nes.cpu.data2 as u16) << 8);
@@ -356,15 +356,6 @@ pub fn branch(nes: &mut NesState) {
       nes.cpu.tick = 0;
 
     },
-    /*
-    5 => {
-      // Fetch opcode of next instruction
-      let pc = nes.registers.pc;
-      nes.cpu.opcode = read_byte(nes, pc);
-      nes.registers.pc = nes.registers.pc.wrapping_add(1);
-      // Finally done
-      nes.cpu.tick = 1;
-    }*/
     _ => ()
   }
 }
