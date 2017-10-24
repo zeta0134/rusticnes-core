@@ -8,11 +8,6 @@ use memory::CpuMemory;
 use ppu::PpuState;
 use mmc::mapper::Mapper;
 
-use std::error::Error;
-use std::fs::File;
-use std::io::Read;
-use std::io::Write;
-
 pub struct NesState {
     pub apu: ApuState,
     pub cpu: CpuState,
@@ -130,64 +125,15 @@ impl NesState {
         }
     }
 
-    pub fn write_sram(&mut self, file_path: &str) {
-        if self.mapper.has_sram() {
-            let file = File::create(file_path);
-            match file {
-                Err(why) => {
-                    println!("Couldn't open {}: {}", file_path, why.description());
-                },
-                Ok(mut file) => {
-                    let _ = file.write_all(&self.mapper.get_sram());
-                },
-            };
-        }
+    pub fn sram(&mut self) -> Vec<u8> {
+        return self.mapper.get_sram();
     }
 
-    pub fn read_sram(&mut self, file_path: &str) {
-        let file = File::open(file_path);
-        match file {
-            Err(why) => {
-                println!("Couldn't open {}: {}", file_path, why.description());
-                return;
-            },
-            Ok(_) => (),
-        };
-        // Read the whole thing
-        let mut sram_data = Vec::new();
-        match file.unwrap().read_to_end(&mut sram_data) {
-            Err(why) => {
-                println!("Couldn't read data: {}", why.description());
-                return;
-            },
-            Ok(bytes_read) => {
-                if bytes_read != self.mapper.get_sram().len() {
-                    println!("SRAM size mismatch, expected {} bytes but file is {} bytes!", bytes_read, self.mapper.get_sram().len());
-                } else {
-                    self.mapper.load_sram(sram_data);
-                }
-            }
+    pub fn set_sram(&mut self, sram_data: Vec<u8>) {
+        if sram_data.len() != self.mapper.get_sram().len() {
+            println!("SRAM size mismatch, expected {} bytes but file is {} bytes!", self.mapper.get_sram().len(), sram_data.len());
+        } else {
+            self.mapper.load_sram(sram_data);
         }
     }
-}
-
-pub fn open_file(file_path: &str) -> Result<NesState, String> {
-    let file = File::open(file_path);
-    match file {
-        Err(why) => {
-            return Err(format!("Couldn't open {}: {}", file_path, why.description()));
-        },
-        Ok(_) => (),
-    };
-    // Read the whole thing
-    let mut cartridge = Vec::new();
-    match file.unwrap().read_to_end(&mut cartridge) {
-        Err(why) => {
-            return Err(format!("Couldn't read from {}: {}", file_path, why.description()));
-        },
-        Ok(bytes_read) => {
-            println!("Data read successfully: {}", bytes_read);
-            return NesState::from_rom(&cartridge);
-        },
-    };
 }
