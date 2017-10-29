@@ -203,7 +203,11 @@ impl PpuState {
                 if palette_address & 0x13 == 0x10 {
                     palette_address = palette_address - 0x10;
                 }
-                return self.palette[palette_address as usize];
+                let mut palette_entry = self.palette[palette_address as usize];
+                if self.mask & 0b0000_0001 != 0 {
+                    palette_entry &= 0x30;
+                }
+                return palette_entry;
             },
             _ => return 0
         }
