@@ -610,8 +610,15 @@ impl PpuState {
             match self.current_scanline_cycle {
                 // cycle 0 is a dummy cycle, nothing happens
                 1 ... 256 => {
-                    // The PPU is disabled, so output background pixel zero all the time
-                    let pixel_color = self._read_byte(mapper, 0x3F00);
+                    // The PPU is disabled. Usually, we should show the backdrop color:
+                    let mut pixel_color = self._read_byte(mapper, 0x3F00);
+                    // However, if the current VRAM address is within palette memory, instead
+                    // show whatever that color is:
+                    if self.current_vram_address >= 0x3F00 && self.current_vram_address <= 0x3FFF {
+                        let vram_address = self.current_vram_address;
+                        pixel_color = self._read_byte(mapper, vram_address);
+                    }
+
                     let px = self.current_scanline_cycle - 1;
                     let py = self.current_scanline;
                     self.plot_pixel(px, py, pixel_color);
