@@ -71,14 +71,27 @@ impl NesState {
 
         self.registers.set_status_from_byte(0x34);
 
+        // Initialize I/O and Audio registers to known startup values
+        for i in 0x4000 .. (0x400F + 1) {
+            memory::write_byte(self, i, 0);
+        }
+        memory::write_byte(self, 0x4015, 0);
+        memory::write_byte(self, 0x4017, 0);
+
         let pc_low = memory::read_byte(self, 0xFFFC);
         let pc_high = memory::read_byte(self, 0xFFFD);
         self.registers.pc = pc_low as u16 + ((pc_high as u16) << 8);
+
+        // Clock the APU 10 times (this subtly affects the first IRQ's timing and frame counter operation)
+        for _ in 0 .. 10 {
+            self.apu.clock_apu(&mut *self.mapper);
+        }
     }
 
     pub fn reset(&mut self) {
         self.registers.s = self.registers.s.wrapping_sub(3);
         self.registers.flags.interrupts_disabled = true;
+
         // Silence the APU
         memory::write_byte(self, 0x4015, 0);
 
