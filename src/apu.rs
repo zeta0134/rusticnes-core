@@ -557,8 +557,6 @@ impl ApuState {
                 }
                 // Reading from this register resets frame_interrupt:
                 self.frame_interrupt = false;
-
-                println!("APU Status Read: {:02X}", status);
                 return status;
             },
             _ => return 0
