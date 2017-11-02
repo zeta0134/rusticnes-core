@@ -63,7 +63,7 @@ fn _read_byte(nes: &mut NesState, address: u16, side_effects: bool) -> u8 {
                 7 => {
                     let ppu_addr = nes.ppu.current_vram_address;
                     if side_effects {
-                        nes.ppu.latch = nes.ppu.read_byte(&mut *nes.mapper, ppu_addr);
+                        nes.ppu.latch = nes.ppu.read_latched_byte(&mut *nes.mapper, ppu_addr);
                         if nes.ppu.rendering_enabled() && 
                         (nes.ppu.current_scanline == 261 ||
                          nes.ppu.current_scanline <= 239) {
@@ -82,11 +82,11 @@ fn _read_byte(nes: &mut NesState, address: u16, side_effects: bool) -> u8 {
                         // Perform a dummy read immediately, to simulte the behavior of the PPU
                         // address lines changing, so the mapper can react accordingly
                         let address = nes.ppu.current_vram_address;
-                        let _ = nes.ppu._read_byte(&mut *nes.mapper, address);
+                        let _ = nes.ppu._read_byte(&mut *nes.mapper, address, true);
 
                         return nes.ppu.latch;
                     } else {
-                        return nes.ppu.read_byte(&mut *nes.mapper, ppu_addr);
+                        return nes.ppu._read_byte(&mut *nes.mapper, ppu_addr, false);
                     }
                 },
                 _ => return 0
@@ -187,7 +187,7 @@ pub fn write_byte(nes: &mut NesState, address: u16, data: u8) {
                         // Perform a dummy read immediately, to simulte the behavior of the PPU
                         // address lines changing, so the mapper can react accordingly
                         let address = nes.ppu.current_vram_address;
-                        let _ = nes.ppu._read_byte(&mut *nes.mapper, address);
+                        let _ = nes.ppu._read_byte(&mut *nes.mapper, address, true);
                     } else {
                         nes.ppu.temporary_vram_address &= 0b0000_0000_1111_1111;
                         // Note: This is missing bit 14 on purpose! This is cleared by the real PPU during
@@ -217,7 +217,7 @@ pub fn write_byte(nes: &mut NesState, address: u16, data: u8) {
                     // Perform a dummy read immediately, to simulte the behavior of the PPU
                     // address lines changing, so the mapper can react accordingly
                     let address = nes.ppu.current_vram_address;
-                    let _ = nes.ppu._read_byte(&mut *nes.mapper, address);
+                    let _ = nes.ppu._read_byte(&mut *nes.mapper, address, true);
                     
                     nes.ppu.write_byte(&mut *nes.mapper, ppu_addr, data);
                 },
