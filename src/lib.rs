@@ -6,5 +6,6 @@ pub mod memory;
 pub mod mmc;
 pub mod nes;
 pub mod opcodes;
+pub mod opcode_info;
 pub mod palettes;
 pub mod ppu;
