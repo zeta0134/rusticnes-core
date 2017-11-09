@@ -94,24 +94,25 @@ impl Mmc3 {
                     }
                     self.last_a12 = current_a12;
                 }
+                let chr_rom_len = self.chr_rom.len();
                 if self.switch_chr_banks {
                     match address {
-                        0x0000 ... 0x03FF => return self.chr_rom[(self.chr1_bank_2 * 0x400) + (address as usize -  0x000)],
-                        0x0400 ... 0x07FF => return self.chr_rom[(self.chr1_bank_3 * 0x400) + (address as usize -  0x400)],
-                        0x0800 ... 0x0BFF => return self.chr_rom[(self.chr1_bank_4 * 0x400) + (address as usize -  0x800)],
-                        0x0C00 ... 0x0FFF => return self.chr_rom[(self.chr1_bank_5 * 0x400) + (address as usize -  0xC00)],
-                        0x1000 ... 0x17FF => return self.chr_rom[(self.chr2_bank_0 * 0x400) + (address as usize - 0x1000)],
-                        0x1800 ... 0x1FFF => return self.chr_rom[(self.chr2_bank_1 * 0x400) + (address as usize - 0x1800)],
+                        0x0000 ... 0x03FF => return self.chr_rom[((self.chr1_bank_2 * 0x400) + (address as usize -  0x000)) % chr_rom_len],
+                        0x0400 ... 0x07FF => return self.chr_rom[((self.chr1_bank_3 * 0x400) + (address as usize -  0x400)) % chr_rom_len],
+                        0x0800 ... 0x0BFF => return self.chr_rom[((self.chr1_bank_4 * 0x400) + (address as usize -  0x800)) % chr_rom_len],
+                        0x0C00 ... 0x0FFF => return self.chr_rom[((self.chr1_bank_5 * 0x400) + (address as usize -  0xC00)) % chr_rom_len],
+                        0x1000 ... 0x17FF => return self.chr_rom[((self.chr2_bank_0 * 0x400) + (address as usize - 0x1000)) % chr_rom_len],
+                        0x1800 ... 0x1FFF => return self.chr_rom[((self.chr2_bank_1 * 0x400) + (address as usize - 0x1800)) % chr_rom_len],
                         _ => return 0,
                     }
                 } else {
                     match address {
-                        0x0000 ... 0x07FF => return self.chr_rom[(self.chr2_bank_0 * 0x400) + (address as usize -  0x000)],
-                        0x0800 ... 0x0FFF => return self.chr_rom[(self.chr2_bank_1 * 0x400) + (address as usize -  0x800)],
-                        0x1000 ... 0x13FF => return self.chr_rom[(self.chr1_bank_2 * 0x400) + (address as usize - 0x1000)],
-                        0x1400 ... 0x17FF => return self.chr_rom[(self.chr1_bank_3 * 0x400) + (address as usize - 0x1400)],
-                        0x1800 ... 0x1BFF => return self.chr_rom[(self.chr1_bank_4 * 0x400) + (address as usize - 0x1800)],
-                        0x1C00 ... 0x1FFF => return self.chr_rom[(self.chr1_bank_5 * 0x400) + (address as usize - 0x1C00)],
+                        0x0000 ... 0x07FF => return self.chr_rom[((self.chr2_bank_0 * 0x400) + (address as usize -  0x000)) % chr_rom_len],
+                        0x0800 ... 0x0FFF => return self.chr_rom[((self.chr2_bank_1 * 0x400) + (address as usize -  0x800)) % chr_rom_len],
+                        0x1000 ... 0x13FF => return self.chr_rom[((self.chr1_bank_2 * 0x400) + (address as usize - 0x1000)) % chr_rom_len],
+                        0x1400 ... 0x17FF => return self.chr_rom[((self.chr1_bank_3 * 0x400) + (address as usize - 0x1400)) % chr_rom_len],
+                        0x1800 ... 0x1BFF => return self.chr_rom[((self.chr1_bank_4 * 0x400) + (address as usize - 0x1800)) % chr_rom_len],
+                        0x1C00 ... 0x1FFF => return self.chr_rom[((self.chr1_bank_5 * 0x400) + (address as usize - 0x1C00)) % chr_rom_len],
                         _ => return 0,
                     }
                 }
@@ -122,20 +123,21 @@ impl Mmc3 {
             },
             // PRG ROM
             0x8000 ... 0xFFFF => {
+                let prg_rom_len = self.prg_rom.len();
                 if self.switch_prg_banks {
                     match address {
-                        0x8000 ... 0x9FFF => return self.prg_rom[(self.prg_rom.len() - 0x4000) + (address as usize -  0x8000)],
-                        0xA000 ... 0xBFFF => return self.prg_rom[(self.prg_bank_7 * 0x2000)    + (address as usize -  0xA000)],
-                        0xC000 ... 0xDFFF => return self.prg_rom[(self.prg_bank_6 * 0x2000)    + (address as usize -  0xC000)],
-                        0xE000 ... 0xFFFF => return self.prg_rom[(self.prg_rom.len() - 0x2000) + (address as usize -  0xE000)],
+                        0x8000 ... 0x9FFF => return self.prg_rom[((self.prg_rom.len() - 0x4000) + (address as usize -  0x8000)) % prg_rom_len],
+                        0xA000 ... 0xBFFF => return self.prg_rom[((self.prg_bank_7 * 0x2000)    + (address as usize -  0xA000)) % prg_rom_len],
+                        0xC000 ... 0xDFFF => return self.prg_rom[((self.prg_bank_6 * 0x2000)    + (address as usize -  0xC000)) % prg_rom_len],
+                        0xE000 ... 0xFFFF => return self.prg_rom[((self.prg_rom.len() - 0x2000) + (address as usize -  0xE000)) % prg_rom_len],
                         _ => return 0,
                     }
                 } else {
                     match address {
-                        0x8000 ... 0x9FFF => return self.prg_rom[(self.prg_bank_6 * 0x2000)    + (address as usize -  0x8000)],
-                        0xA000 ... 0xBFFF => return self.prg_rom[(self.prg_bank_7 * 0x2000)    + (address as usize -  0xA000)],
-                        0xC000 ... 0xDFFF => return self.prg_rom[(self.prg_rom.len() - 0x4000) + (address as usize -  0xC000)],
-                        0xE000 ... 0xFFFF => return self.prg_rom[(self.prg_rom.len() - 0x2000) + (address as usize -  0xE000)],
+                        0x8000 ... 0x9FFF => return self.prg_rom[((self.prg_bank_6 * 0x2000)    + (address as usize -  0x8000)) % prg_rom_len],
+                        0xA000 ... 0xBFFF => return self.prg_rom[((self.prg_bank_7 * 0x2000)    + (address as usize -  0xA000)) % prg_rom_len],
+                        0xC000 ... 0xDFFF => return self.prg_rom[((self.prg_rom.len() - 0x4000) + (address as usize -  0xC000)) % prg_rom_len],
+                        0xE000 ... 0xFFFF => return self.prg_rom[((self.prg_rom.len() - 0x2000) + (address as usize -  0xE000)) % prg_rom_len],
                         _ => return 0,
                     }
                 }
