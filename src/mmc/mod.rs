@@ -1,6 +1,7 @@
 pub mod mapper;
 
 pub mod axrom;
+pub mod cnrom;
 pub mod gxrom;
 pub mod mmc1;
 pub mod mmc3;
