@@ -24,6 +24,7 @@ pub struct Mmc1 {
     pub control: u8,
 
     pub mirroring: Mirroring,
+    pub last_write: bool,
 }
 
 impl Mmc1 {
@@ -53,6 +54,7 @@ impl Mmc1 {
             prg_ram_enabled: true,
             control: 0x0C,
             mirroring: Mirroring::Vertical,
+            last_write: false,
         }
     }
 }
@@ -75,6 +77,7 @@ impl Mapper for Mmc1 {
     }
 
     fn read_byte(&mut self, address: u16) -> u8 {
+        self.last_write = false;
         match address {
             // CHR Bank 0
             0x0000 ... 0x0FFF => {
@@ -205,6 +208,13 @@ impl Mapper for Mmc1 {
             },
             // Control Registers
             0x8000 ... 0xFFFF => {
+                if self.last_write {
+                    // Ignore this write! MMC1 ignores successive writes, and will clear this flag
+                    // on the next read cycle.
+                    return;
+                }
+                self.last_write = true;
+                
                 if data & 0x80 != 0 {
                     // Shift / Control Reset!
                     self.shift_counter = 0;
