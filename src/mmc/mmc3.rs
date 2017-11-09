@@ -15,6 +15,7 @@ pub struct Mmc3 {
     pub chr1_bank_3: usize,
     pub chr1_bank_4: usize,
     pub chr1_bank_5: usize,
+    pub chr_ram: bool,
 
     pub prg_bank_6: usize,
     pub prg_bank_7: usize,
@@ -39,11 +40,16 @@ pub struct Mmc3 {
 }
 
 impl Mmc3 {
-    pub fn new(_: NesHeader, chr: &[u8], prg: &[u8]) -> Mmc3 {
+    pub fn new(header: NesHeader, chr: &[u8], prg: &[u8]) -> Mmc3 {
+        let chr_rom = match header.has_chr_ram {
+            true => vec![0u8; 8 * 1024],
+            false => chr.to_vec()
+        };
+
         return Mmc3 {
             prg_rom: prg.to_vec(),
             prg_ram: vec![0u8; 0x2000],
-            chr_rom: chr.to_vec(),
+            chr_rom: chr_rom,
             // Note: On real MMC3-based hardware, many of these values are random on startup, so
             // the defaults presented below are arbitrary.
             chr2_bank_0: 0,
@@ -52,6 +58,7 @@ impl Mmc3 {
             chr1_bank_3: 0,
             chr1_bank_4: 0,
             chr1_bank_5: 0,
+            chr_ram: header.has_chr_ram,
 
             prg_bank_6: 0,
             prg_bank_7: 0,
@@ -173,6 +180,47 @@ impl Mapper for Mmc3 {
 
     fn write_byte(&mut self, address: u16, data: u8) {
         match address {
+            // CHR RAM (if enabled)
+            0x0000 ... 0x1FFF => {
+                self.last_chr_read = address;
+                let current_a12 = ((address & 0b0001_0000_0000_0000) >> 12) as u8;
+                if current_a12 == 1 && self.last_a12 == 0 {
+                    if self.irq_counter == 0 || self.irq_reload_requested {
+                        self.irq_counter = self.irq_reload;
+                        self.irq_reload_requested = false;
+                    } else {
+                        self.irq_counter -= 1;                        
+                    }
+                    if self.irq_counter == 0 && self.irq_enabled {
+                        self.irq_flag = true;                        
+                    }
+                }
+                self.last_a12 = current_a12;
+                if self.chr_ram {
+                    let chr_rom_len = self.chr_rom.len();
+                    if self.switch_chr_banks {
+                        match address {
+                            0x0000 ... 0x03FF => self.chr_rom[((self.chr1_bank_2 * 0x400) + (address as usize -  0x000)) % chr_rom_len] = data,
+                            0x0400 ... 0x07FF => self.chr_rom[((self.chr1_bank_3 * 0x400) + (address as usize -  0x400)) % chr_rom_len] = data,
+                            0x0800 ... 0x0BFF => self.chr_rom[((self.chr1_bank_4 * 0x400) + (address as usize -  0x800)) % chr_rom_len] = data,
+                            0x0C00 ... 0x0FFF => self.chr_rom[((self.chr1_bank_5 * 0x400) + (address as usize -  0xC00)) % chr_rom_len] = data,
+                            0x1000 ... 0x17FF => self.chr_rom[((self.chr2_bank_0 * 0x400) + (address as usize - 0x1000)) % chr_rom_len] = data,
+                            0x1800 ... 0x1FFF => self.chr_rom[((self.chr2_bank_1 * 0x400) + (address as usize - 0x1800)) % chr_rom_len] = data,
+                            _ => (),
+                        }
+                    } else {
+                        match address {
+                            0x0000 ... 0x07FF => self.chr_rom[((self.chr2_bank_0 * 0x400) + (address as usize -  0x000)) % chr_rom_len] = data,
+                            0x0800 ... 0x0FFF => self.chr_rom[((self.chr2_bank_1 * 0x400) + (address as usize -  0x800)) % chr_rom_len] = data,
+                            0x1000 ... 0x13FF => self.chr_rom[((self.chr1_bank_2 * 0x400) + (address as usize - 0x1000)) % chr_rom_len] = data,
+                            0x1400 ... 0x17FF => self.chr_rom[((self.chr1_bank_3 * 0x400) + (address as usize - 0x1400)) % chr_rom_len] = data,
+                            0x1800 ... 0x1BFF => self.chr_rom[((self.chr1_bank_4 * 0x400) + (address as usize - 0x1800)) % chr_rom_len] = data,
+                            0x1C00 ... 0x1FFF => self.chr_rom[((self.chr1_bank_5 * 0x400) + (address as usize - 0x1C00)) % chr_rom_len] = data,
+                            _ => (),
+                        }
+                    }
+                }
+            },
             // PRG RAM
             0x6000 ... 0x7FFF => {
                 // Note: Intentionally omitting PRG RAM protection feature, since this
