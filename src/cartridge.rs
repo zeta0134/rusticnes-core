@@ -46,6 +46,9 @@ impl Default for NesHeader {
 
 impl NesHeader {
     pub fn print_info(&self) {
+        // TODO: Detect if the magic header doesn't match and either bail, or print a warning.
+        println!("Magic Header: {0}{1}{2} 0x{3:X}", self.magic[0] as char, self.magic[1] as char, self.magic[2] as char, self.magic[3]);
+
         println!("PRG ROM: {0}", self.prg_rom_size);
         println!("CHR ROM: {0}", self.chr_rom_size);
         println!("PRG RAM: {0}", self.prg_ram_size);
@@ -62,9 +65,6 @@ impl NesHeader {
 }
 
 pub fn extract_header(cartridge: &[u8]) -> NesHeader {
-    // TODO: Detect if the magic header doesn't match and either bail, or print a warning.
-    println!("Magic Header: {0}{1}{2} 0x{3:X}", cartridge[0] as char, cartridge[1] as char, cartridge[2] as char, cartridge[3]);
-
     let prg_size = cartridge[4] as usize * 16 * 1024;
     let chr_size = cartridge[5] as usize * 8 * 1024;
     let mapper_low = (cartridge[6] & 0b1111_0000) >> 4;

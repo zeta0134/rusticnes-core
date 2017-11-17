@@ -43,7 +43,6 @@ impl NesState {
 
     pub fn from_rom(cart_data: &[u8]) -> Result<NesState, String> {
         let nes_header = cartridge::extract_header(cart_data);
-        nes_header.print_info();
 
         if !nes_header.magic_is_valid() {
             return Err(format!("iNES Magic Header is wrong, this is not a valid NES ROM. Refusing to proceed."));
