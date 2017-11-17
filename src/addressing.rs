@@ -398,8 +398,47 @@ pub fn indexed_indirect_x_write(nes: &mut NesState, opcode_func: WriteOpcode) {
   }
 }
 
+pub fn indexed_indirect_x_modify(nes: &mut NesState, opcode_func: ModifyOpcode) {
+  match nes.cpu.tick {
+    2 => read_data1(nes),
+    3 => {let offset = nes.registers.x; add_to_zero_page_address(nes, offset)},
+    4 => {
+      // Read low byte of indirect address
+      let effective_address = nes.cpu.data1 as u16;
+      nes.cpu.temp_address = read_byte(nes, effective_address) as u16;
+      nes.cpu.data1 = nes.cpu.data1.wrapping_add(1);
+    },
+    5 => {
+      // Read high byte of indirect address
+      let effective_address = nes.cpu.data1 as u16;
+      nes.cpu.temp_address = ((read_byte(nes, effective_address) as u16) << 8) | nes.cpu.temp_address;
+    },
+    6 => {
+      // Read value from effective address
+      let effective_address = nes.cpu.temp_address;
+      nes.cpu.data1 = read_byte(nes, effective_address);
+    },
+    7 => {
+      // Dummy write of the original value
+      let effective_address = nes.cpu.temp_address;
+      let data = nes.cpu.data1;
+      write_byte(nes, effective_address, data);
+      // Perform opcode and store
+      nes.cpu.data1 = opcode_func(&mut nes.registers, data);
+    },
+    8 => {
+      // Finally write modified data back out to effective_address
+      let effective_address = nes.cpu.temp_address;
+      let data = nes.cpu.data1;
+      write_byte(nes, effective_address, data);
+      nes.cpu.tick = 0;
+    },
+    _ => ()
+  }
+}
+
 pub static INDEXED_INDIRECT_X: AddressingMode = AddressingMode{
-  read: indexed_indirect_x_read, write: indexed_indirect_x_write, modify: unimplemented_modify };
+  read: indexed_indirect_x_read, write: indexed_indirect_x_write, modify: indexed_indirect_x_modify};
 
 pub fn indirect_indexed_y_read(nes: &mut NesState, opcode_func: ReadOpcode) {
   match nes.cpu.tick {
@@ -472,8 +511,61 @@ pub fn indirect_indexed_y_write(nes: &mut NesState, opcode_func: WriteOpcode) {
   }
 }
 
+pub fn indirect_indexed_y_modify(nes: &mut NesState, opcode_func: ModifyOpcode) {
+  match nes.cpu.tick {
+    2 => read_data1(nes),
+    3 => {
+      // Read low byte of indirect address
+      let pointer_low = nes.cpu.data1 as u16;
+      nes.cpu.temp_address = read_byte(nes, pointer_low) as u16;
+      nes.cpu.data1 = nes.cpu.data1.wrapping_add(1);
+    },
+    4 => {
+      // Read high byte of indirect address
+      let pointer_high = nes.cpu.data1 as u16;
+      nes.cpu.temp_address = ((read_byte(nes, pointer_high) as u16) << 8) | nes.cpu.temp_address;
+    },
+    5 => {
+      // Add Y to LOW BYTE of the effective address
+      // Accuracy note: technically this occurs in cycle 4, but as it has no effect on emulation, I've
+      // moved it to the beginning of cycle 5 for simplicity
+      let low_byte = (nes.cpu.temp_address & 0xFF) + (nes.registers.y as u16);
+      nes.cpu.temp_address = (nes.cpu.temp_address & 0xFF00) | (low_byte & 0xFF);
+      let temp_address = nes.cpu.temp_address;
+      // Dummy read from the new address before it is fixed
+      let _ = read_byte(nes, temp_address);
+      if low_byte > 0xFF {
+        // Fix the high byte of the address by adding 1 to it
+        nes.cpu.temp_address = nes.cpu.temp_address.wrapping_add(0x100);
+      }
+    },
+    6 => {
+      // Read value from effective address
+      let effective_address = nes.cpu.temp_address;
+      nes.cpu.data1 = read_byte(nes, effective_address);
+    },
+    7 => {
+      // Dummy write of the original value
+      let effective_address = nes.cpu.temp_address;
+      let data = nes.cpu.data1;
+      write_byte(nes, effective_address, data);
+      // Perform opcode and store
+      nes.cpu.data1 = opcode_func(&mut nes.registers, data);
+    },
+    8 => {
+      // Finally write modified data back out to effective_address
+      let effective_address = nes.cpu.temp_address;
+      let data = nes.cpu.data1;
+      write_byte(nes, effective_address, data);
+      nes.cpu.tick = 0;
+    },
+    _ => ()
+  }
+
+}
+
 pub static INDIRECT_INDEXED_Y: AddressingMode = AddressingMode{
-  read: indirect_indexed_y_read, write: indirect_indexed_y_write, modify: unimplemented_modify };
+  read: indirect_indexed_y_read, write: indirect_indexed_y_write, modify: indirect_indexed_y_modify };
 
 pub fn absolute_indexed_x_read(nes: &mut NesState, opcode_func: ReadOpcode) {
   match nes.cpu.tick {
