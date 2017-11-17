@@ -21,7 +21,7 @@ impl Nrom {
 
         return Nrom {
             prg_rom: prg.to_vec(),
-            prg_ram: Vec::new(),
+            prg_ram: vec![0u8; 8 * 1024],
             chr_rom: chr_rom,
             mirroring: header.mirroring,
             has_chr_ram: header.has_chr_ram,
