@@ -147,7 +147,7 @@ pub fn addressing_bytes(addressing_mode: &str) -> u8 {
 	}
 }
 
-pub fn disassemble_instruction(opcode: u8, data1: u8, data2: u8) -> (String, u8) {
+pub fn disassemble_instruction(opcode: u8, _: u8, _: u8) -> (String, u8) {
   let logic_block = opcode & 0b0000_0011;
   let addressing_mode_index = (opcode & 0b0001_1100) >> 2;
   let opcode_index = (opcode & 0b1110_0000) >> 5;
