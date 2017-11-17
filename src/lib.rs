@@ -9,3 +9,4 @@ pub mod opcodes;
 pub mod opcode_info;
 pub mod palettes;
 pub mod ppu;
+pub mod unofficial_opcodes;

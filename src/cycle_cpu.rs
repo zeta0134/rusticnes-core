@@ -8,6 +8,7 @@ use memory::read_byte;
 use memory::write_byte;
 use nes::NesState;
 use opcodes;
+use unofficial_opcodes;
 
 #[derive(Copy, Clone)]
 pub struct Flags {
@@ -137,6 +138,15 @@ pub fn interrupt_requested(nes: &NesState) -> bool {
   return nes.cpu.nmi_requested || nes.cpu.irq_requested;
 }
 
+pub fn halt_cpu(nes: &mut NesState) {
+  // HALT the CPU. It died, jim.
+  if nes.cpu.tick < 10 {
+    println!("STP opcode encountered: {}", nes.cpu.opcode);
+    println!("Proceeding to lock up CPU. Goodbye, cruel world!");
+  }
+  nes.cpu.tick = 10;
+}
+
 pub fn alu_block(nes: &mut NesState, addressing_mode_index: u8, opcode_index: u8) {
   let addressing_mode = match addressing_mode_index {
     // Zero Page Mode
@@ -174,12 +184,7 @@ pub fn rmw_block(nes: &mut NesState, addressing_mode_index: u8, opcode_index: u8
     0x1A | 0x3A | 0x5A | 0x7A | 0xDA | 0xEA | 0xFA => addressing::implied(nes, opcodes::nop),
     // Certain opcodes may be vital to your success. THESE opcodes are not.
     0x02 | 0x22 | 0x42 | 0x62 | 0x12 | 0x32 | 0x52 | 0x72 | 0x92 | 0xB2 | 0xD2 | 0xF2 => {
-      // HALT the CPU. It died, jim.
-      if nes.cpu.tick < 10 {
-        println!("STP opcode encountered: {}", nes.cpu.opcode);
-        println!("Proceeding to lock up CPU. Goodbye, cruel world!");
-      }
-      nes.cpu.tick = 10;
+      halt_cpu(nes);
     },
     0xA2 => {(addressing::IMMEDIATE.read)(nes, opcodes::ldx)},
     0x8A => addressing::implied(nes, opcodes::txa),
@@ -281,6 +286,52 @@ pub fn control_block(nes: &mut NesState) {
   };
 }
 
+pub fn unofficial_block(nes: &mut NesState, addressing_mode_index: u8, opcode_index: u8) {
+  // unofficial opcodes are surprisingly regular, but the following instructions break the
+  // mold, mostly from the +0B block:
+  match nes.cpu.opcode {
+    0x0B | 0x2B | 0x4B | 0x6B | 0x8B | 0xAB | 0xCB | 0xEB | 
+    0x93 | 0x9B | 0xBB => { 
+      println!("Unimplemented mold-breaking (11) opcode: {:02X}", nes.cpu.opcode);
+      // HALT CPU until we fix this.
+      println!("Will now halt CPU to prevent undefined execution. File a bug!");
+      halt_cpu(nes);
+    },
+    _ => {
+        let addressing_mode = match addressing_mode_index {
+        // Zero Page Mode
+        0b000 => &addressing::INDEXED_INDIRECT_X,
+        0b001 => &addressing::ZERO_PAGE,
+        0b011 => &addressing::ABSOLUTE,
+        0b100 => &addressing::INDIRECT_INDEXED_Y,
+        0b101 => &addressing::ZERO_PAGE_INDEXED_X,
+        0b110 => &addressing::ABSOLUTE_INDEXED_Y,
+        0b111 => &addressing::ABSOLUTE_INDEXED_X,
+
+        // Not implemented yet
+        _ => &addressing::UNIMPLEMENTED,
+      };
+
+      match opcode_index {
+        0b000 => {(addressing_mode.modify)(nes, unofficial_opcodes::slo)},
+        /* 0b001 => {(addressing_mode.read)(nes, opcodes::and)},
+        0b010 => {(addressing_mode.read)(nes, opcodes::eor)},
+        0b011 => {(addressing_mode.read)(nes, opcodes::adc)},
+        0b100 => {(addressing_mode.write)(nes, opcodes::sta)},
+        0b101 => {(addressing_mode.read)(nes, opcodes::lda)},
+        0b110 => {(addressing_mode.read)(nes, opcodes::cmp)},
+        0b111 => {(addressing_mode.read)(nes, opcodes::sbc)}, */
+        _ => {
+          println!("Unimplemented (11) opcode: {:02X}", nes.cpu.opcode);
+          // HALT CPU until we fix this.
+          println!("Will now halt CPU to prevent undefined execution. File a bug!");
+          halt_cpu(nes);
+        }
+      };
+    }
+  }
+}
+
 pub fn advance_oam_dma(nes: &mut NesState) {
   if nes.cpu.oam_dma_cycle & 0b1 == 0 && nes.cpu.oam_dma_cycle <= 511 {
     let address = nes.cpu.oam_dma_address;
@@ -337,10 +388,7 @@ pub fn run_one_clock(nes: &mut NesState) {
     0b00 => control_block(nes),
     0b01 => alu_block(nes, addressing_mode_index, opcode_index),
     0b10 => rmw_block(nes, addressing_mode_index, opcode_index),
-    _ => {
-      // We don't have this block implemented! Cry.
-      println!("Undefined (0x11) opcode: {:02X}", nes.cpu.opcode);
-      nes.cpu.tick = 0;
-    }
+    0b11 => unofficial_block(nes, addressing_mode_index, opcode_index),
+    _ => ()
   }
 }
