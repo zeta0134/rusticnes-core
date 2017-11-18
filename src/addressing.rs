@@ -666,7 +666,7 @@ pub fn absolute_indexed_y_read(nes: &mut NesState, opcode_func: ReadOpcode) {
     2 => read_address_low(nes),
     3 => read_address_high(nes),
     4 => {
-      // Add X to LOW BYTE of the effective address
+      // Add Y to LOW BYTE of the effective address
       // Accuracy note: technically this occurs in cycle 3
       let low_byte = (nes.cpu.temp_address & 0xFF) + (nes.registers.y as u16);
       nes.cpu.temp_address = (nes.cpu.temp_address & 0xFF00) | (low_byte & 0xFF);
@@ -693,7 +693,7 @@ pub fn absolute_indexed_y_write(nes: &mut NesState, opcode_func: WriteOpcode) {
     2 => read_address_low(nes),
     3 => read_address_high(nes),
     4 => {
-      // Add X to LOW BYTE of the effective address
+      // Add Y to LOW BYTE of the effective address
       // Accuracy note: technically this occurs in cycle 4, but as it has no effect on emulation, I've
       // moved it to the beginning of cycle 5, as it makes the early escape detection more straightforward.
       let low_byte = (nes.cpu.temp_address & 0xFF) + (nes.registers.y as u16);
@@ -711,6 +711,47 @@ pub fn absolute_indexed_y_write(nes: &mut NesState, opcode_func: WriteOpcode) {
   }
 }
 
+pub fn absolute_indexed_y_modify(nes: &mut NesState, opcode_func: ModifyOpcode) {  
+  match nes.cpu.tick {
+    2 => read_address_low(nes),
+    3 => read_address_high(nes),
+    4 => {
+      // Add Y to LOW BYTE of the effective address
+      // Accuracy note: technically this occurs in cycle 4, but as it has no effect on emulation, I've
+      // moved it to the beginning of cycle 5, as it makes the early escape detection more straightforward.
+      let low_byte = (nes.cpu.temp_address & 0xFF) + (nes.registers.y as u16);
+      nes.cpu.temp_address = (nes.cpu.temp_address & 0xFF00) | (low_byte & 0xFF);
+      let temp_address = nes.cpu.temp_address;
+      // Dummy read from the new address before it is fixed
+      let _ = read_byte(nes, temp_address);
+      if low_byte > 0xFF {
+        // Fix the high byte of the address by adding 1 to it
+        nes.cpu.temp_address = nes.cpu.temp_address.wrapping_add(0x100);
+      }
+    },
+    5 => {
+      let effective_address = nes.cpu.temp_address;
+      nes.cpu.data1 = read_byte(nes, effective_address);
+    },
+    6 => {
+      // Dummy write
+      let temp_address = nes.cpu.temp_address;
+      let data = nes.cpu.data1;
+      write_byte(nes, temp_address, data);
+      // Perform opcode and store
+      nes.cpu.data1 = opcode_func(&mut nes.registers, data);
+    },
+    7 => {
+      // Finally write modified data back out to effective_address
+      let temp_address = nes.cpu.temp_address;
+      let data = nes.cpu.data1;
+      write_byte(nes, temp_address, data);
+      nes.cpu.tick = 0;
+    }
+    _ => (),
+  }
+}
+
 pub static ABSOLUTE_INDEXED_Y: AddressingMode = AddressingMode{
-  read: absolute_indexed_y_read, write: absolute_indexed_y_write, modify: unimplemented_modify };
+  read: absolute_indexed_y_read, write: absolute_indexed_y_write, modify: absolute_indexed_y_modify };
 

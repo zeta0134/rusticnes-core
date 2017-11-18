@@ -42,7 +42,7 @@ pub fn sax(registers: &mut Registers) -> u8 {
 }
 
 pub fn lax(registers: &mut Registers, data: u8) {
-  registers.a = data;
+  opcodes::lda(registers, data);
   registers.x = data;
 }
 
@@ -197,6 +197,9 @@ pub fn arr(registers: &mut Registers, data: u8) {
   opcodes::and(registers, data);
   let result = registers.a;
   registers.a = opcodes::ror(registers, result);
+  // Carry and Overflow are set weirdly:
+  registers.flags.carry = (registers.a & 0b0100_0000) != 0;
+  registers.flags.overflow = (((registers.a & 0b0100_0000) >> 6) ^ ((registers.a & 0b0010_0000) >> 5)) != 0;
 }
 
 // "Magic" value is a complete guess. I don't know if the NES's decimal unit actually
@@ -219,4 +222,60 @@ pub fn axs(registers: &mut Registers, data: u8) {
   registers.x = initial.wrapping_sub(data);
   registers.flags.zero = registers.x == 0;
   registers.flags.negative = registers.x & 0x80 != 0;
+}
+
+pub fn shx(nes: &mut NesState) {
+  match nes.cpu.tick {
+    2 => addressing::read_address_low(nes),
+    3 => addressing::read_address_high(nes),
+    4 => {
+      // Add X to LOW BYTE of the effective address
+      let low_byte = (nes.cpu.temp_address & 0xFF) + (nes.registers.y as u16);
+      nes.cpu.temp_address = (nes.cpu.temp_address & 0xFF00) | (low_byte & 0xFF);
+      let temp_address = nes.cpu.temp_address;
+      // Dummy read from the new address before it is fixed
+      let _ = read_byte(nes, temp_address);
+      // Save the result of our weird modification here:
+      nes.cpu.data1 = nes.registers.x & (nes.cpu.temp_address.wrapping_add(0x100) >> 8) as u8;
+      if low_byte > 0xFF {
+        // Fix the high byte of the address by adding 1 to it
+        nes.cpu.temp_address = (nes.cpu.temp_address & 0x00FF) | ((nes.cpu.data1 as u16) << 8);
+      }
+    },
+    5 => {
+      let data = nes.cpu.data1;
+      let address = nes.cpu.temp_address;
+      write_byte(nes, address, data);
+      nes.cpu.tick = 0;
+    },
+    _ => {}
+  }
+}
+
+pub fn shy(nes: &mut NesState) {
+  match nes.cpu.tick {
+    2 => addressing::read_address_low(nes),
+    3 => addressing::read_address_high(nes),
+    4 => {
+      // Add X to LOW BYTE of the effective address
+      let low_byte = (nes.cpu.temp_address & 0xFF) + (nes.registers.x as u16);
+      nes.cpu.temp_address = (nes.cpu.temp_address & 0xFF00) | (low_byte & 0xFF);
+      let temp_address = nes.cpu.temp_address;
+      // Dummy read from the new address before it is fixed
+      let _ = read_byte(nes, temp_address);
+      // Save the result of our weird modification here:
+      nes.cpu.data1 = nes.registers.y & (nes.cpu.temp_address.wrapping_add(0x100) >> 8) as u8;
+      if low_byte > 0xFF {
+        // Fix the high byte of the address by adding 1 to it
+        nes.cpu.temp_address = (nes.cpu.temp_address & 0x00FF) | ((nes.cpu.data1 as u16) << 8);
+      }
+    },
+    5 => {
+      let data = nes.cpu.data1;
+      let address = nes.cpu.temp_address;
+      write_byte(nes, address, data);
+      nes.cpu.tick = 0;
+    },
+    _ => {}
+  }
 }
