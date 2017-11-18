@@ -290,15 +290,22 @@ pub fn unofficial_block(nes: &mut NesState, addressing_mode_index: u8, opcode_in
   // unofficial opcodes are surprisingly regular, but the following instructions break the
   // mold, mostly from the +0B block:
   match nes.cpu.opcode {
-    0x0B | 0x2B | 0x4B | 0x6B | 0x8B | 0xCB | 0xEB | 
-    0x93 | 0x9B | 0x9F | 0xBB => { 
+    0x0B | 0x2B | 0x4B | 0x6B | 0x8B | 0xCB | 0xEB => {
       println!("Unimplemented mold-breaking (11) opcode: {:02X}", nes.cpu.opcode);
       // HALT CPU until we fix this.
       println!("Will now halt CPU to prevent undefined execution. File a bug!");
       halt_cpu(nes);
     },
+    0x93 => unofficial_opcodes::ahx_indirect_indexed_y(nes),
+    0x9B => unofficial_opcodes::tas(nes),
+    0x9F => unofficial_opcodes::ahx_absolute_indexed_x(nes),
+    0xBB => {(addressing::ABSOLUTE_INDEXED_Y.read)(nes, unofficial_opcodes::las)},
     _ => {
-        let addressing_mode = match addressing_mode_index {
+      // The remaining opcodes all use the same addressing mode as the ALU block, and the wame
+      // read / write / modify type as the corresponding RMW block. Opcodes are mostly a combination
+      // of the two, with a few exceptions.
+
+      let addressing_mode = match addressing_mode_index {
         // Zero Page Mode
         0b000 => &addressing::INDEXED_INDIRECT_X,
         0b001 => &addressing::ZERO_PAGE,
