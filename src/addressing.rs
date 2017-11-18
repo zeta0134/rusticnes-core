@@ -604,8 +604,8 @@ pub fn absolute_indexed_x_write(nes: &mut NesState, opcode_func: WriteOpcode) {
       // moved it to the beginning of cycle 5, as it makes the early escape detection more straightforward.
       let low_byte = (nes.cpu.temp_address & 0xFF) + (nes.registers.x as u16);
       nes.cpu.temp_address = (nes.cpu.temp_address & 0xFF00) | (low_byte & 0xFF);
-      let temp_address = nes.cpu.temp_address;
       // Dummy read from the new address before it is fixed
+      let temp_address = nes.cpu.temp_address;
       let _ = read_byte(nes, temp_address);
       if low_byte > 0xFF {
         // Fix the high byte of the address by adding 1 to it

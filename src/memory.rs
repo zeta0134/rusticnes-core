@@ -142,10 +142,7 @@ pub fn write_byte(nes: &mut NesState, address: u16, data: u8) {
                 1 => {
                     nes.ppu.mask = data;
                 },
-                // PPUSTATUS
-                2 => {
-                    nes.ppu.status = data & 0xE0;
-                },
+                // PPUSTATUS is read-only
                 // OAM ADDRESS
                 3 => {
                     nes.ppu.oam_addr = data;
