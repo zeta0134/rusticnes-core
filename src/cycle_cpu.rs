@@ -232,7 +232,18 @@ pub fn control_block(nes: &mut NesState) {
   // Everything else is pretty irregular, so we'll just match the whole opcode
   match nes.cpu.opcode {
     0x00 => opcodes::brk(nes),
-    0x80 => (addressing::IMMEDIATE.read)  (nes, opcodes::nop_read),
+
+    // Various unofficial NOPs
+    0x80 => 
+      (addressing::IMMEDIATE.read)  (nes, opcodes::nop_read),
+    0x04 | 0x44 | 0x64 => 
+      (addressing::ZERO_PAGE.read)  (nes, opcodes::nop_read),
+    0x0C => 
+      (addressing::ABSOLUTE.read)  (nes, opcodes::nop_read),
+    0x14 | 0x34 | 0x54 | 0x74 | 0xD4 | 0xF4 => 
+      (addressing::ZERO_PAGE_INDEXED_X.read)  (nes, opcodes::nop_read),
+    0x1C | 0x3C | 0x5C | 0x7C | 0xDC | 0xFC =>
+      (addressing::ABSOLUTE_INDEXED_X.read)  (nes, opcodes::nop_read),
 
     // Opcodes with similar addressing modes
     0xA0 => (addressing::IMMEDIATE.read)  (nes, opcodes::ldy),
@@ -290,16 +301,16 @@ pub fn unofficial_block(nes: &mut NesState, addressing_mode_index: u8, opcode_in
   // unofficial opcodes are surprisingly regular, but the following instructions break the
   // mold, mostly from the +0B block:
   match nes.cpu.opcode {
-    0x0B | 0x2B | 0x4B | 0x6B | 0x8B | 0xCB | 0xEB => {
-      println!("Unimplemented mold-breaking (11) opcode: {:02X}", nes.cpu.opcode);
-      // HALT CPU until we fix this.
-      println!("Will now halt CPU to prevent undefined execution. File a bug!");
-      halt_cpu(nes);
-    },
+    0x0B | 0x2B => {(addressing::IMMEDIATE.read)(nes, unofficial_opcodes::anc)},
+    0x4B => {(addressing::IMMEDIATE.read)(nes, unofficial_opcodes::alr)},
+    0x6B => {(addressing::IMMEDIATE.read)(nes, unofficial_opcodes::arr)},
+    0x8B => {(addressing::IMMEDIATE.read)(nes, unofficial_opcodes::xaa)},
     0x93 => unofficial_opcodes::ahx_indirect_indexed_y(nes),
     0x9B => unofficial_opcodes::tas(nes),
     0x9F => unofficial_opcodes::ahx_absolute_indexed_x(nes),
     0xBB => {(addressing::ABSOLUTE_INDEXED_Y.read)(nes, unofficial_opcodes::las)},
+    0xCB => {(addressing::IMMEDIATE.read)(nes, unofficial_opcodes::axs)},
+    0xEB => {(addressing::IMMEDIATE.read)(nes, opcodes::sbc)},
     _ => {
       // The remaining opcodes all use the same addressing mode as the ALU block, and the wame
       // read / write / modify type as the corresponding RMW block. Opcodes are mostly a combination

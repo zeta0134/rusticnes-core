@@ -178,3 +178,45 @@ pub fn las(registers: &mut Registers, data: u8) {
   registers.x = result;
   registers.s = result;
 }
+
+// AND with carry
+pub fn anc(registers: &mut Registers, data: u8) {
+  opcodes::and(registers, data);
+  registers.flags.carry = (registers.a & 0b1000_0000) != 0;
+}
+
+// AND with #imm, then LSR
+pub fn alr(registers: &mut Registers, data: u8) {
+  opcodes::and(registers, data);
+  let result = registers.a;
+  registers.a = opcodes::lsr(registers, result);
+}
+
+// AND with #imm, then ROR
+pub fn arr(registers: &mut Registers, data: u8) {
+  opcodes::and(registers, data);
+  let result = registers.a;
+  registers.a = opcodes::ror(registers, result);
+}
+
+// "Magic" value is a complete guess. I don't know if the NES's decimal unit actually
+// exists and is stubbed out; I'm assuming here that it is NOT, so setting magic to
+// 0x00. The true effect of this instruction varies *by console* and the instruction
+// should not be used for any purpose.
+// http://visual6502.org/wiki/index.php?title=6502_Opcode_8B_%28XAA,_ANE%29
+pub fn xaa(registers: &mut Registers, data: u8) {
+  // A = (A | magic) & X & imm
+  let magic = 0x00;
+  registers.a = (registers.a | magic) & registers.x & data;
+  registers.flags.zero = registers.a == 0;
+  registers.flags.negative = registers.a & 0x80 != 0;
+}
+
+pub fn axs(registers: &mut Registers, data: u8) {
+  let initial = registers.a & registers.x;
+  // CMP with #imm, but store value in x:
+  registers.flags.carry = initial >= data;
+  registers.x = initial.wrapping_sub(data);
+  registers.flags.zero = registers.x == 0;
+  registers.flags.negative = registers.x & 0x80 != 0;
+}
