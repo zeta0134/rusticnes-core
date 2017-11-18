@@ -290,8 +290,8 @@ pub fn unofficial_block(nes: &mut NesState, addressing_mode_index: u8, opcode_in
   // unofficial opcodes are surprisingly regular, but the following instructions break the
   // mold, mostly from the +0B block:
   match nes.cpu.opcode {
-    0x0B | 0x2B | 0x4B | 0x6B | 0x8B | 0xAB | 0xCB | 0xEB | 
-    0x93 | 0x9B | 0xBB => { 
+    0x0B | 0x2B | 0x4B | 0x6B | 0x8B | 0xCB | 0xEB | 
+    0x93 | 0x9B | 0x9F | 0xBB => { 
       println!("Unimplemented mold-breaking (11) opcode: {:02X}", nes.cpu.opcode);
       // HALT CPU until we fix this.
       println!("Will now halt CPU to prevent undefined execution. File a bug!");
@@ -302,6 +302,7 @@ pub fn unofficial_block(nes: &mut NesState, addressing_mode_index: u8, opcode_in
         // Zero Page Mode
         0b000 => &addressing::INDEXED_INDIRECT_X,
         0b001 => &addressing::ZERO_PAGE,
+        0b010 => &addressing::IMMEDIATE,
         0b011 => &addressing::ABSOLUTE,
         0b100 => &addressing::INDIRECT_INDEXED_Y,
         0b101 => &addressing::ZERO_PAGE_INDEXED_X,
@@ -314,19 +315,14 @@ pub fn unofficial_block(nes: &mut NesState, addressing_mode_index: u8, opcode_in
 
       match opcode_index {
         0b000 => {(addressing_mode.modify)(nes, unofficial_opcodes::slo)},
-        /* 0b001 => {(addressing_mode.read)(nes, opcodes::and)},
-        0b010 => {(addressing_mode.read)(nes, opcodes::eor)},
-        0b011 => {(addressing_mode.read)(nes, opcodes::adc)},
-        0b100 => {(addressing_mode.write)(nes, opcodes::sta)},
-        0b101 => {(addressing_mode.read)(nes, opcodes::lda)},
-        0b110 => {(addressing_mode.read)(nes, opcodes::cmp)},
-        0b111 => {(addressing_mode.read)(nes, opcodes::sbc)}, */
-        _ => {
-          println!("Unimplemented (11) opcode: {:02X}", nes.cpu.opcode);
-          // HALT CPU until we fix this.
-          println!("Will now halt CPU to prevent undefined execution. File a bug!");
-          halt_cpu(nes);
-        }
+        0b001 => {(addressing_mode.modify)(nes, unofficial_opcodes::rla)},
+        0b010 => {(addressing_mode.modify)(nes, unofficial_opcodes::sre)},
+        0b011 => {(addressing_mode.modify)(nes, unofficial_opcodes::rra)},
+        0b100 => {(addressing_mode.write )(nes, unofficial_opcodes::sax)},
+        0b101 => {(addressing_mode.read  )(nes, unofficial_opcodes::lax)},
+        0b110 => {(addressing_mode.modify)(nes, unofficial_opcodes::dcp)},
+        0b111 => {(addressing_mode.modify)(nes, unofficial_opcodes::isc)},
+        _ => ()
       };
     }
   }
