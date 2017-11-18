@@ -5,6 +5,7 @@ pub struct CpuMemory {
 
     pub recent_reads: Vec<u16>,
     pub recent_writes: Vec<u16>,
+    pub open_bus: u8,
 }
 
 impl CpuMemory {
@@ -13,6 +14,7 @@ impl CpuMemory {
             iram_raw: vec!(0u8; 0x800),
             recent_reads: Vec::new(),
             recent_writes: Vec::new(),
+            open_bus: 0,
         }
     }
 }
@@ -24,13 +26,17 @@ pub fn passively_read_byte(nes: &mut NesState, address: u16) -> u8 {
 pub fn read_byte(nes: &mut NesState, address: u16) -> u8 {
     nes.memory.recent_reads.insert(0, address);
     nes.memory.recent_reads.truncate(20);
-    return _read_byte(nes, address, true);
+    let byte = _read_byte(nes, address, true);
+    nes.memory.open_bus = byte;
+    return byte;
 }
 
 fn _read_byte(nes: &mut NesState, address: u16, side_effects: bool) -> u8 {
     let memory = &mut nes.memory;
     match address {
-        0x0000 ... 0x1FFF => return memory.iram_raw[(address & 0x7FF) as usize],
+        0x0000 ... 0x1FFF => {
+            return memory.iram_raw[(address & 0x7FF) as usize];
+        },
         0x2000 ... 0x3FFF => {
             // PPU
             let ppu_reg = address & 0x7;
@@ -116,7 +122,9 @@ fn _read_byte(nes: &mut NesState, address: u16, side_effects: bool) -> u8 {
             return result;
         },
         0x4020 ... 0xFFFF => return nes.mapper.read_byte(address),
-        _ => return 0
+        _ => {
+            return memory.open_bus;
+        }
     }
 }
 
