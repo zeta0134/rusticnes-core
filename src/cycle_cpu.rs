@@ -311,7 +311,7 @@ pub fn unofficial_block(nes: &mut NesState, addressing_mode_index: u8, opcode_in
     0x93 => unofficial_opcodes::ahx_indirect_indexed_y(nes),
     0x9B => unofficial_opcodes::tas(nes),
     0x97 => {(addressing::ZERO_PAGE_INDEXED_Y.write)(nes, unofficial_opcodes::sax)},
-    0x9F => unofficial_opcodes::ahx_absolute_indexed_x(nes),
+    0x9F => unofficial_opcodes::ahx_absolute_indexed_y(nes),
     0xB7 => {(addressing::ZERO_PAGE_INDEXED_Y.read)(nes, unofficial_opcodes::lax)},
     0xBB => {(addressing::ABSOLUTE_INDEXED_Y.read)(nes, unofficial_opcodes::las)},
     0xBF => {(addressing::ABSOLUTE_INDEXED_Y.read)(nes, unofficial_opcodes::lax)},

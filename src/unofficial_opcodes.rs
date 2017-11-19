@@ -107,13 +107,13 @@ pub fn ahx_indirect_indexed_y(nes: &mut NesState) {
   }
 }
 
-pub fn ahx_absolute_indexed_x(nes: &mut NesState) {
+pub fn ahx_absolute_indexed_y(nes: &mut NesState) {
   match nes.cpu.tick {
     2 => addressing::read_address_low(nes),
     3 => addressing::read_address_high(nes),
     4 => {
-      // Add X to LOW BYTE of the effective address
-      let low_byte = (nes.cpu.temp_address & 0xFF) + (nes.registers.x as u16);
+      // Add Y to LOW BYTE of the effective address
+      let low_byte = (nes.cpu.temp_address & 0xFF) + (nes.registers.y as u16);
       nes.cpu.temp_address = (nes.cpu.temp_address & 0xFF00) | (low_byte & 0xFF);
       let temp_address = nes.cpu.temp_address;
       // Dummy read from the new address before it is fixed
