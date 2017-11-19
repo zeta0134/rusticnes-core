@@ -27,17 +27,17 @@ impl Mapper for CnRom {
         return self.mirroring;
     }
 
-    fn read_byte(&mut self, address: u16) -> u8 {
+    fn read_byte(&mut self, address: u16) -> Option<u8> {
         match address {
             0x0000 ... 0x1FFF => {
                 let chr_rom_len = self.chr_rom.len();
-                return self.chr_rom[((self.chr_bank * 0x2000) + (address as usize)) % chr_rom_len];
+                return Some(self.chr_rom[((self.chr_bank * 0x2000) + (address as usize)) % chr_rom_len]);
             },
             0x8000 ... 0xFFFF => {
                 let prg_rom_len = self.prg_rom.len();
-                return self.prg_rom[(address as usize - 0x8000) % prg_rom_len];
+                return Some(self.prg_rom[(address as usize - 0x8000) % prg_rom_len]);
             },
-            _ => return 0
+            _ => return None
         }
     }
 

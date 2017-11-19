@@ -34,22 +34,22 @@ impl Mapper for Nrom {
         return self.mirroring;
     }
     
-    fn read_byte(&mut self, address: u16) -> u8 {
+    fn read_byte(&mut self, address: u16) -> Option<u8> {
         match address {
-            0x0000 ... 0x1FFF => return self.chr_rom[address as usize],
+            0x0000 ... 0x1FFF => return Some(self.chr_rom[address as usize]),
             0x6000 ... 0x7FFF => {
                 let prg_ram_len = self.prg_ram.len();
                 if prg_ram_len > 0 {
-                    return self.prg_ram[((address - 0x6000) % (prg_ram_len as u16)) as usize];
+                    return Some(self.prg_ram[((address - 0x6000) % (prg_ram_len as u16)) as usize]);
                 } else {
-                    return 0;
+                    return None;
                 }
             },
             0x8000 ... 0xFFFF => {
                 let prg_rom_len = self.prg_rom.len();
-                return self.prg_rom[(address % (prg_rom_len as u16)) as usize];
+                return Some(self.prg_rom[(address % (prg_rom_len as u16)) as usize]);
             },
-            _ => return 0
+            _ => return None
         }
     }
 

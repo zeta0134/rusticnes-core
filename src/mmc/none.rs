@@ -18,8 +18,8 @@ impl Mapper for NoneMapper {
         return Mirroring::Horizontal;
     }
     
-    fn read_byte(&mut self, _: u16) -> u8 {
-        return 0;
+    fn read_byte(&mut self, _: u16) -> Option<u8> {
+        return None;
     }
 
     fn write_byte(&mut self, _: u16, _: u8) {

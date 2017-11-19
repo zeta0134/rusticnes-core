@@ -87,6 +87,9 @@ pub struct PpuState {
     // PPU Registers
     pub latch: u8,
 
+    // PPU reads from unconnected mapper space (uncommon, but not impossible)
+    pub open_bus: u8,
+
     pub read_buffer: u8,
 
     pub control: u8,
@@ -154,6 +157,7 @@ impl PpuState {
             oam_addr: 0,
             oam_dma_high: 0,
             latch: 0,
+            open_bus: 0,
             read_buffer: 0,
     
             write_toggle: false,
@@ -185,21 +189,27 @@ impl PpuState {
             0x3F00 ... 0x3FFF => {
                 // Weird read buffer behavior
                 self.read_buffer = self.read_latched_byte(mapper, (masked_address & 0x0FFF) + 0x2000);
-                return self._read_byte(mapper, address, true);
+                return self.read_byte(mapper, address);
             },
             _ => {
                 let result = self.read_buffer;
-                self.read_buffer = self._read_byte(mapper, address, true);
+                self.read_buffer = self.read_byte(mapper, address);
                 return result;
             }
         }
     }
 
     pub fn passively_read_byte(&mut self, mapper: &mut Mapper, address: u16) -> u8 {
-        return self._read_byte(mapper, address, false);
+        return self.__read_byte(mapper, address, false);
     }
 
-    pub fn _read_byte(&mut self, mapper: &mut Mapper, address: u16, side_effects: bool) -> u8 {
+    pub fn read_byte(&mut self, mapper: &mut Mapper, address: u16) -> u8 {
+        let byte = self.__read_byte(mapper, address, true);
+        self.open_bus = byte;
+        return byte;
+    }
+
+    pub fn __read_byte(&mut self, mapper: &mut Mapper, address: u16, side_effects: bool) -> u8 {
         let masked_address = address & 0x3FFF;
         if side_effects {
             self.recent_reads.insert(0, masked_address);
@@ -208,14 +218,20 @@ impl PpuState {
         match masked_address {
             0x0000 ... 0x1FFF => {
                 if side_effects {
-                    return mapper.read_byte(masked_address);
+                    return match mapper.read_byte(masked_address) {
+                        Some(byte) => byte,
+                        None => self.open_bus
+                    };
                 } else {
-                    return mapper.debug_read_byte(masked_address);
+                    return match mapper.debug_read_byte(masked_address) {
+                        Some(byte) => byte,
+                        None => self.open_bus
+                    };
                 }
             },
             // Nametable 0 (top-left)
             0x2000 ... 0x2FFF => return self.internal_vram[nametable_address(masked_address, mapper.mirroring()) as usize],
-            0x3000 ... 0x3EFF => return self._read_byte(mapper, masked_address - 0x1000, side_effects),
+            0x3000 ... 0x3EFF => return self.__read_byte(mapper, masked_address - 0x1000, side_effects),
             0x3F00 ... 0x3FFF => {
                 let mut palette_address = masked_address & 0x1F;
                 // Weird background masking
@@ -356,7 +372,7 @@ impl PpuState {
             bg_palette_number = 0;
         }
 
-        let mut pixel_color = self._read_byte(mapper, (((bg_palette_number as u16) << 2) + bg_palette_index) as u16 + 0x3F00, true);
+        let mut pixel_color = self.read_byte(mapper, (((bg_palette_number as u16) << 2) + bg_palette_index) as u16 + 0x3F00);
 
         // If sprites are enabled
         if self.mask & 0b0001_0000 != 0 && ((self.mask & 0b0000_0100 != 0) || px >= 8) {
@@ -376,7 +392,7 @@ impl PpuState {
                 if bg_palette_index == 0 || !self.secondary_oam[sprite_index].bg_priority() {
                     let sprite_palette_number = self.secondary_oam[sprite_index].palette() as u16;
                     let sprite_palette_index = self.secondary_oam[sprite_index].palette_index() as u16;
-                    pixel_color = self._read_byte(mapper, (sprite_palette_number << 2) + sprite_palette_index + 0x3F10, true);
+                    pixel_color = self.read_byte(mapper, (sprite_palette_number << 2) + sprite_palette_index + 0x3F10);
                 }
             }
         }
@@ -431,7 +447,7 @@ impl PpuState {
             // Note that mirroring is applied in _read_byte, not here.
             0 => {
                 let tile_address = 0x2000 | (self.current_vram_address & 0x0FFF);
-                self.tile_index = self._read_byte(mapper, tile_address, true);
+                self.tile_index = self.read_byte(mapper, tile_address);
             },
             2 => {
                 let attribute_address = 
@@ -439,19 +455,19 @@ impl PpuState {
                      (self.current_vram_address & 0x0C00) | 
                     ((self.current_vram_address >> 4) & 0x38) | 
                     ((self.current_vram_address >> 2) & 0x07);
-                self.attribute_byte = self._read_byte(mapper, attribute_address, true);
+                self.attribute_byte = self.read_byte(mapper, attribute_address);
             },
             4 => {
                 let tile_low_address = pattern_address + 
                     (self.tile_index as u16 * 16) + 
                      self.fine_y();
-                self.tile_low = self._read_byte(mapper, tile_low_address, true);
+                self.tile_low = self.read_byte(mapper, tile_low_address);
             },
             6 => {
                 let tile_high_address = pattern_address + 
                     (self.tile_index as u16 * 16) + 8 +
                      self.fine_y();
-                self.tile_high = self._read_byte(mapper, tile_high_address, true);
+                self.tile_high = self.read_byte(mapper, tile_high_address);
             },
             7 => {
                 self.reload_shift_registers();
@@ -499,8 +515,8 @@ impl PpuState {
             let tile_address = (((tile_index as u16 * 16) + y_offset) & 0xFFF) | pattern_address;
 
             match sub_cycle {
-                4 => self.secondary_oam[sprite_index].bitmap_low  = self._read_byte(mapper, tile_address, true),
-                6 => self.secondary_oam[sprite_index].bitmap_high = self._read_byte(mapper, tile_address + 8, true),
+                4 => self.secondary_oam[sprite_index].bitmap_low  = self.read_byte(mapper, tile_address),
+                6 => self.secondary_oam[sprite_index].bitmap_high = self.read_byte(mapper, tile_address + 8),
                 _ => ()
             }
         }
@@ -570,13 +586,13 @@ impl PpuState {
             337 => {
                 if self.rendering_enabled() {
                     let tile_address = 0x2000 | (self.current_vram_address & 0x0FFF);
-                    self.tile_index = self._read_byte(mapper, tile_address, true);
+                    self.tile_index = self.read_byte(mapper, tile_address);
                 }
             },
             339 => {
                 if self.rendering_enabled() {
                     let tile_address = 0x2000 | (self.current_vram_address & 0x0FFF);
-                    self.tile_index = self._read_byte(mapper, tile_address, true);
+                    self.tile_index = self.read_byte(mapper, tile_address);
 
                     if self.current_frame & 0x1 != 0 {
                         // Skip ahead one cycle on odd frames. This jitter produces a cleaner image
@@ -627,7 +643,7 @@ impl PpuState {
                 // (Required for MMU5 to detect scanlines for IRQs, among other things.)
                 337 | 339 => {
                     let tile_address = 0x2000 | (self.current_vram_address & 0x0FFF);
-                    self.tile_index = self._read_byte(mapper, tile_address, true);
+                    self.tile_index = self.read_byte(mapper, tile_address);
                 },
                 _ => ()
             }
@@ -636,12 +652,12 @@ impl PpuState {
                 // cycle 0 is a dummy cycle, nothing happens
                 1 ... 256 => {
                     // The PPU is disabled. Usually, we should show the backdrop color:
-                    let mut pixel_color = self._read_byte(mapper, 0x3F00, true);
+                    let mut pixel_color = self.read_byte(mapper, 0x3F00);
                     // However, if the current VRAM address is within palette memory, instead
                     // show whatever that color is:
                     if self.current_vram_address >= 0x3F00 && self.current_vram_address <= 0x3FFF {
                         let vram_address = self.current_vram_address;
-                        pixel_color = self._read_byte(mapper, vram_address, true);
+                        pixel_color = self.read_byte(mapper, vram_address);
                     }
 
                     let px = self.current_scanline_cycle - 1;
@@ -688,7 +704,7 @@ impl PpuState {
             address = address + 0x0800;
         }
         address = address + ((ty % 30) as u16) * 32 + ((tx & 0x1F) as u16);
-        return self._read_byte(mapper, address, true);
+        return self.read_byte(mapper, address);
     }
 
     pub fn get_bg_palette(&mut self, mapper: &mut Mapper, tx: u8, ty: u8) -> u8 {
@@ -701,7 +717,7 @@ impl PpuState {
         }
         address += ((tx & 0x1F) >> 2) as u16;
         address += (((ty % 30) >> 2) as u16)* 0x8;
-        let attr_byte = self._read_byte(mapper, address, true);
+        let attr_byte = self.read_byte(mapper, address);
         let shift = (((tx & 0x2) >> 1) + ((ty % 30) & 0x2)) << 1;
         let mask = 0x3 << shift;
         return (attr_byte & mask) >> shift;
@@ -756,14 +772,4 @@ pub fn nametable_address(read_address: u16, mirroring: Mirroring) -> u16 {
         },
         _ => return 0, // wat
     }
-}
-
-// Given a pattern and tile / pixel coordinates, decodes the palette index and returns it
-// (Palette index will be between 0 .. 3)
-pub fn decode_chr_pixel(mapper: &mut Mapper, pattern_address: u16, tile: u8, pixel_x: u8, pixel_y: u8) -> u8 {
-    let low_addr = (tile as u16) * 16 + (pixel_y as u16);
-    let high_addr = low_addr + 8;
-    let low_bit = mapper.debug_read_byte(pattern_address + low_addr) >> (7 - pixel_x) & 0x1;
-    let high_bit = mapper.debug_read_byte(pattern_address + high_addr) >> (7 - pixel_x) & 0x1;
-    return (high_bit << 1) + low_bit;
 }

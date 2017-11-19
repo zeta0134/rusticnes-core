@@ -412,7 +412,10 @@ impl DmcState {
     }
 
     pub fn read_next_sample(&mut self, mapper: &mut Mapper) {
-        self.sample_buffer = mapper.read_byte(0x8000 | (self.current_address & 0x7FFF));
+        match mapper.read_byte(0x8000 | (self.current_address & 0x7FFF)) {
+            Some(byte) => self.sample_buffer = byte,
+            None => self.sample_buffer = 0,
+        }
         self.current_address = self.current_address.wrapping_add(1);
         self.bytes_remaining -= 1;
         if self.bytes_remaining == 0 {

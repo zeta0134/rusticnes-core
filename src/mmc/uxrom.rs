@@ -27,17 +27,17 @@ impl Mapper for UxRom {
         return self.mirroring;
     }
 
-    fn read_byte(&mut self, address: u16) -> u8 {
+    fn read_byte(&mut self, address: u16) -> Option<u8> {
         match address {
-            0x0000 ... 0x1FFF => return self.chr_ram[address as usize],
+            0x0000 ... 0x1FFF => return Some(self.chr_ram[address as usize]),
             0x8000 ... 0xBFFF => {
                 let prg_rom_len = self.prg_rom.len();
-                return self.prg_rom[((self.prg_bank * 0x4000) + (address as usize - 0x8000)) % prg_rom_len];
+                return Some(self.prg_rom[((self.prg_bank * 0x4000) + (address as usize - 0x8000)) % prg_rom_len]);
             },
             0xC000 ... 0xFFFF => {
-                return self.prg_rom[self.prg_rom.len() - 0x4000 + (address as usize - 0xC000)];
+                return Some(self.prg_rom[self.prg_rom.len() - 0x4000 + (address as usize - 0xC000)]);
             }
-            _ => return 0
+            _ => return None
         }
     }
 
