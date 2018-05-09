@@ -7,7 +7,7 @@ pub enum Mirroring {
     FourScreen,
 }
 
-pub trait Mapper {
+pub trait Mapper: Send {
     fn read_byte(&mut self, address: u16) -> Option<u8>;
     fn write_byte(&mut self, address: u16, data: u8);
     fn debug_read_byte(&mut self, address: u16) -> Option<u8> {return self.read_byte(address);}
