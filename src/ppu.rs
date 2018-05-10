@@ -483,7 +483,7 @@ impl PpuState {
             let sprite_index: usize = ((self.current_scanline_cycle - 257) / 8) as usize;
             let mut tile_index = self.secondary_oam[sprite_index].tile_index;
 
-            let mut sprite_size = 8;
+            let mut sprite_size: u16 = 8;
             if (self.control & 0b0010_0000) != 0 {
                 sprite_size = 16;
             }
@@ -502,14 +502,14 @@ impl PpuState {
                 }
             }
 
-            let mut y_offset = self.current_scanline - self.secondary_oam[sprite_index].y_pos as u16;
+            let mut y_offset = self.current_scanline.wrapping_sub(self.secondary_oam[sprite_index].y_pos as u16);
             if self.secondary_oam[sprite_index].y_flip() {
-                y_offset = sprite_size - 1 - y_offset;
+                y_offset = sprite_size.wrapping_sub(1).wrapping_sub(y_offset);
             }
 
             if y_offset >= 8 {
-                y_offset -= 8;
-                tile_index += 1;
+                y_offset = y_offset.wrapping_sub(8);
+                tile_index = tile_index.wrapping_add(1);
             }
 
             let tile_address = (((tile_index as u16 * 16) + y_offset) & 0xFFF) | pattern_address;
