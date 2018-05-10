@@ -24,8 +24,8 @@ pub fn passively_read_byte(nes: &mut NesState, address: u16) -> u8 {
 }
 
 pub fn read_byte(nes: &mut NesState, address: u16) -> u8 {
-    nes.memory.recent_reads.insert(0, address);
-    nes.memory.recent_reads.truncate(20);
+    /*nes.memory.recent_reads.insert(0, address);
+    nes.memory.recent_reads.truncate(20);*/
     let byte = _read_byte(nes, address, true);
     nes.memory.open_bus = byte;
     return byte;
@@ -134,8 +134,8 @@ fn _read_byte(nes: &mut NesState, address: u16, side_effects: bool) -> u8 {
 }
 
 pub fn write_byte(nes: &mut NesState, address: u16, data: u8) {
-    nes.memory.recent_writes.insert(0, address);
-    nes.memory.recent_writes.truncate(20);
+    /*nes.memory.recent_writes.insert(0, address);
+    nes.memory.recent_writes.truncate(20);*/
     match address {
         0x0000 ... 0x1FFF => nes.memory.iram_raw[(address & 0x7FF) as usize] = data,
         0x2000 ... 0x3FFF => {

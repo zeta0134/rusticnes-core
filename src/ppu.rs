@@ -211,10 +211,10 @@ impl PpuState {
 
     pub fn __read_byte(&mut self, mapper: &mut Mapper, address: u16, side_effects: bool) -> u8 {
         let masked_address = address & 0x3FFF;
-        if side_effects {
+        /*if side_effects {
             self.recent_reads.insert(0, masked_address);
             self.recent_reads.truncate(20);
-        }
+        }*/
         match masked_address {
             0x0000 ... 0x1FFF => {
                 if side_effects {
