@@ -7,4 +7,5 @@ pub mod mmc1;
 pub mod mmc3;
 pub mod none;
 pub mod nrom;
+pub mod pxrom;
 pub mod uxrom;
