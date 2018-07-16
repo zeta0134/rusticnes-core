@@ -9,10 +9,10 @@ pub struct PxRom {
     pub prg_ram: Vec<u8>,
     pub chr_rom: Vec<u8>,
     pub mirroring: Mirroring,
-    pub chr_0_bank: usize,
+    pub chr_0_latch: u8,
     pub chr_0_fd_bank: usize,
     pub chr_0_fe_bank: usize,
-    pub chr_1_bank: usize,
+    pub chr_1_latch: u8,
     pub chr_1_fd_bank: usize,
     pub chr_1_fe_bank: usize,
     pub prg_bank: usize,
@@ -25,10 +25,10 @@ impl PxRom {
             prg_ram: vec![0u8; 8 * 1024],
             chr_rom: chr.to_vec(),
             mirroring: Mirroring::Vertical,
-            chr_0_bank: 0,
+            chr_0_latch: 0,
             chr_0_fd_bank: 0,
             chr_0_fe_bank: 0,
-            chr_1_bank: 0,
+            chr_1_latch: 0,
             chr_1_fd_bank: 0,
             chr_1_fe_bank: 0,
             prg_bank: 0,
@@ -45,20 +45,30 @@ impl Mapper for PxRom {
         match address {
             0x0000 ... 0x0FFF => {
                 let chr_rom_len = self.chr_rom.len();
-                let chr_byte = Some(self.chr_rom[((self.chr_0_bank * 0x1000) + (address as usize)) % chr_rom_len]);
+                let chr_bank = match self.chr_0_latch {
+                    0 => self.chr_0_fd_bank,
+                    1 => self.chr_0_fe_bank,
+                    _ => 0
+                };
+                let chr_byte = Some(self.chr_rom[((chr_bank * 0x1000) + (address as usize)) % chr_rom_len]);
                 match address {
-                    0x0FD8 => {self.chr_0_bank = self.chr_0_fd_bank;},
-                    0x0FE8 => {self.chr_0_bank = self.chr_0_fe_bank;},
+                    0x0FD8 => {self.chr_0_latch = 0;},
+                    0x0FE8 => {self.chr_0_latch = 1;},
                     _ => {}
                 }
                 return chr_byte;
             },
             0x1000 ... 0x1FFF => {
                 let chr_rom_len = self.chr_rom.len();
-                let chr_byte = Some(self.chr_rom[((self.chr_1_bank * 0x1000) + ((address - 0x1000) as usize)) % chr_rom_len]);
+                let chr_bank = match self.chr_1_latch {
+                    0 => self.chr_1_fd_bank,
+                    1 => self.chr_1_fe_bank,
+                    _ => 0
+                };
+                let chr_byte = Some(self.chr_rom[((chr_bank * 0x1000) + ((address - 0x1000) as usize)) % chr_rom_len]);
                 match address {
-                    0x1FD8 ... 0x1FDF => {self.chr_1_bank = self.chr_1_fd_bank;},
-                    0x1FE8 ... 0x1FEF => {self.chr_1_bank = self.chr_1_fe_bank;},
+                    0x1FD8 ... 0x1FDF => {self.chr_1_latch = 0;},
+                    0x1FE8 ... 0x1FEF => {self.chr_1_latch = 1;},
                     _ => {}
                 }
                 return chr_byte;
