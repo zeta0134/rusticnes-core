@@ -511,6 +511,7 @@ impl PpuState {
                 y_offset = y_offset.wrapping_sub(8);
                 tile_index = tile_index.wrapping_add(1);
             }
+            y_offset = y_offset % 8;
 
             let tile_address = (((tile_index as u16 * 16) + y_offset) & 0xFFF) | pattern_address;
 
