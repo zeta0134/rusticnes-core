@@ -1,5 +1,5 @@
 // Advanced mapper with bank-switched PRG ROM and CHR ROM, and a scanline counter feeding into IRQ
-// Reference capabilities: https://wiki.nesdev.com/w/index.php/MMC1
+// Reference capabilities: https://wiki.nesdev.com/w/index.php/MMC3
 
 use cartridge::NesHeader;
 use mmc::mapper::*;

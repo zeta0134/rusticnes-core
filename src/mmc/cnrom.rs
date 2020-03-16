@@ -1,5 +1,5 @@
-// GxRom, simple bank switchable 32kb PRG ROM and 8k CHR ROM
-// Reference capabilities: https://wiki.nesdev.com/w/index.php/GxROM
+// CnROM, 16-32kb PRG ROM, up to 2048k CHR ROM
+// Reference capabilities: https://wiki.nesdev.com/w/index.php/INES_Mapper_003
 
 use cartridge::NesHeader;
 use mmc::mapper::*;
