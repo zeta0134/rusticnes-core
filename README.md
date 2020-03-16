@@ -10,9 +10,7 @@ I'm striving for cycle accuracy with the emulator. While it works and runs many 
 
 ## 6502 CPU
 
-- All Official Instructions.
-- Some unofficial NOPs and all STPs.
-- No unofficial instructions, the usage of these typically results in a crash due to undefined behavior.
+- All instructions, including unofficial instructions, NOPs, and STPs
 - Mostly cycle accurate, which should include additional reads / writes on dummy cycles.
 - Missing proper read delay implementation, needed for DMC DMA read delay, and proper interaction between DMC and OAM DMA during simultaneous operation.
 
@@ -22,6 +20,7 @@ I'm striving for cycle accuracy with the emulator. While it works and runs many 
 - DMC wait delay is not implemented.
 - Audio is not mixed properly, relative channel volumes are therefore sometimes quite incorrect. It's close enough that things sound okay unless you know what to listen for.
 - No interpolation or filtering, which can make especially high frequencies sound a bit off. The APU is producing the correct output, but the subsequent clamping to 44.1 KHz introduces artifacts.
+- Triangle channel intentionally does not emulate extremely high frequencies, to avoid artifacts in the handful of games that use this to "silence" the channel
 
 ## PPU
 
@@ -37,7 +36,7 @@ I'm striving for cycle accuracy with the emulator. While it works and runs many 
 
 ## Mappers
 
-- Currently supported: AxROM, GxROM, MMC1, MMC3, NROM, UxROM
+- Currently supported: AxROM, CnROM, GxROM, MMC1, MMC3, NROM, PxROM, UxROM
 - Currently unsupported: Everything else.
 - MMC1 does not ignore writes on successive cycles, causing issues with some games.
 - FDS and non-NTSC NES features (PAL, Vs System, etc) are entirely unsupported.
