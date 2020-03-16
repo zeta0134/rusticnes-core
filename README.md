@@ -38,5 +38,6 @@ I'm striving for cycle accuracy with the emulator. While it works and runs many 
 
 - Currently supported: AxROM, CnROM, GxROM, MMC1, MMC3, NROM, PxROM, UxROM
 - Currently unsupported: Everything else.
-- MMC1 does not ignore writes on successive cycles, causing issues with some games.
+- Behavior seems mostly correct, but accuracy is not guaranteed.
+- Some of blarggs mapper tests do not pass, especially those involving timing, which may be due to missing RDY line implementation
 - FDS and non-NTSC NES features (PAL, Vs System, etc) are entirely unsupported.
