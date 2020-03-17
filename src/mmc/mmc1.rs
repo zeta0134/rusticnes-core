@@ -72,6 +72,7 @@ impl Mapper for Mmc1 {
         let last_bank = (self.prg_rom.len() / (16 * 1024)) as u16 - 1;
         println!("PRG: {} | CHR0: {} | CHR1: {} | PRG_LAST: {}",
             self.prg_bank, self.chr_bank_0, self.chr_bank_1, last_bank);
+        println!("Mirroring Mode: {}", mirroring_mode_name(self.mirroring));
         println!("====================");
     }
 
