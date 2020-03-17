@@ -32,6 +32,13 @@ impl Mapper for AxRom {
 
     fn print_debug_status(&self) {
         println!("======= AxROM =======");
+        let mirror_mode = match self.mirroring {
+            Mirroring::OneScreenLower => "$3000 (Lower)",
+            Mirroring::OneScreenUpper => "$2000 (Upper)",
+            _ => "Invalid"
+        };
+        println!("PRG Bank: {}, Mirroring Mode: {}", self.prg_bank, mirror_mode);
+        println!("====================");
     }
 
     fn read_cpu(&mut self, address: u16) -> Option<u8> {
