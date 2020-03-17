@@ -3,11 +3,13 @@
 
 use cartridge::NesHeader;
 use mmc::mapper::*;
+use mmc::mirroring;
 
 pub struct Mmc1 {
     pub prg_rom: Vec<u8>,
     pub prg_ram: Vec<u8>,
     pub chr_rom: Vec<u8>,
+    pub vram: Vec<u8>,
 
     pub shift_counter: u8,
     pub shift_data: u8,
@@ -41,6 +43,7 @@ impl Mmc1 {
             prg_rom: prg.to_vec(),
             prg_ram: vec![0u8; 0x2000],
             chr_rom: chr_rom,
+            vram: vec![0u8; 0x1000],
             chr_ram: header.has_chr_ram,
             // Note: On real MMC1-based hardware, many of these values are random on startup, so
             // the defaults presented below are arbitrary.
@@ -236,6 +239,13 @@ impl Mapper for Mmc1 {
                     return Some(self.chr_rom[((self.chr_bank_1 * 0x1000) +  (address as usize - 0x1000)) % chr_rom_len]);
                 }
             },
+            0x2000 ... 0x3FFF => return match self.mirroring {
+                Mirroring::Horizontal => Some(self.vram[mirroring::horizontal_mirroring(address) as usize]),
+                Mirroring::Vertical   => Some(self.vram[mirroring::vertical_mirroring(address) as usize]),
+                Mirroring::OneScreenLower => Some(self.vram[mirroring::one_screen_lower(address) as usize]),
+                Mirroring::OneScreenUpper => Some(self.vram[mirroring::one_screen_upper(address) as usize]),
+                _ => None
+            },
             _ => return None
         }
     }
@@ -269,6 +279,13 @@ impl Mapper for Mmc1 {
                         self.chr_rom[((self.chr_bank_1 * 0x1000) + (address as usize - 0x1000)) % chr_rom_len] = data;
                     }
                 }
+            },
+            0x2000 ... 0x3FFF => match self.mirroring {
+                Mirroring::Horizontal => self.vram[mirroring::horizontal_mirroring(address) as usize] = data,
+                Mirroring::Vertical   => self.vram[mirroring::vertical_mirroring(address) as usize] = data,
+                Mirroring::OneScreenLower => self.vram[mirroring::one_screen_lower(address) as usize] = data,
+                Mirroring::OneScreenUpper => self.vram[mirroring::one_screen_upper(address) as usize] = data,
+                _ => {}
             },
             _ => {}
         }
