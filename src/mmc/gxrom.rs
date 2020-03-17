@@ -3,6 +3,7 @@
 
 use cartridge::NesHeader;
 use mmc::mapper::*;
+use mmc::mirroring;
 
 pub struct GxRom {
     pub prg_rom: Vec<u8>,
@@ -10,6 +11,7 @@ pub struct GxRom {
     pub mirroring: Mirroring,
     pub prg_bank: usize,
     pub chr_bank: usize,
+    pub vram: Vec<u8>,
 }
 
 impl GxRom {
@@ -20,11 +22,18 @@ impl GxRom {
             mirroring: header.mirroring,
             prg_bank: 0x00,
             chr_bank: 0x00,
+            vram: vec![0u8; 0x1000],
         }
     }
 }
 
 impl Mapper for GxRom {
+    fn print_debug_status(&self) {
+        println!("======= GxROM =======");
+        println!("PRG Bank: {}, CHR Bank: {}, Mirroring Mode: {}", self.prg_bank, self.chr_bank, mirroring_mode_name(self.mirroring));
+        println!("====================");
+    }
+
     fn mirroring(&self) -> Mirroring {
         return self.mirroring;
     }
@@ -55,11 +64,23 @@ impl Mapper for GxRom {
                 let chr_rom_len = self.chr_rom.len();
                 return Some(self.chr_rom[((self.chr_bank * 0x2000) + (address as usize)) % chr_rom_len]);
             },
+            0x2000 ... 0x3FFF => return match self.mirroring {
+                Mirroring::Horizontal => Some(self.vram[mirroring::horizontal_mirroring(address) as usize]),
+                Mirroring::Vertical   => Some(self.vram[mirroring::vertical_mirroring(address) as usize]),
+                _ => None
+            },
             _ => return None
         }
     }
 
-    fn write_ppu(&mut self, _address: u16, _data: u8) {
-        return;
+    fn write_ppu(&mut self, address: u16, data: u8) {
+        match address {
+            0x2000 ... 0x3FFF => match self.mirroring {
+                Mirroring::Horizontal => self.vram[mirroring::horizontal_mirroring(address) as usize] = data,
+                Mirroring::Vertical   => self.vram[mirroring::vertical_mirroring(address) as usize] = data,
+                _ => {}
+            },
+            _ => {}
+        }
     }
 }
