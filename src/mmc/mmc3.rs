@@ -3,11 +3,13 @@
 
 use cartridge::NesHeader;
 use mmc::mapper::*;
+use mmc::mirroring;
 
 pub struct Mmc3 {
     pub prg_rom: Vec<u8>,
     pub prg_ram: Vec<u8>,
     pub chr_rom: Vec<u8>,
+    pub vram: Vec<u8>,
 
     pub chr2_bank_0: usize,
     pub chr2_bank_1: usize,
@@ -50,6 +52,7 @@ impl Mmc3 {
             prg_rom: prg.to_vec(),
             prg_ram: vec![0u8; 0x2000],
             chr_rom: chr_rom,
+            vram: vec![0u8; 0x2000],
             // Note: On real MMC3-based hardware, many of these values are random on startup, so
             // the defaults presented below are arbitrary.
             chr2_bank_0: 0,
@@ -77,7 +80,7 @@ impl Mmc3 {
             last_a12: 0,
             last_chr_read: 0,
 
-            mirroring: Mirroring::Vertical,
+            mirroring: header.mirroring,
         }
     }
 
@@ -124,6 +127,12 @@ impl Mmc3 {
                     }
                 }
             },
+            0x2000 ... 0x3FFF => return match self.mirroring {
+                Mirroring::Horizontal => Some(self.vram[mirroring::horizontal_mirroring(address) as usize]),
+                Mirroring::Vertical   => Some(self.vram[mirroring::vertical_mirroring(address) as usize]),
+                Mirroring::FourScreen => Some(self.vram[mirroring::four_banks(address) as usize]),
+                _ => None
+            },
             _ => return None
         }
     }
@@ -134,6 +143,7 @@ impl Mapper for Mmc3 {
         println!("======= MMC3 =======");
         println!("IRQ: Current: {}, Reload: {}", self.irq_counter, self.irq_reload);
         println!("Last A12: {}, Last CHR Read: 0x{:04X}", self.last_a12, self.last_chr_read);
+        println!("Mirroring Mode: {}", mirroring_mode_name(self.mirroring));
         println!("====================");
     }
 
@@ -196,10 +206,12 @@ impl Mapper for Mmc3 {
                             self.switch_chr_banks = (data & 0b1000_0000) != 0;
                         },
                         0xA000 ... 0xBFFF => {
-                            if data & 0b1 == 0 {
-                                self.mirroring = Mirroring::Vertical;
-                            } else {
-                                self.mirroring = Mirroring::Horizontal;
+                            if self.mirroring != Mirroring::FourScreen {
+                                if data & 0b1 == 0 {
+                                    self.mirroring = Mirroring::Vertical;
+                                } else {
+                                    self.mirroring = Mirroring::Horizontal;
+                                }
                             }
                         },
                         0xC000 ... 0xDFFF => {
@@ -297,6 +309,12 @@ impl Mapper for Mmc3 {
                         }
                     }
                 }
+            },
+            0x2000 ... 0x3FFF => match self.mirroring {
+                Mirroring::Horizontal => self.vram[mirroring::horizontal_mirroring(address) as usize] = data,
+                Mirroring::Vertical   => self.vram[mirroring::vertical_mirroring(address) as usize] = data,
+                Mirroring::FourScreen => self.vram[mirroring::four_banks(address) as usize] = data,
+                _ => {}
             },
             _ => (),
         }
