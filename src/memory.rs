@@ -122,7 +122,7 @@ fn _read_byte(nes: &mut NesState, address: u16, side_effects: bool) -> u8 {
             return result;
         },
         0x4020 ... 0xFFFF => {
-            return match nes.mapper.read_byte(address) {
+            return match nes.mapper.read_cpu(address) {
                 Some(byte) => byte,
                 None => memory.open_bus
             };
@@ -263,7 +263,7 @@ pub fn write_byte(nes: &mut NesState, address: u16, data: u8) {
         0x4017 => {
             nes.apu.write_register(address, data);
         },
-        0x4020 ... 0xFFFF => nes.mapper.write_byte(address, data),
+        0x4020 ... 0xFFFF => nes.mapper.write_cpu(address, data),
         _ => () // Do nothing!
     }
 }

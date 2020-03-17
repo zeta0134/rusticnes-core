@@ -29,12 +29,8 @@ impl Mapper for GxRom {
         return self.mirroring;
     }
 
-    fn read_byte(&mut self, address: u16) -> Option<u8> {
+    fn read_cpu(&mut self, address: u16) -> Option<u8> {
         match address {
-            0x0000 ... 0x1FFF => {
-                let chr_rom_len = self.chr_rom.len();
-                return Some(self.chr_rom[((self.chr_bank * 0x2000) + (address as usize)) % chr_rom_len]);
-            },
             0x8000 ... 0xFFFF => {
                 let prg_rom_len = self.prg_rom.len();
                 return Some(self.prg_rom[((self.prg_bank * 0x8000) + (address as usize - 0x8000)) % prg_rom_len]);
@@ -43,7 +39,7 @@ impl Mapper for GxRom {
         }
     }
 
-    fn write_byte(&mut self, address: u16, data: u8) {
+    fn write_cpu(&mut self, address: u16, data: u8) {
         match address {
             0x8000 ... 0xFFFF => {
                 self.prg_bank = ((data & 0b0011_0000) >> 4) as usize;
@@ -51,5 +47,19 @@ impl Mapper for GxRom {
             }
             _ => {}
         }
+    }
+
+    fn read_ppu(&mut self, address: u16) -> Option<u8> {
+        match address {
+            0x0000 ... 0x1FFF => {
+                let chr_rom_len = self.chr_rom.len();
+                return Some(self.chr_rom[((self.chr_bank * 0x2000) + (address as usize)) % chr_rom_len]);
+            },
+            _ => return None
+        }
+    }
+
+    fn write_ppu(&mut self, _address: u16, _data: u8) {
+        return;
     }
 }

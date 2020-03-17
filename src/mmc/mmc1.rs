@@ -76,33 +76,9 @@ impl Mapper for Mmc1 {
         return self.mirroring;
     }
 
-    fn read_byte(&mut self, address: u16) -> Option<u8> {
+    fn read_cpu(&mut self, address: u16) -> Option<u8> {
         self.last_write = false;
         match address {
-            // CHR Bank 0
-            0x0000 ... 0x0FFF => {
-                let chr_rom_len = self.chr_rom.len();
-                if self.control & 0x10 == 0 {
-                    // 8kb CHR mode, bit 0 is treated as cleared
-                    let bank = self.chr_bank_0 & 0xFFFE;
-                    return Some(self.chr_rom[((bank * 0x1000) + address as usize) % chr_rom_len]);
-                } else {
-                    // 4kb CHR mode
-                    return Some(self.chr_rom[((self.chr_bank_0 * 0x1000) + address as usize) % chr_rom_len]);
-                }
-            },
-            // CHR Bank 1
-            0x1000 ... 0x1FFF => {
-                let chr_rom_len = self.chr_rom.len();
-                if self.control & 0x10 == 0 {
-                    // 8kb CHR mode, bit 0 is treated as set
-                    let bank = self.chr_bank_0 | 0x0001;
-                    return Some(self.chr_rom[((bank * 0x1000) +  (address as usize - 0x1000)) % chr_rom_len]);
-                } else {
-                    // 4kb CHR mode
-                    return Some(self.chr_rom[((self.chr_bank_1 * 0x1000) +  (address as usize - 0x1000)) % chr_rom_len]);
-                }
-            },
             // PRG RAM
             0x6000 ... 0x7FFF => {
                 let prg_ram_len = self.prg_ram.len();
@@ -167,36 +143,8 @@ impl Mapper for Mmc1 {
         }
     }
 
-    fn write_byte(&mut self, address: u16, data: u8) {
+    fn write_cpu(&mut self, address: u16, data: u8) {
         match address {
-            // CHR Bank 0
-            0x0000 ... 0x0FFF => {
-                if self.chr_ram {
-                    let chr_rom_len = self.chr_rom.len();
-                    if self.control & 0x10 == 0 {
-                        // 8kb CHR mode, bit 0 is ignored
-                        let bank = self.chr_bank_0 & 0xFFFE;
-                        self.chr_rom[((bank * 0x1000) + address as usize) % chr_rom_len] = data;
-                    } else {
-                        // 4kb CHR mode
-                        self.chr_rom[((self.chr_bank_0 * 0x1000) + address as usize) % chr_rom_len] = data;
-                    }
-                }
-            },
-            // CHR Bank 1
-            0x1000 ... 0x1FFF => {
-                if self.chr_ram {
-                    let chr_rom_len = self.chr_rom.len();
-                    if self.control & 0x10 == 0 {
-                        // 8kb CHR mode, use chr_bank_0 with bit 1 set
-                        let bank = self.chr_bank_0 | 0x0001;
-                        self.chr_rom[((bank * 0x1000) +  (address as usize - 0x1000)) % chr_rom_len] = data;
-                    } else {
-                        // 4kb CHR mode
-                        self.chr_rom[((self.chr_bank_1 * 0x1000) + (address as usize - 0x1000)) % chr_rom_len] = data;
-                    }
-                }
-            },
             // PRG RAM
             0x6000 ... 0x7FFF => {
                 if self.prg_ram_enabled {
@@ -258,6 +206,70 @@ impl Mapper for Mmc1 {
                     }
                 }
             }
+            _ => {}
+        }
+    }
+
+    fn read_ppu(&mut self, address: u16) -> Option<u8> {
+        match address {
+            // CHR Bank 0
+            0x0000 ... 0x0FFF => {
+                let chr_rom_len = self.chr_rom.len();
+                if self.control & 0x10 == 0 {
+                    // 8kb CHR mode, bit 0 is treated as cleared
+                    let bank = self.chr_bank_0 & 0xFFFE;
+                    return Some(self.chr_rom[((bank * 0x1000) + address as usize) % chr_rom_len]);
+                } else {
+                    // 4kb CHR mode
+                    return Some(self.chr_rom[((self.chr_bank_0 * 0x1000) + address as usize) % chr_rom_len]);
+                }
+            },
+            // CHR Bank 1
+            0x1000 ... 0x1FFF => {
+                let chr_rom_len = self.chr_rom.len();
+                if self.control & 0x10 == 0 {
+                    // 8kb CHR mode, bit 0 is treated as set
+                    let bank = self.chr_bank_0 | 0x0001;
+                    return Some(self.chr_rom[((bank * 0x1000) +  (address as usize - 0x1000)) % chr_rom_len]);
+                } else {
+                    // 4kb CHR mode
+                    return Some(self.chr_rom[((self.chr_bank_1 * 0x1000) +  (address as usize - 0x1000)) % chr_rom_len]);
+                }
+            },
+            _ => return None
+        }
+    }
+
+    fn write_ppu(&mut self, address: u16, data: u8) {
+        match address {
+            // CHR Bank 0
+            0x0000 ... 0x0FFF => {
+                if self.chr_ram {
+                    let chr_rom_len = self.chr_rom.len();
+                    if self.control & 0x10 == 0 {
+                        // 8kb CHR mode, bit 0 is ignored
+                        let bank = self.chr_bank_0 & 0xFFFE;
+                        self.chr_rom[((bank * 0x1000) + address as usize) % chr_rom_len] = data;
+                    } else {
+                        // 4kb CHR mode
+                        self.chr_rom[((self.chr_bank_0 * 0x1000) + address as usize) % chr_rom_len] = data;
+                    }
+                }
+            },
+            // CHR Bank 1
+            0x1000 ... 0x1FFF => {
+                if self.chr_ram {
+                    let chr_rom_len = self.chr_rom.len();
+                    if self.control & 0x10 == 0 {
+                        // 8kb CHR mode, use chr_bank_0 with bit 1 set
+                        let bank = self.chr_bank_0 | 0x0001;
+                        self.chr_rom[((bank * 0x1000) +  (address as usize - 0x1000)) % chr_rom_len] = data;
+                    } else {
+                        // 4kb CHR mode
+                        self.chr_rom[((self.chr_bank_1 * 0x1000) + (address as usize - 0x1000)) % chr_rom_len] = data;
+                    }
+                }
+            },
             _ => {}
         }
     }

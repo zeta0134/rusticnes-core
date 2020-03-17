@@ -218,12 +218,12 @@ impl PpuState {
         match masked_address {
             0x0000 ... 0x1FFF => {
                 if side_effects {
-                    return match mapper.read_byte(masked_address) {
+                    return match mapper.read_ppu(masked_address) {
                         Some(byte) => byte,
                         None => self.open_bus
                     };
                 } else {
-                    return match mapper.debug_read_byte(masked_address) {
+                    return match mapper.debug_read_ppu(masked_address) {
                         Some(byte) => byte,
                         None => self.open_bus
                     };
@@ -252,7 +252,7 @@ impl PpuState {
         self.recent_writes.insert(0, masked_address);
         self.recent_writes.truncate(20);
         match masked_address {
-            0x0000 ... 0x1FFF => mapper.write_byte(masked_address, data),
+            0x0000 ... 0x1FFF => mapper.write_ppu(masked_address, data),
             // Nametable 0
             0x2000 ... 0x2FFF => self.internal_vram[nametable_address(masked_address, mapper.mirroring()) as usize] = data,
             0x3000 ... 0x3EFF => self.write_byte(mapper, masked_address - 0x1000, data),

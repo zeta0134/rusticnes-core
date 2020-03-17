@@ -34,9 +34,8 @@ impl Mapper for Nrom {
         return self.mirroring;
     }
     
-    fn read_byte(&mut self, address: u16) -> Option<u8> {
+    fn read_cpu(&mut self, address: u16) -> Option<u8> {
         match address {
-            0x0000 ... 0x1FFF => return Some(self.chr_rom[address as usize]),
             0x6000 ... 0x7FFF => {
                 let prg_ram_len = self.prg_ram.len();
                 if prg_ram_len > 0 {
@@ -53,17 +52,30 @@ impl Mapper for Nrom {
         }
     }
 
-    fn write_byte(&mut self, address: u16, data: u8) {
+    fn write_cpu(&mut self, address: u16, data: u8) {
         match address {
-            0x0000 ... 0x1FFF => {
-                if self.has_chr_ram {
-                    self.chr_rom[address as usize] = data;
-                }
-            },
             0x6000 ... 0x7FFF => {
                 let prg_ram_len = self.prg_ram.len();
                 if prg_ram_len > 0 {
                     self.prg_ram[((address - 0x6000) % (prg_ram_len as u16)) as usize] = data;
+                }
+            },
+            _ => {}
+        }
+    }
+
+    fn read_ppu(&mut self, address: u16) -> Option<u8> {
+        match address {
+            0x0000 ... 0x1FFF => return Some(self.chr_rom[address as usize]),
+            _ => return None
+        }
+    }
+
+    fn write_ppu(&mut self, address: u16, data: u8) {
+        match address {
+            0x0000 ... 0x1FFF => {
+                if self.has_chr_ram {
+                    self.chr_rom[address as usize] = data;
                 }
             },
             _ => {}

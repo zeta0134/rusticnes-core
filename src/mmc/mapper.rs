@@ -8,9 +8,12 @@ pub enum Mirroring {
 }
 
 pub trait Mapper: Send {
-    fn read_byte(&mut self, address: u16) -> Option<u8>;
-    fn write_byte(&mut self, address: u16, data: u8);
-    fn debug_read_byte(&mut self, address: u16) -> Option<u8> {return self.read_byte(address);}
+    fn read_cpu(&mut self, address: u16) -> Option<u8>;
+    fn write_cpu(&mut self, address: u16, data: u8);
+    fn read_ppu(&mut self, address: u16) -> Option<u8>;
+    fn write_ppu(&mut self, address: u16, data: u8);
+    fn debug_read_cpu(&mut self, address: u16) -> Option<u8> {return self.read_cpu(address);}
+    fn debug_read_ppu(&mut self, address: u16) -> Option<u8> {return self.read_ppu(address);}
     fn print_debug_status(&self) {}
     fn mirroring(&self) -> Mirroring;
     fn has_sram(&self) -> bool {return false;}

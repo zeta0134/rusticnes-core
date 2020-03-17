@@ -81,7 +81,7 @@ impl Mmc3 {
         }
     }
 
-    fn _read_byte(&mut self, address: u16, side_effects: bool) -> Option<u8> {
+    fn _read_ppu(&mut self, address: u16, side_effects: bool) -> Option<u8> {
         match address {
             // CHR
             0x0000 ... 0x1FFF => {
@@ -124,6 +124,29 @@ impl Mmc3 {
                     }
                 }
             },
+            _ => return None
+        }
+    }
+}
+
+impl Mapper for Mmc3 {
+    fn print_debug_status(&self) {
+        println!("======= MMC3 =======");
+        println!("IRQ: Current: {}, Reload: {}", self.irq_counter, self.irq_reload);
+        println!("Last A12: {}, Last CHR Read: 0x{:04X}", self.last_a12, self.last_chr_read);
+        println!("====================");
+    }
+
+    fn mirroring(&self) -> Mirroring {
+        return self.mirroring;
+    }
+
+    fn irq_flag(&self) -> bool {
+        return self.irq_flag;
+    }
+
+    fn read_cpu(&mut self, address: u16) -> Option<u8> {
+        match address {
             // PRG RAM
             0x6000 ... 0x7FFF => {
                 return Some(self.prg_ram[(address - 0x6000) as usize]);
@@ -152,75 +175,9 @@ impl Mmc3 {
             _ => return None
         }
     }
-}
 
-impl Mapper for Mmc3 {
-    fn print_debug_status(&self) {
-        println!("======= MMC3 =======");
-        println!("IRQ: Current: {}, Reload: {}", self.irq_counter, self.irq_reload);
-        println!("Last A12: {}, Last CHR Read: 0x{:04X}", self.last_a12, self.last_chr_read);
-        println!("====================");
-    }
-
-    fn mirroring(&self) -> Mirroring {
-        return self.mirroring;
-    }
-
-    fn irq_flag(&self) -> bool {
-        return self.irq_flag;
-    }
-
-    fn read_byte(&mut self, address: u16) -> Option<u8> {
-        return self._read_byte(address, true);
-    }
-
-    fn debug_read_byte(&mut self, address: u16) -> Option<u8> {
-        return self._read_byte(address, false);
-    }
-
-    fn write_byte(&mut self, address: u16, data: u8) {
+    fn write_cpu(&mut self, address: u16, data: u8) {
         match address {
-            // CHR RAM (if enabled)
-            0x0000 ... 0x1FFF => {
-                self.last_chr_read = address;
-                let current_a12 = ((address & 0b0001_0000_0000_0000) >> 12) as u8;
-                if current_a12 == 1 && self.last_a12 == 0 {
-                    if self.irq_counter == 0 || self.irq_reload_requested {
-                        self.irq_counter = self.irq_reload;
-                        self.irq_reload_requested = false;
-                    } else {
-                        self.irq_counter -= 1;                        
-                    }
-                    if self.irq_counter == 0 && self.irq_enabled {
-                        self.irq_flag = true;                        
-                    }
-                }
-                self.last_a12 = current_a12;
-                if self.chr_ram {
-                    let chr_rom_len = self.chr_rom.len();
-                    if self.switch_chr_banks {
-                        match address {
-                            0x0000 ... 0x03FF => self.chr_rom[((self.chr1_bank_2 * 0x400) + (address as usize -  0x000)) % chr_rom_len] = data,
-                            0x0400 ... 0x07FF => self.chr_rom[((self.chr1_bank_3 * 0x400) + (address as usize -  0x400)) % chr_rom_len] = data,
-                            0x0800 ... 0x0BFF => self.chr_rom[((self.chr1_bank_4 * 0x400) + (address as usize -  0x800)) % chr_rom_len] = data,
-                            0x0C00 ... 0x0FFF => self.chr_rom[((self.chr1_bank_5 * 0x400) + (address as usize -  0xC00)) % chr_rom_len] = data,
-                            0x1000 ... 0x17FF => self.chr_rom[((self.chr2_bank_0 * 0x400) + (address as usize - 0x1000)) % chr_rom_len] = data,
-                            0x1800 ... 0x1FFF => self.chr_rom[((self.chr2_bank_1 * 0x400) + (address as usize - 0x1800)) % chr_rom_len] = data,
-                            _ => (),
-                        }
-                    } else {
-                        match address {
-                            0x0000 ... 0x07FF => self.chr_rom[((self.chr2_bank_0 * 0x400) + (address as usize -  0x000)) % chr_rom_len] = data,
-                            0x0800 ... 0x0FFF => self.chr_rom[((self.chr2_bank_1 * 0x400) + (address as usize -  0x800)) % chr_rom_len] = data,
-                            0x1000 ... 0x13FF => self.chr_rom[((self.chr1_bank_2 * 0x400) + (address as usize - 0x1000)) % chr_rom_len] = data,
-                            0x1400 ... 0x17FF => self.chr_rom[((self.chr1_bank_3 * 0x400) + (address as usize - 0x1400)) % chr_rom_len] = data,
-                            0x1800 ... 0x1BFF => self.chr_rom[((self.chr1_bank_4 * 0x400) + (address as usize - 0x1800)) % chr_rom_len] = data,
-                            0x1C00 ... 0x1FFF => self.chr_rom[((self.chr1_bank_5 * 0x400) + (address as usize - 0x1C00)) % chr_rom_len] = data,
-                            _ => (),
-                        }
-                    }
-                }
-            },
             // PRG RAM
             0x6000 ... 0x7FFF => {
                 // Note: Intentionally omitting PRG RAM protection feature, since this
@@ -283,6 +240,61 @@ impl Mapper for Mmc3 {
                             self.irq_enabled = true;
                         }
                         _ => (),
+                    }
+                }
+            },
+            _ => (),
+        }
+    }
+
+    fn read_ppu(&mut self, address: u16) -> Option<u8> {
+        return self._read_ppu(address, true);
+    }
+
+    fn debug_read_ppu(&mut self, address: u16) -> Option<u8> {
+        return self._read_ppu(address, false);
+    }
+
+    fn write_ppu(&mut self, address: u16, data: u8) {
+        match address {
+            // CHR RAM (if enabled)
+            0x0000 ... 0x1FFF => {
+                self.last_chr_read = address;
+                let current_a12 = ((address & 0b0001_0000_0000_0000) >> 12) as u8;
+                if current_a12 == 1 && self.last_a12 == 0 {
+                    if self.irq_counter == 0 || self.irq_reload_requested {
+                        self.irq_counter = self.irq_reload;
+                        self.irq_reload_requested = false;
+                    } else {
+                        self.irq_counter -= 1;                        
+                    }
+                    if self.irq_counter == 0 && self.irq_enabled {
+                        self.irq_flag = true;                        
+                    }
+                }
+                self.last_a12 = current_a12;
+                if self.chr_ram {
+                    let chr_rom_len = self.chr_rom.len();
+                    if self.switch_chr_banks {
+                        match address {
+                            0x0000 ... 0x03FF => self.chr_rom[((self.chr1_bank_2 * 0x400) + (address as usize -  0x000)) % chr_rom_len] = data,
+                            0x0400 ... 0x07FF => self.chr_rom[((self.chr1_bank_3 * 0x400) + (address as usize -  0x400)) % chr_rom_len] = data,
+                            0x0800 ... 0x0BFF => self.chr_rom[((self.chr1_bank_4 * 0x400) + (address as usize -  0x800)) % chr_rom_len] = data,
+                            0x0C00 ... 0x0FFF => self.chr_rom[((self.chr1_bank_5 * 0x400) + (address as usize -  0xC00)) % chr_rom_len] = data,
+                            0x1000 ... 0x17FF => self.chr_rom[((self.chr2_bank_0 * 0x400) + (address as usize - 0x1000)) % chr_rom_len] = data,
+                            0x1800 ... 0x1FFF => self.chr_rom[((self.chr2_bank_1 * 0x400) + (address as usize - 0x1800)) % chr_rom_len] = data,
+                            _ => (),
+                        }
+                    } else {
+                        match address {
+                            0x0000 ... 0x07FF => self.chr_rom[((self.chr2_bank_0 * 0x400) + (address as usize -  0x000)) % chr_rom_len] = data,
+                            0x0800 ... 0x0FFF => self.chr_rom[((self.chr2_bank_1 * 0x400) + (address as usize -  0x800)) % chr_rom_len] = data,
+                            0x1000 ... 0x13FF => self.chr_rom[((self.chr1_bank_2 * 0x400) + (address as usize - 0x1000)) % chr_rom_len] = data,
+                            0x1400 ... 0x17FF => self.chr_rom[((self.chr1_bank_3 * 0x400) + (address as usize - 0x1400)) % chr_rom_len] = data,
+                            0x1800 ... 0x1BFF => self.chr_rom[((self.chr1_bank_4 * 0x400) + (address as usize - 0x1800)) % chr_rom_len] = data,
+                            0x1C00 ... 0x1FFF => self.chr_rom[((self.chr1_bank_5 * 0x400) + (address as usize - 0x1C00)) % chr_rom_len] = data,
+                            _ => (),
+                        }
                     }
                 }
             },
