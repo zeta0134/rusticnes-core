@@ -187,8 +187,10 @@ impl PpuState {
         let masked_address = address & 0x3FFF;
         match masked_address {
             0x3F00 ... 0x3FFF => {
-                // Weird read buffer behavior
-                self.read_buffer = self.read_latched_byte(mapper, (masked_address & 0x0FFF) + 0x2000);
+                // We're going to return palette data from read_byte, but we place data from "underneath" the palette
+                // space in the read_buffer. This is intentional, a very odd quirk of PPU reading due to the way
+                // palette reads are implemented in hardware.
+                self.read_buffer = mapper.read_ppu(masked_address).unwrap_or(self.open_bus);
                 return self.read_byte(mapper, address);
             },
             _ => {
@@ -216,7 +218,7 @@ impl PpuState {
             self.recent_reads.truncate(20);
         }*/
         match masked_address {
-            0x0000 ... 0x1FFF => {
+            0x0000 ... 0x3EFF => {
                 if side_effects {
                     return match mapper.read_ppu(masked_address) {
                         Some(byte) => byte,
@@ -229,9 +231,6 @@ impl PpuState {
                     };
                 }
             },
-            // Nametable 0 (top-left)
-            0x2000 ... 0x2FFF => return self.internal_vram[nametable_address(masked_address, mapper.mirroring()) as usize],
-            0x3000 ... 0x3EFF => return self.__read_byte(mapper, masked_address - 0x1000, side_effects),
             0x3F00 ... 0x3FFF => {
                 let mut palette_address = masked_address & 0x1F;
                 // Weird background masking
@@ -252,10 +251,7 @@ impl PpuState {
         self.recent_writes.insert(0, masked_address);
         self.recent_writes.truncate(20);
         match masked_address {
-            0x0000 ... 0x1FFF => mapper.write_ppu(masked_address, data),
-            // Nametable 0
-            0x2000 ... 0x2FFF => self.internal_vram[nametable_address(masked_address, mapper.mirroring()) as usize] = data,
-            0x3000 ... 0x3EFF => self.write_byte(mapper, masked_address - 0x1000, data),
+            0x0000 ... 0x3EFF => mapper.write_ppu(masked_address, data),
             0x3F00 ... 0x3FFF => {
                 // palette data is 6-bits, so mask off the upper two:
                 let palette_entry = data & 0b0011_1111;

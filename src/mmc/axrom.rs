@@ -3,12 +3,14 @@
 
 use cartridge::NesHeader;
 use mmc::mapper::*;
+use mmc::mirroring;
 
 pub struct AxRom {
     pub prg_rom: Vec<u8>,
     pub chr_ram: Vec<u8>,
     pub mirroring: Mirroring,
     pub prg_bank: usize,
+    pub vram: Vec<u8>,
 }
 
 impl AxRom {
@@ -18,6 +20,7 @@ impl AxRom {
             chr_ram: vec![0u8; 0x2000],
             mirroring: Mirroring::OneScreenUpper,
             prg_bank: 0x07,
+            vram: vec![0u8; 0x1000],
         }
     }
 }
@@ -25,6 +28,10 @@ impl AxRom {
 impl Mapper for AxRom {
     fn mirroring(&self) -> Mirroring {
         return self.mirroring;
+    }
+
+    fn print_debug_status(&self) {
+        println!("======= AxROM =======");
     }
 
     fn read_cpu(&mut self, address: u16) -> Option<u8> {
@@ -54,6 +61,11 @@ impl Mapper for AxRom {
     fn read_ppu(&mut self, address: u16) -> Option<u8> {
         match address {
             0x0000 ... 0x1FFF => return Some(self.chr_ram[address as usize]),
+            0x2000 ... 0x3FFF => return match self.mirroring {
+                Mirroring::OneScreenLower => Some(self.vram[mirroring::one_screen_lower(address) as usize]),
+                Mirroring::OneScreenUpper => Some(self.vram[mirroring::one_screen_upper(address) as usize]),
+                _ => None
+            },
             _ => return None
         }
     }
@@ -61,6 +73,11 @@ impl Mapper for AxRom {
     fn write_ppu(&mut self, address: u16, data: u8) {
         match address {
             0x0000 ... 0x1FFF => self.chr_ram[address as usize] = data,
+            0x2000 ... 0x3FFF => match self.mirroring {
+                Mirroring::OneScreenLower => self.vram[mirroring::one_screen_lower(address) as usize] = data,
+                Mirroring::OneScreenUpper => self.vram[mirroring::one_screen_upper(address) as usize] = data,
+                _ => {}
+            },
             _ => {}
         }
     }

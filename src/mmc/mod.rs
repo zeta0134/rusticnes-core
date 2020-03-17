@@ -1,4 +1,5 @@
 pub mod mapper;
+pub mod mirroring;
 
 pub mod axrom;
 pub mod cnrom;
