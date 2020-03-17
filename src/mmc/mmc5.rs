@@ -13,6 +13,11 @@ pub struct Mmc5 {
     pub mirroring: Mirroring,
     pub ppuctrl_monitor: u8,
     pub ppumask_monitor: u8,
+    pub prg_mode: u8,
+    pub chr_mode: u8,
+    pub prg_ram_magic_low: u8,
+    pub prg_ram_magic_high: u8,
+    pub extended_ram_mode: u8,
 
 }
 
@@ -30,11 +35,20 @@ impl Mmc5 {
             mirroring: header.mirroring,
             ppuctrl_monitor: 0,
             ppumask_monitor: 0,
+            prg_mode: 0,
+            chr_mode: 0,
+            prg_ram_magic_low: 0,
+            prg_ram_magic_high: 0,
+            extended_ram_mode: 0,
         }
     }
 
     pub fn large_sprites_active(&self) -> bool {
         return ((self.ppuctrl_monitor & 0b0010_0000) != 0) && ((self.ppumask_monitor & 0b0001_1000) != 0);
+    }
+
+    pub fn prg_ram_write_enabled(&self) -> bool {
+        return (self.prg_ram_magic_low == 0b10) && (self.prg_ram_magic_high == 0b01);
     }
 }
 
@@ -51,8 +65,13 @@ impl Mapper for Mmc5 {
 
     fn write_cpu(&mut self, address: u16, data: u8) {
         match address {
-            2000 => {self.ppuctrl_monitor = data},
-            2001 => {self.ppumask_monitor = data},
+            0x2000 => {self.ppuctrl_monitor = data},
+            0x2001 => {self.ppumask_monitor = data},
+            0x5100 => {self.prg_mode = data & 0b0000_0011;},
+            0x5101 => {self.chr_mode = data & 0b0000_0011;},
+            0x5102 => {self.prg_ram_magic_low  = data & 0b0000_0011;},
+            0x5103 => {self.prg_ram_magic_high = data & 0b0000_0011;},
+            0x5104 => {self.extended_ram_mode = data & 0b0000_0011;},
             _ => {}
         }
     }
