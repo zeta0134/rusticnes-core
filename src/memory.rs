@@ -33,6 +33,10 @@ pub fn read_byte(nes: &mut NesState, address: u16) -> u8 {
 
 fn _read_byte(nes: &mut NesState, address: u16, side_effects: bool) -> u8 {
     let memory = &mut nes.memory;
+    let mapped_byte = match side_effects {
+        true => nes.mapper.read_cpu(address).unwrap_or(memory.open_bus),
+        false => nes.mapper.debug_read_cpu(address).unwrap_or(memory.open_bus),
+    };
     match address {
         0x0000 ... 0x1FFF => {
             return memory.iram_raw[(address & 0x7FF) as usize];
@@ -122,10 +126,7 @@ fn _read_byte(nes: &mut NesState, address: u16, side_effects: bool) -> u8 {
             return result;
         },
         0x4020 ... 0xFFFF => {
-            return match nes.mapper.read_cpu(address) {
-                Some(byte) => byte,
-                None => memory.open_bus
-            };
+            return mapped_byte;
         },
         _ => {
             return memory.open_bus;
