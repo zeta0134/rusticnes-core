@@ -206,9 +206,7 @@ impl PpuState {
     }
 
     pub fn read_byte(&mut self, mapper: &mut Mapper, address: u16) -> u8 {
-        let byte = self.__read_byte(mapper, address, true);
-        self.open_bus = byte;
-        return byte;
+        return self.__read_byte(mapper, address, true);
     }
 
     pub fn __read_byte(&mut self, mapper: &mut Mapper, address: u16, side_effects: bool) -> u8 {
@@ -220,10 +218,11 @@ impl PpuState {
         match masked_address {
             0x0000 ... 0x3EFF => {
                 if side_effects {
-                    return match mapper.read_ppu(masked_address) {
+                    self.open_bus = match mapper.read_ppu(masked_address) {
                         Some(byte) => byte,
                         None => self.open_bus
                     };
+                    return self.open_bus;
                 } else {
                     return match mapper.debug_read_ppu(masked_address) {
                         Some(byte) => byte,
