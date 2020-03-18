@@ -18,7 +18,10 @@ pub struct Mmc5 {
     pub prg_ram_magic_low: u8,
     pub prg_ram_magic_high: u8,
     pub extended_ram_mode: u8,
-
+    pub vram: Vec<u8>,
+    pub nametable_mapping: u8,
+    pub fill_tile: u8,
+    pub fill_attr: u8,
 }
 
 impl Mmc5 {
@@ -40,6 +43,10 @@ impl Mmc5 {
             prg_ram_magic_low: 0,
             prg_ram_magic_high: 0,
             extended_ram_mode: 0,
+            vram: vec![0u8; 0x1800],
+            nametable_mapping: 0,
+            fill_tile: 0,
+            fill_attr: 0,
         }
     }
 
@@ -72,6 +79,13 @@ impl Mapper for Mmc5 {
             0x5102 => {self.prg_ram_magic_low  = data & 0b0000_0011;},
             0x5103 => {self.prg_ram_magic_high = data & 0b0000_0011;},
             0x5104 => {self.extended_ram_mode = data & 0b0000_0011;},
+            0x5105 => {self.nametable_mapping = data;},
+            0x5106 => {self.fill_tile = data;},
+            0x5107 => {
+                let fill_color = data & 0b0000_0011;
+                // For simplicity, go ahead and store the whole attribute byte
+                self.fill_attr = (fill_color << 6) | (fill_color << 2) | (fill_color << 4) | (fill_color);
+            },
             _ => {}
         }
     }
