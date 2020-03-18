@@ -3,6 +3,7 @@
 
 use cartridge::NesHeader;
 use mmc::mapper::*;
+use mmc::mirroring;
 
 pub struct PxRom {
     pub prg_rom: Vec<u8>,
@@ -16,6 +17,7 @@ pub struct PxRom {
     pub chr_1_fd_bank: usize,
     pub chr_1_fe_bank: usize,
     pub prg_bank: usize,
+    pub vram: Vec<u8>,
 }
 
 impl PxRom {
@@ -32,11 +34,21 @@ impl PxRom {
             chr_1_fd_bank: 0,
             chr_1_fe_bank: 0,
             prg_bank: 0,
+            vram: vec![0u8; 0x1000],
         }
     }
 }
 
 impl Mapper for PxRom {
+    fn print_debug_status(&self) {
+        println!("======= PxROM =======");
+        println!("PRG Bank: {}, ", self.prg_bank);
+        println!("CHR0 0xFD Bank: {}. CHR0 0xFE Bank: {}", self.chr_0_fd_bank, self.chr_0_fe_bank);
+        println!("CHR1 0xFD Bank: {}. CHR1 0xFE Bank: {}", self.chr_1_fd_bank, self.chr_1_fe_bank);
+        println!("Mirroring Mode: {}", mirroring_mode_name(self.mirroring));
+        println!("====================");
+    }
+
     fn mirroring(&self) -> Mirroring {
         return self.mirroring;
     }
@@ -119,11 +131,23 @@ impl Mapper for PxRom {
                 }
                 return chr_byte;
             },
+            0x2000 ... 0x3FFF => return match self.mirroring {
+                Mirroring::Horizontal => Some(self.vram[mirroring::horizontal_mirroring(address) as usize]),
+                Mirroring::Vertical   => Some(self.vram[mirroring::vertical_mirroring(address) as usize]),
+                _ => None
+            },
             _ => return None
         }
     }
 
-    fn write_ppu(&mut self, _address: u16, _data: u8) {
-        return;
+    fn write_ppu(&mut self, address: u16, data: u8) {
+        match address {
+            0x2000 ... 0x3FFF => match self.mirroring {
+                Mirroring::Horizontal => self.vram[mirroring::horizontal_mirroring(address) as usize] = data,
+                Mirroring::Vertical   => self.vram[mirroring::vertical_mirroring(address) as usize] = data,
+                _ => {}
+            },
+            _ => {}
+        }
     }
 }

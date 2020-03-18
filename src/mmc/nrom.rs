@@ -33,7 +33,7 @@ impl Nrom {
 }
 
 impl Mapper for Nrom {
-        fn print_debug_status(&self) {
+    fn print_debug_status(&self) {
         println!("======= NROM =======");
         println!("Mirroring Mode: {}", mirroring_mode_name(self.mirroring));
         println!("====================");
