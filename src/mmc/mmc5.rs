@@ -19,6 +19,7 @@ pub struct Mmc5 {
     pub prg_ram_magic_high: u8,
     pub extended_ram_mode: u8,
     pub vram: Vec<u8>,
+    pub extram: Vec<u8>,
     pub nametable_mapping: u8,
     pub fill_tile: u8,
     pub fill_attr: u8,
@@ -43,7 +44,8 @@ impl Mmc5 {
             prg_ram_magic_low: 0,
             prg_ram_magic_high: 0,
             extended_ram_mode: 0,
-            vram: vec![0u8; 0x1800],
+            vram: vec![0u8; 0x1000],
+            extram: vec![0u8; 0x800],
             nametable_mapping: 0,
             fill_tile: 0,
             fill_attr: 0,
@@ -56,6 +58,48 @@ impl Mmc5 {
 
     pub fn prg_ram_write_enabled(&self) -> bool {
         return (self.prg_ram_magic_low == 0b10) && (self.prg_ram_magic_high == 0b01);
+    }
+
+    // Nametable mapping helper functions, to assist with MMC5's arbitrary quadrant mapping
+    pub fn nametable_vram_low(&self, address: u16) -> u8 {
+        let masked_address = address & 0x3FF;
+        return self.vram[masked_address as usize];
+    }
+
+    pub fn nametable_vram_high(&self, address: u16) -> u8 {
+        let masked_address = address & 0x3FF;
+        return self.vram[masked_address as usize + 0x400];
+    }
+
+    pub fn nametable_ext1(&self, address: u16) -> u8 {
+        if self.extended_ram_mode == 0 || self.extended_ram_mode == 1 {
+            let masked_address = address & 0x3FF;
+            return self.extram[masked_address as usize];
+        } else {
+            return 0;
+        }
+    }
+
+    pub fn nametable_fixed(&self, address: u16) -> u8 {
+        let masked_address = address & 0x3FF;
+        if masked_address < 0x3C0 {
+            return self.fill_tile;
+        } else {
+            return self.fill_attr;
+        }
+    }
+
+    pub fn read_nametable(&self, address: u16) -> u8 {
+        let masked_address = address & 0xFFF;
+        let quadrant = masked_address / 0x400;
+        let nametable_select = (self.nametable_mapping >> quadrant * 2) & 0b11;
+        return match nametable_select {
+            0 => self.nametable_vram_low(masked_address),
+            1 => self.nametable_vram_high(masked_address),
+            2 => self.nametable_ext1(masked_address),
+            3 => self.nametable_fixed(masked_address),
+            _ => 0 // Shouldn't be reachable
+        }
     }
 }
 
@@ -92,6 +136,7 @@ impl Mapper for Mmc5 {
 
     fn read_ppu(&mut self, address: u16) -> Option<u8> {
         match address {
+            0x2000 ... 0x3FFF => {return Some(self.read_nametable(address))},
             _ => return None
         }
     }
