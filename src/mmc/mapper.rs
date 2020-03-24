@@ -13,8 +13,7 @@ pub fn mirroring_mode_name(mode: Mirroring) -> &'static str {
         Mirroring::Vertical => "Vertical",
         Mirroring::OneScreenLower => "OneScreenLower",
         Mirroring::OneScreenUpper => "OneScreenUpper",
-        Mirroring::FourScreen => "FourScreen",
-        _ => "Invalid"
+        Mirroring::FourScreen => "FourScreen"
     }
 }
 
