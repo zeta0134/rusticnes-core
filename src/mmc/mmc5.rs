@@ -23,6 +23,11 @@ pub struct Mmc5 {
     pub nametable_mapping: u8,
     pub fill_tile: u8,
     pub fill_attr: u8,
+    pub prg_rom_bank_a: u8,
+    pub prg_rom_bank_b: u8,
+    pub prg_rom_bank_c: u8,
+    pub prg_rom_bank_d: u8,
+    pub prg_ram_bank: u8,
 }
 
 impl Mmc5 {
@@ -49,6 +54,11 @@ impl Mmc5 {
             nametable_mapping: 0,
             fill_tile: 0,
             fill_attr: 0,
+            prg_rom_bank_a: 0,
+            prg_rom_bank_b: 0,
+            prg_rom_bank_c: 0,
+            prg_rom_bank_d: 0,
+            prg_ram_bank: 0,
         }
     }
 
@@ -101,6 +111,42 @@ impl Mmc5 {
             _ => 0 // Shouldn't be reachable
         }
     }
+    /*
+    pub fn read_8k_prg_bank(&self, address: u16, bank: u8) -> u8 {
+        let total_8k_banks = self.prg_rom.len() >> 13;
+        let selected_bank = bank % total_8k_banks;
+        let bank_address = address & 0x1FFF;
+        return self.prg_rom[selected_bank * 0x2000 + bank_address];
+    }
+
+    pub fn read_16k_prg_bank(&self, address: u16, bank_8k: u8) -> u8 {
+        let total_16k_banks = self.prg_rom.len() >> 14;
+        let bank_16k = bank_8k & 0b1111_1110;
+        let selected_bank = bank_16k % total_16k_banks;
+        let bank_address = address & 0x3FFF;
+        return self.prg_rom[selected_bank * 0x4000 + bank_address];
+    }
+
+    pub fn read_32k_prg_bank(&self, address: u16, bank_8k: u8) -> u8 {
+        let total_32k_banks = self.prg_rom.len() >> 15;
+        let bank_32k = bank_8k & 0b1111_1100;
+        let selected_bank = bank % total_32k_banks;
+        let bank_address = address & 0x7FFF;
+        return self.prg_rom[selected_bank * 0x8000 + bank_address];
+    }
+
+    pub fn read_ekrom_ram_bank(&self, address: u16, bank: u8) -> Option<u8> {
+        let bank_address = address & 0x7FFF;
+        if bank < 4 {
+            return self.prg_ram[]
+        }
+    }
+
+    pub fn read_prg_rom(&self, address: u16) -> u8 {
+
+    }*/
+
+
 }
 
 impl Mapper for Mmc5 {
