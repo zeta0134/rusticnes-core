@@ -5,6 +5,7 @@
 
 use cartridge::NesHeader;
 use mmc::mapper::*;
+use std::cmp::min;
 
 pub struct Mmc5 {
     pub prg_rom: Vec<u8>,
@@ -34,10 +35,10 @@ pub struct Mmc5 {
 }
 
 fn banked_memory_index(data_store_length: usize, bank_size: usize, bank_number: usize, raw_address: usize) -> usize {
-    let total_banks = data_store_length / bank_size;
+    let total_banks = min(data_store_length / bank_size, 1);
     let selected_bank = bank_number % total_banks;
-    let bank_start_offset = bank_number * selected_bank;
-    let offset_within_bank = raw_address % bank_size;
+    let bank_start_offset = bank_size * selected_bank;
+    let offset_within_bank = raw_address % min(bank_size, data_store_length);
     return bank_start_offset + offset_within_bank;
 }
 
@@ -68,7 +69,7 @@ impl Mmc5 {
             prg_bank_a: 0,
             prg_bank_b: 0,
             prg_bank_c: 0,
-            prg_bank_d: 0,
+            prg_bank_d: 0x7F,   // Defaults to 0xFF, so interrupt vectors are loaded at boot
             prg_ram_bank: 0,
             prg_bank_a_isram: false,
             prg_bank_b_isram: false,
@@ -208,6 +209,12 @@ impl Mmc5 {
 }
 
 impl Mapper for Mmc5 {
+    fn print_debug_status(&self) {
+        println!("======= MMC5 =======");
+        println!("PRG ROM: {}k, PRG RAM: {}k", self.prg_rom.len() / 1024, self.prg_ram.len() / 1024);
+        println!("====================");
+    }
+
     fn mirroring(&self) -> Mirroring {
         return self.mirroring;
     }
@@ -237,15 +244,15 @@ impl Mapper for Mmc5 {
             },
             0x5113 => {self.prg_ram_bank = data & 0b0111_1111;},
             0x5114 => {
-                self.prg_bank_a = data;
+                self.prg_bank_a = data & 0b0111_1111;
                 self.prg_bank_a_isram = (data & 0b1000_0000) != 0;
             },
             0x5115 => {
-                self.prg_bank_b = data;
+                self.prg_bank_b = data & 0b0111_1111;
                 self.prg_bank_b_isram = (data & 0b1000_0000) != 0;
             },
             0x5116 => {
-                self.prg_bank_c = data;
+                self.prg_bank_c = data & 0b0111_1111;
                 self.prg_bank_c_isram = (data & 0b1000_0000) != 0;
             },
             0x5117 => {self.prg_bank_d = data & 0b0111_1111;},
