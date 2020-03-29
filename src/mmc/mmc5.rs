@@ -297,6 +297,12 @@ impl Mapper for Mmc5 {
     
     fn read_cpu(&mut self, address: u16) -> Option<u8> {
         match address {
+            0x5C00 ... 0x5FFF => {
+                match self.extended_ram_mode {
+                    2 ... 3 => {return Some(self.extram[address as usize - 0x5C00]);},
+                    _ => return None
+                }
+            }
             0x6000 ... 0xFFFF => {return Some(self.read_prg(address))},
             _ => return None
         }
@@ -332,6 +338,11 @@ impl Mapper for Mmc5 {
                 self.prg_bank_c_isram = (data & 0b1000_0000) != 0;
             },
             0x5117 => {self.prg_bank_d = data & 0b0111_1111;},
+            0x5C00 ... 0x5FFF => {
+                if self.extended_ram_mode == 2 {
+                    self.extram[address as usize - 0x5C00] = data;
+                }
+            }
             0x6000 ... 0xFFFF => {self.write_prg(address, data);},
             _ => {}
         }
