@@ -327,15 +327,15 @@ impl Mapper for Mmc5 {
             0x5113 => {self.prg_ram_bank = data & 0b0111_1111;},
             0x5114 => {
                 self.prg_bank_a = data & 0b0111_1111;
-                self.prg_bank_a_isram = (data & 0b1000_0000) != 0;
+                self.prg_bank_a_isram = (data & 0b1000_0000) == 0;
             },
             0x5115 => {
                 self.prg_bank_b = data & 0b0111_1111;
-                self.prg_bank_b_isram = (data & 0b1000_0000) != 0;
+                self.prg_bank_b_isram = (data & 0b1000_0000) == 0;
             },
             0x5116 => {
                 self.prg_bank_c = data & 0b0111_1111;
-                self.prg_bank_c_isram = (data & 0b1000_0000) != 0;
+                self.prg_bank_c_isram = (data & 0b1000_0000) == 0;
             },
             0x5117 => {self.prg_bank_d = data & 0b0111_1111;},
             0x5C00 ... 0x5FFF => {
