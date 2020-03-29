@@ -203,6 +203,8 @@ impl Mmc5 {
             _ => 0 // Should be unreachable
         }
     }
+
+
 }
 
 impl Mapper for Mmc5 {
@@ -212,6 +214,7 @@ impl Mapper for Mmc5 {
     
     fn read_cpu(&mut self, address: u16) -> Option<u8> {
         match address {
+            0x6000 ... 0xFFFF => {return Some(self.read_prg(address))},
             _ => return None
         }
     }
