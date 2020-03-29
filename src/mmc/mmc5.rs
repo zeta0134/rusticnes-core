@@ -206,6 +206,79 @@ impl Mmc5 {
         }
     }
 
+    pub fn write_prg_mode_0(&mut self, address: u16, data: u8) {
+        let (bank_number, bank_size) = match address {
+            0x6000 ... 0x7FFF => (self.prg_ram_bank, 8 * 1024),
+            _ => {return}
+        };
+
+        let datastore_offset = banked_memory_index(self.prg_ram.len(), bank_size, bank_number as usize, address as usize);
+        self.prg_ram[datastore_offset] = data;
+    }
+
+    pub fn write_prg_mode_1(&mut self, address: u16, data: u8) {
+        let (bank_number, bank_size) = match address {
+            0x6000 ... 0x7FFF => (self.prg_ram_bank, 8 * 1024),
+            0x8000 ... 0xBFFF => match self.prg_bank_b_isram {
+                true  => (self.prg_bank_b >> 1, 16 * 1024),
+                false => {return}
+            },
+            _ => {return}
+        };
+
+        let datastore_offset = banked_memory_index(self.prg_ram.len(), bank_size, bank_number as usize, address as usize);
+        self.prg_ram[datastore_offset] = data;
+    }
+
+    pub fn write_prg_mode_2(&mut self, address: u16, data: u8) {
+        let (bank_number, bank_size) = match address {
+            0x6000 ... 0x7FFF => (self.prg_ram_bank, 8 * 1024),
+            0x8000 ... 0xBFFF => match self.prg_bank_b_isram {
+                true  => (self.prg_bank_b >> 1, 16 * 1024),
+                false => {return}
+            },
+            0xC000 ... 0xDFFF => match self.prg_bank_c_isram {
+                true  => (self.prg_bank_c, 8 * 1024),
+                false => {return}
+            },
+            _ => {return}
+        };
+
+        let datastore_offset = banked_memory_index(self.prg_ram.len(), bank_size, bank_number as usize, address as usize);
+        self.prg_ram[datastore_offset] = data;
+    }
+
+    pub fn write_prg_mode_3(&mut self, address: u16, data: u8) {
+        let (bank_number, bank_size) = match address {
+            0x6000 ... 0x7FFF => (self.prg_ram_bank, 8 * 1024),
+            0x8000 ... 0x9FFF => match self.prg_bank_a_isram {
+                true  => (self.prg_bank_a, 8 * 1024),
+                false => {return}
+            },
+            0xA000 ... 0xBFFF => match self.prg_bank_b_isram {
+                true  => (self.prg_bank_b, 8 * 1024),
+                false => {return}
+            },
+            0xC000 ... 0xDFFF => match self.prg_bank_c_isram {
+                true  => (self.prg_bank_c, 8 * 1024),
+                false => {return}
+            },
+            _ => {return}
+        };
+
+        let datastore_offset = banked_memory_index(self.prg_ram.len(), bank_size, bank_number as usize, address as usize);
+        self.prg_ram[datastore_offset] = data;
+    }
+
+    pub fn write_prg(&mut self, address: u16, data: u8) {
+        match self.prg_mode {
+            0 => self.write_prg_mode_0(address, data),
+            1 => self.write_prg_mode_1(address, data),
+            2 => self.write_prg_mode_2(address, data),
+            3 => self.write_prg_mode_3(address, data),
+            _ => {} // Should be unreachable
+        }
+    }
 
 }
 
@@ -259,6 +332,7 @@ impl Mapper for Mmc5 {
                 self.prg_bank_c_isram = (data & 0b1000_0000) != 0;
             },
             0x5117 => {self.prg_bank_d = data & 0b0111_1111;},
+            0x6000 ... 0xFFFF => {self.write_prg(address, data);},
             _ => {}
         }
     }
