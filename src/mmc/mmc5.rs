@@ -127,58 +127,80 @@ impl Mmc5 {
     }
 
     pub fn read_prg_mode_0(&self, address: u16) -> u8 {
-        return match address {
-            0x6000 ... 0x7FFF => self.prg_ram[banked_memory_index(self.prg_ram.len(),  8 * 1024, self.prg_ram_bank as usize, address as usize)],
-            0x8000 ... 0xFFFF => self.prg_rom[banked_memory_index(self.prg_rom.len(), 32 * 1024, self.prg_bank_d   as usize, address as usize)],
-            _ => 0
-        }
+        let (datastore, bank_number, bank_size) = match address {
+            0x6000 ... 0x7FFF => (&self.prg_ram, self.prg_ram_bank, 8 * 1024),
+            0x8000 ... 0xFFFF => (&self.prg_rom, self.prg_bank_d >> 2, 32 * 1024),
+            _ => {return 0}
+        };
+
+        let datastore_offset = banked_memory_index(datastore.len(), bank_size, bank_number as usize, address as usize);
+        return datastore[datastore_offset];
     }
 
     pub fn read_prg_mode_1(&self, address: u16) -> u8 {
-        return match address {
-            0x6000 ... 0x7FFF => self.prg_ram[banked_memory_index(self.prg_ram.len(),  8 * 1024, self.prg_ram_bank as usize, address as usize)],
+        let (datastore, bank_number, bank_size) = match address {
+            0x6000 ... 0x7FFF => (&self.prg_ram, self.prg_ram_bank, 8 * 1024),
             0x8000 ... 0xBFFF => match self.prg_bank_b_isram {
-                true  => self.prg_ram[banked_memory_index(self.prg_ram.len(), 16 * 1024, self.prg_bank_b   as usize, address as usize)],
-                false => self.prg_rom[banked_memory_index(self.prg_rom.len(), 16 * 1024, self.prg_bank_b   as usize, address as usize)]
+                true  => (&self.prg_ram, self.prg_bank_b >> 1, 16 * 1024),
+                false => (&self.prg_rom, self.prg_bank_b >> 1, 16 * 1024)
             },
-            0xC000 ... 0xFFFF => self.prg_rom[banked_memory_index(self.prg_rom.len(), 16 * 1024, self.prg_bank_d   as usize, address as usize)],
-            _ => 0
-        }
+            0xC000 ... 0xFFFF => (&self.prg_rom, self.prg_bank_d >> 1, 16 * 1024),
+            _ => {return 0}
+        };
+
+        let datastore_offset = banked_memory_index(datastore.len(), bank_size, bank_number as usize, address as usize);
+        return datastore[datastore_offset];
     }
 
     pub fn read_prg_mode_2(&self, address: u16) -> u8 {
-        return match address {
-            0x6000 ... 0x7FFF => self.prg_ram[banked_memory_index(self.prg_ram.len(),  8 * 1024, self.prg_ram_bank as usize, address as usize)],
+        let (datastore, bank_number, bank_size) = match address {
+            0x6000 ... 0x7FFF => (&self.prg_ram, self.prg_ram_bank, 8 * 1024),
             0x8000 ... 0xBFFF => match self.prg_bank_b_isram {
-                true  => self.prg_ram[banked_memory_index(self.prg_ram.len(), 16 * 1024, self.prg_bank_b   as usize, address as usize)],
-                false => self.prg_rom[banked_memory_index(self.prg_rom.len(), 16 * 1024, self.prg_bank_b   as usize, address as usize)]
+                true  => (&self.prg_ram, self.prg_bank_b >> 1, 16 * 1024),
+                false => (&self.prg_rom, self.prg_bank_b >> 1, 16 * 1024)
             },
             0xC000 ... 0xDFFF => match self.prg_bank_c_isram {
-                true  => self.prg_ram[banked_memory_index(self.prg_ram.len(), 8 * 1024, self.prg_bank_c   as usize, address as usize)],
-                false => self.prg_rom[banked_memory_index(self.prg_rom.len(), 8 * 1024, self.prg_bank_c   as usize, address as usize)]
+                true  => (&self.prg_ram, self.prg_bank_c, 8 * 1024),
+                false => (&self.prg_rom, self.prg_bank_c, 8 * 1024)
             },
-            0xE000 ... 0xFFFF => self.prg_rom[banked_memory_index(self.prg_rom.len(), 8 * 1024, self.prg_bank_d   as usize, address as usize)],
-            _ => 0
-        }
+            0xE000 ... 0xFFFF => (&self.prg_rom, self.prg_bank_d, 8 * 1024),
+            _ => {return 0}
+        };
+
+        let datastore_offset = banked_memory_index(datastore.len(), bank_size, bank_number as usize, address as usize);
+        return datastore[datastore_offset];
     }
 
     pub fn read_prg_mode_3(&self, address: u16) -> u8 {
-        return match address {
-            0x6000 ... 0x7FFF => self.prg_ram[banked_memory_index(self.prg_ram.len(),  8 * 1024, self.prg_ram_bank as usize, address as usize)],
+        let (datastore, bank_number, bank_size) = match address {
+            0x6000 ... 0x7FFF => (&self.prg_ram, self.prg_ram_bank, 8 * 1024),
             0x8000 ... 0x9FFF => match self.prg_bank_a_isram {
-                true  => self.prg_ram[banked_memory_index(self.prg_ram.len(), 8 * 1024, self.prg_bank_a   as usize, address as usize)],
-                false => self.prg_rom[banked_memory_index(self.prg_rom.len(), 8 * 1024, self.prg_bank_a   as usize, address as usize)]
+                true  => (&self.prg_ram, self.prg_bank_a, 8 * 1024),
+                false => (&self.prg_rom, self.prg_bank_a, 8 * 1024)
             },
             0xA000 ... 0xBFFF => match self.prg_bank_b_isram {
-                true  => self.prg_ram[banked_memory_index(self.prg_ram.len(), 8 * 1024, self.prg_bank_b   as usize, address as usize)],
-                false => self.prg_rom[banked_memory_index(self.prg_rom.len(), 8 * 1024, self.prg_bank_b   as usize, address as usize)]
+                true  => (&self.prg_ram, self.prg_bank_b, 8 * 1024),
+                false => (&self.prg_rom, self.prg_bank_b, 8 * 1024)
             },
             0xC000 ... 0xDFFF => match self.prg_bank_c_isram {
-                true  => self.prg_ram[banked_memory_index(self.prg_ram.len(), 8 * 1024, self.prg_bank_c   as usize, address as usize)],
-                false => self.prg_rom[banked_memory_index(self.prg_rom.len(), 8 * 1024, self.prg_bank_c   as usize, address as usize)]
+                true  => (&self.prg_ram, self.prg_bank_c, 8 * 1024),
+                false => (&self.prg_rom, self.prg_bank_c, 8 * 1024)
             },
-            0xE000 ... 0xFFFF => self.prg_rom[banked_memory_index(self.prg_rom.len(), 8 * 1024, self.prg_bank_d   as usize, address as usize)],
-            _ => 0
+            0xE000 ... 0xFFFF => (&self.prg_rom, self.prg_bank_d, 8 * 1024),
+            _ => {return 0}
+        };
+
+        let datastore_offset = banked_memory_index(datastore.len(), bank_size, bank_number as usize, address as usize);
+        return datastore[datastore_offset];
+    }
+
+    pub fn read_prg(&self, address: u16) -> u8 {
+        return match self.prg_mode {
+            0 => self.read_prg_mode_0(address),
+            1 => self.read_prg_mode_1(address),
+            2 => self.read_prg_mode_2(address),
+            3 => self.read_prg_mode_3(address),
+            _ => 0 // Should be unreachable
         }
     }
 }
