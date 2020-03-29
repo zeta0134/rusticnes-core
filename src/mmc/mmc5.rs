@@ -6,6 +6,7 @@
 use cartridge::NesHeader;
 use mmc::mapper::*;
 use std::cmp::min;
+use std::cmp::max;
 
 pub struct Mmc5 {
     pub prg_rom: Vec<u8>,
@@ -35,7 +36,7 @@ pub struct Mmc5 {
 }
 
 fn banked_memory_index(data_store_length: usize, bank_size: usize, bank_number: usize, raw_address: usize) -> usize {
-    let total_banks = min(data_store_length / bank_size, 1);
+    let total_banks = max(data_store_length / bank_size, 1);
     let selected_bank = bank_number % total_banks;
     let bank_start_offset = bank_size * selected_bank;
     let offset_within_bank = raw_address % min(bank_size, data_store_length);
@@ -212,6 +213,8 @@ impl Mapper for Mmc5 {
     fn print_debug_status(&self) {
         println!("======= MMC5 =======");
         println!("PRG ROM: {}k, PRG RAM: {}k", self.prg_rom.len() / 1024, self.prg_ram.len() / 1024);
+        println!("PRG Mode: {}", self.prg_mode);
+        println!("PRG Banks: A:{} B:{} C:{} D:{} RAM:{}", self.prg_bank_a, self.prg_bank_b, self.prg_bank_c, self.prg_bank_d, self.prg_ram_bank);
         println!("====================");
     }
 
@@ -273,3 +276,4 @@ impl Mapper for Mmc5 {
         }
     }
 }
+
