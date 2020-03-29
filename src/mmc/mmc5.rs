@@ -8,6 +8,13 @@ use mmc::mapper::*;
 use std::cmp::min;
 use std::cmp::max;
 
+#[derive(Copy, Clone, PartialEq)]
+pub enum PpuMode {
+    Backgrounds,
+    Sprites,
+    PpuData
+}
+
 pub struct Mmc5 {
     pub prg_rom: Vec<u8>,
     pub prg_ram: Vec<u8>,
@@ -33,6 +40,11 @@ pub struct Mmc5 {
     pub prg_bank_c: u8,
     pub prg_bank_d: u8,
     pub prg_ram_bank: u8,
+    pub chr_banks: Vec<usize>,
+    pub chr_ext_banks: Vec<usize>,
+    pub chr_last_write_ext: bool,
+    pub ppu_read_mode: PpuMode,
+    pub chr_bank_high_bits: usize,
 }
 
 fn banked_memory_index(data_store_length: usize, bank_size: usize, bank_number: usize, raw_address: usize) -> usize {
@@ -75,6 +87,11 @@ impl Mmc5 {
             prg_bank_a_isram: false,
             prg_bank_b_isram: false,
             prg_bank_c_isram: false,
+            chr_banks: vec![0usize; 8],
+            chr_ext_banks: vec![0usize; 8],
+            chr_last_write_ext: false,
+            ppu_read_mode: PpuMode::PpuData,
+            chr_bank_high_bits: 0,
         }
     }
 
@@ -280,6 +297,34 @@ impl Mmc5 {
         }
     }
 
+    pub fn read_chr(&self, address: u16) -> u8 {
+        let chr_bank_size = match self.chr_mode {
+            0 => 8192,
+            1 => 4096,
+            2 => 2048,
+            3 => 1024,
+            _ => return 0
+        };
+
+        let chr_region = address / chr_bank_size;
+        let standard_bank_index = (chr_region + 1) * (8 >> self.chr_mode) - 1;
+        let extended_bank_index = standard_bank_index & 0x3;
+
+        let large_sprites_enabled = self.ppuctrl_monitor & 0b0010_0000 != 0;
+        let currently_reading_backgrounds = self.ppu_read_mode == PpuMode::Backgrounds;
+        let ppu_inactive = self.ppu_read_mode == PpuMode::PpuData;
+        let wrote_ext_register_last = self.chr_last_write_ext;
+
+        if large_sprites_enabled && (currently_reading_backgrounds || (ppu_inactive && wrote_ext_register_last)) {
+            let chr_bank = self.chr_ext_banks[extended_bank_index as usize];
+            let chr_address = banked_memory_index(self.chr_rom.len(), chr_bank_size as usize, chr_bank, address as usize);
+            return self.chr_rom[chr_address];
+        } else {
+            let chr_bank = self.chr_banks[standard_bank_index as usize];
+            let chr_address = banked_memory_index(self.chr_rom.len(), chr_bank_size as usize, chr_bank, address as usize);
+            return self.chr_rom[chr_address];
+        }
+    }
 }
 
 impl Mapper for Mmc5 {
@@ -343,6 +388,9 @@ impl Mapper for Mmc5 {
                     self.extram[address as usize - 0x5C00] = data;
                 }
             }
+            0x5120 ... 0x5127 => {self.chr_banks[address as usize - 0x5120] = data as usize + self.chr_bank_high_bits;},
+            0x5128 ... 0x512B => {self.chr_ext_banks[address as usize - 0x5128] = data as usize + self.chr_bank_high_bits;},
+            0x5130 => {self.chr_bank_high_bits = (data as usize) << 8;},
             0x6000 ... 0xFFFF => {self.write_prg(address, data);},
             _ => {}
         }
@@ -350,6 +398,7 @@ impl Mapper for Mmc5 {
 
     fn read_ppu(&mut self, address: u16) -> Option<u8> {
         match address {
+            0x0000 ... 0x1FFF => {return Some(self.read_chr(address))},
             0x2000 ... 0x3FFF => {return Some(self.read_nametable(address))},
             _ => return None
         }
