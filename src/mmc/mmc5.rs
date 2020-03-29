@@ -127,10 +127,22 @@ impl Mmc5 {
     }
 
     pub fn read_prg_mode_0(&self, address: u16) -> u8 {
-        match address {
-            0x6000 ... 0x7FFF => {return self.prg_ram[banked_memory_index(self.prg_ram.len(),  8 * 1024, self.prg_ram_bank as usize, address as usize)];},
-            0x8000 ... 0xFFFF => {return self.prg_rom[banked_memory_index(self.prg_rom.len(), 32 * 1024, self.prg_bank_d   as usize, address as usize)];},
-            _ => {return 0}
+        return match address {
+            0x6000 ... 0x7FFF => self.prg_ram[banked_memory_index(self.prg_ram.len(),  8 * 1024, self.prg_ram_bank as usize, address as usize)],
+            0x8000 ... 0xFFFF => self.prg_rom[banked_memory_index(self.prg_rom.len(), 32 * 1024, self.prg_bank_d   as usize, address as usize)],
+            _ => 0
+        }
+    }
+
+    pub fn read_prg_mode_1(&self, address: u16) -> u8 {
+        return match address {
+            0x6000 ... 0x7FFF => self.prg_ram[banked_memory_index(self.prg_ram.len(),  8 * 1024, self.prg_ram_bank as usize, address as usize)],
+            0x8000 ... 0xBFFF => 
+                match self.prg_bank_b_isram {
+                    true  => self.prg_ram[banked_memory_index(self.prg_ram.len(), 32 * 1024, self.prg_bank_b   as usize, address as usize)],
+                    false => self.prg_rom[banked_memory_index(self.prg_rom.len(), 32 * 1024, self.prg_bank_b   as usize, address as usize)]},
+            0xC000 ... 0xFFFF => self.prg_rom[banked_memory_index(self.prg_rom.len(), 32 * 1024, self.prg_bank_d   as usize, address as usize)],
+            _ => 0
         }
     }
 }
