@@ -23,11 +23,22 @@ pub struct Mmc5 {
     pub nametable_mapping: u8,
     pub fill_tile: u8,
     pub fill_attr: u8,
-    pub prg_rom_bank_a: u8,
-    pub prg_rom_bank_b: u8,
-    pub prg_rom_bank_c: u8,
-    pub prg_rom_bank_d: u8,
+    pub prg_bank_a_isram: bool,
+    pub prg_bank_b_isram: bool,
+    pub prg_bank_c_isram: bool,
+    pub prg_bank_a: u8,
+    pub prg_bank_b: u8,
+    pub prg_bank_c: u8,
+    pub prg_bank_d: u8,
     pub prg_ram_bank: u8,
+}
+
+fn banked_memory_index(data_store_length: usize, bank_size: usize, bank_number: usize, raw_address: usize) -> usize {
+    let total_banks = data_store_length / bank_size;
+    let selected_bank = bank_number % total_banks;
+    let bank_start_offset = bank_number * selected_bank;
+    let offset_within_bank = raw_address % bank_size;
+    return bank_start_offset + offset_within_bank;
 }
 
 impl Mmc5 {
@@ -44,7 +55,7 @@ impl Mmc5 {
             mirroring: header.mirroring,
             ppuctrl_monitor: 0,
             ppumask_monitor: 0,
-            prg_mode: 0,
+            prg_mode: 3,   // Koei games require MMC5 to boot into PRG mode 3
             chr_mode: 0,
             prg_ram_magic_low: 0,
             prg_ram_magic_high: 0,
@@ -54,11 +65,14 @@ impl Mmc5 {
             nametable_mapping: 0,
             fill_tile: 0,
             fill_attr: 0,
-            prg_rom_bank_a: 0,
-            prg_rom_bank_b: 0,
-            prg_rom_bank_c: 0,
-            prg_rom_bank_d: 0,
+            prg_bank_a: 0,
+            prg_bank_b: 0,
+            prg_bank_c: 0,
+            prg_bank_d: 0,
             prg_ram_bank: 0,
+            prg_bank_a_isram: false,
+            prg_bank_b_isram: false,
+            prg_bank_c_isram: false,
         }
     }
 
@@ -111,42 +125,14 @@ impl Mmc5 {
             _ => 0 // Shouldn't be reachable
         }
     }
-    /*
-    pub fn read_8k_prg_bank(&self, address: u16, bank: u8) -> u8 {
-        let total_8k_banks = self.prg_rom.len() >> 13;
-        let selected_bank = bank % total_8k_banks;
-        let bank_address = address & 0x1FFF;
-        return self.prg_rom[selected_bank * 0x2000 + bank_address];
-    }
 
-    pub fn read_16k_prg_bank(&self, address: u16, bank_8k: u8) -> u8 {
-        let total_16k_banks = self.prg_rom.len() >> 14;
-        let bank_16k = bank_8k & 0b1111_1110;
-        let selected_bank = bank_16k % total_16k_banks;
-        let bank_address = address & 0x3FFF;
-        return self.prg_rom[selected_bank * 0x4000 + bank_address];
-    }
-
-    pub fn read_32k_prg_bank(&self, address: u16, bank_8k: u8) -> u8 {
-        let total_32k_banks = self.prg_rom.len() >> 15;
-        let bank_32k = bank_8k & 0b1111_1100;
-        let selected_bank = bank % total_32k_banks;
-        let bank_address = address & 0x7FFF;
-        return self.prg_rom[selected_bank * 0x8000 + bank_address];
-    }
-
-    pub fn read_ekrom_ram_bank(&self, address: u16, bank: u8) -> Option<u8> {
-        let bank_address = address & 0x7FFF;
-        if bank < 4 {
-            return self.prg_ram[]
+    pub fn read_prg_mode_0(&self, address: u16) -> u8 {
+        match address {
+            0x6000 ... 0x7FFF => {return self.prg_ram[banked_memory_index(self.prg_ram.len(),  8 * 1024, self.prg_ram_bank as usize, address as usize)];},
+            0x8000 ... 0xFFFF => {return self.prg_rom[banked_memory_index(self.prg_rom.len(), 32 * 1024, self.prg_bank_d   as usize, address as usize)];},
+            _ => {return 0}
         }
     }
-
-    pub fn read_prg_rom(&self, address: u16) -> u8 {
-
-    }*/
-
-
 }
 
 impl Mapper for Mmc5 {
@@ -176,6 +162,20 @@ impl Mapper for Mmc5 {
                 // For simplicity, go ahead and store the whole attribute byte
                 self.fill_attr = (fill_color << 6) | (fill_color << 2) | (fill_color << 4) | (fill_color);
             },
+            0x5113 => {self.prg_ram_bank = data & 0b0111_1111;},
+            0x5114 => {
+                self.prg_bank_a = data;
+                self.prg_bank_a_isram = (data & 0b1000_0000) != 0;
+            },
+            0x5115 => {
+                self.prg_bank_b = data;
+                self.prg_bank_b_isram = (data & 0b1000_0000) != 0;
+            },
+            0x5116 => {
+                self.prg_bank_c = data;
+                self.prg_bank_c_isram = (data & 0b1000_0000) != 0;
+            },
+            0x5117 => {self.prg_bank_d = data & 0b0111_1111;},
             _ => {}
         }
     }
