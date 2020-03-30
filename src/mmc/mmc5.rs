@@ -54,6 +54,8 @@ pub struct Mmc5 {
     pub consecutive_nametable_count: u8,
     pub cpu_cycles_since_last_ppu_read: u8,
     pub ppu_fetches_this_scanline: u16,
+    pub multiplicand_a: u8,
+    pub multiplicand_b: u8,
 }
 
 fn banked_memory_index(data_store_length: usize, bank_size: usize, bank_number: usize, raw_address: usize) -> usize {
@@ -110,6 +112,8 @@ impl Mmc5 {
             consecutive_nametable_count: 0,
             cpu_cycles_since_last_ppu_read: 0,
             ppu_fetches_this_scanline: 0,
+            multiplicand_a: 0xFF,
+            multiplicand_b: 0xFF,
         }
     }
 
@@ -385,6 +389,14 @@ impl Mmc5 {
                     _ => return None
                 }
             }
+            0x5205 => {
+                let result = self.multiplicand_a as u16 * self.multiplicand_b as u16;
+                return Some((result & 0xFF) as u8);
+            },
+            0x5206 => {
+                let result = self.multiplicand_a as u16 * self.multiplicand_b as u16;
+                return Some(((result & 0xFF00) >> 8) as u8);
+            },            
             0x6000 ... 0xFFFF => {return Some(self.read_prg(address))},
             _ => return None
         }
@@ -533,6 +545,8 @@ impl Mapper for Mmc5 {
             0x5130 => {self.chr_bank_high_bits = ((data & 0b0000_0011) as usize) << 8;},
             0x5203 => {self.irq_scanline_compare = data},
             0x5204 => {self.irq_enabled = (data & 0b1000_0000) != 0;},
+            0x5205 => {self.multiplicand_a = data;},
+            0x5206 => {self.multiplicand_b = data;},
             0x6000 ... 0xFFFF => {self.write_prg(address, data);},
             _ => {}
         }
