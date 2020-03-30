@@ -700,7 +700,7 @@ impl PpuState {
             address = address + 0x0800;
         }
         address = address + ((ty % 30) as u16) * 32 + ((tx & 0x1F) as u16);
-        return self.read_byte(mapper, address);
+        return self.passively_read_byte(mapper, address);
     }
 
     pub fn get_bg_palette(&mut self, mapper: &mut Mapper, tx: u8, ty: u8) -> u8 {
@@ -713,7 +713,7 @@ impl PpuState {
         }
         address += ((tx & 0x1F) >> 2) as u16;
         address += (((ty % 30) >> 2) as u16)* 0x8;
-        let attr_byte = self.read_byte(mapper, address);
+        let attr_byte = self.passively_read_byte(mapper, address);
         let shift = (((tx & 0x2) >> 1) + ((ty % 30) & 0x2)) << 1;
         let mask = 0x3 << shift;
         return (attr_byte & mask) >> shift;
