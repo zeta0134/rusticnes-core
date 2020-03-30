@@ -349,7 +349,7 @@ impl Mmc5 {
         let standard_bank_index = (chr_region + 1) * (8 >> self.chr_mode) - 1;
         let extended_bank_index = standard_bank_index & 0x3;
 
-        let large_sprites_enabled = self.ppuctrl_monitor & 0b0010_0000 != 0;
+        let large_sprites_enabled = (self.ppuctrl_monitor & 0b0010_0000) != 0;
         let currently_reading_backgrounds = self.ppu_read_mode == PpuMode::Backgrounds;
         let ppu_inactive = self.ppu_read_mode == PpuMode::PpuData;
         let wrote_ext_register_last = self.chr_last_write_ext;
@@ -428,7 +428,7 @@ impl Mmc5 {
     fn snoop_ppu_read(&mut self, address: u16) {
         self.cpu_cycles_since_last_ppu_read = 0;
         self.ppu_fetches_this_scanline += 1;
-        if self.ppu_fetches_this_scanline > 127 {
+        if self.ppu_fetches_this_scanline >= 127 {
             self.ppu_read_mode = PpuMode::Sprites;
         }
         if self.consecutive_nametable_count == 2 {
@@ -474,10 +474,17 @@ impl Mapper for Mmc5 {
         println!("PRG ROM: {}k, PRG RAM: {}k, CHR ROM: {}k", self.prg_rom.len() / 1024, self.prg_ram.len() / 1024, self.chr_rom.len() / 1024);
         println!("PRG Mode: {} CHR Mode: {}, ExRAM Mode: {}", self.prg_mode, self.chr_mode, self.extended_ram_mode);
         println!("PRG Banks: A:{} B:{} C:{} D:{} RAM:{}", self.prg_bank_a, self.prg_bank_b, self.prg_bank_c, self.prg_bank_d, self.prg_ram_bank);
-        println!("IRQ E:{} P:{} CMP:{} Current Scanline: {}", self.irq_enabled, self.irq_pending, self.irq_scanline_compare, self.current_scanline);
+        println!("IRQ E:{} P:{} CMP:{} Detected Scanline: {}, PPU Fetches: {}", self.irq_enabled, self.irq_pending, self.irq_scanline_compare, self.current_scanline, self.ppu_fetches_this_scanline);
+        let ppu_mode_name = match self.ppu_read_mode {
+            PpuMode::Backgrounds => "Backgrounds",
+            PpuMode::Sprites => "Sprites",
+            PpuMode::PpuData => "Data",
+        };
+        println!("PPU Detected Read Mode: {}", ppu_mode_name);
         println!("CHR Banks: A:{}, B:{}, C:{}, D:{}, E:{}, F:{}, G:{}, H:{}", self.chr_banks[0], self.chr_banks[1], self.chr_banks[2], self.chr_banks[3], self.chr_banks[4], self.chr_banks[5], self.chr_banks[6], self.chr_banks[7]);
         println!("CHR Ext:   AA:{}, BB:{}, CC:{}, DD:{}", self.chr_ext_banks[0], self.chr_ext_banks[1], self.chr_ext_banks[2], self.chr_ext_banks[3]);
         println!("Nametables: Q1:{}, Q2:{}, Q3:{}, Q4:{}", self.nametable_mapping & 0b0000_0011, (self.nametable_mapping & 0b0000_1100) >> 2, (self.nametable_mapping & 0b0011_0000) >> 4, (self.nametable_mapping & 0b1100_0000) >> 6);
+        println!("Monitors: PPUCTRL: 0x{:02X}, PPUMASK: 0x{:02X}", self.ppuctrl_monitor, self.ppumask_monitor);
         println!("====================");
     }
 
