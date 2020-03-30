@@ -135,8 +135,9 @@ fn _read_byte(nes: &mut NesState, address: u16, side_effects: bool) -> u8 {
 }
 
 pub fn write_byte(nes: &mut NesState, address: u16, data: u8) {
-    /*nes.memory.recent_writes.insert(0, address);
-    nes.memory.recent_writes.truncate(20);*/
+    // The mapper *always* sees the write. Even to RAM, and even to internal registers.
+    // Most mappers ignore writes to addresses below 0x6000. Some (notably MMC5) do not.
+    nes.mapper.write_cpu(address, data);
     match address {
         0x0000 ... 0x1FFF => nes.memory.iram_raw[(address & 0x7FF) as usize] = data,
         0x2000 ... 0x3FFF => {
@@ -264,7 +265,6 @@ pub fn write_byte(nes: &mut NesState, address: u16, data: u8) {
         0x4017 => {
             nes.apu.write_register(address, data);
         },
-        0x4020 ... 0xFFFF => nes.mapper.write_cpu(address, data),
         _ => () // Do nothing!
     }
 }
