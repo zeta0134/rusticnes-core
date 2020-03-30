@@ -50,6 +50,9 @@ pub struct Mmc5 {
     pub irq_pending: bool,
     pub in_frame: bool,
     pub current_scanline: u8,
+    pub last_nametable_fetch: u16,
+    pub consecutive_nametable_count: u8,
+    pub cpu_cycles_since_last_ppu_read: u8,
 }
 
 fn banked_memory_index(data_store_length: usize, bank_size: usize, bank_number: usize, raw_address: usize) -> usize {
@@ -102,6 +105,9 @@ impl Mmc5 {
             irq_pending: false,
             in_frame: false,
             current_scanline: 0,
+            last_nametable_fetch: 0,
+            consecutive_nametable_count: 0,
+            cpu_cycles_since_last_ppu_read: 0,
         }
     }
 
@@ -354,6 +360,9 @@ impl Mmc5 {
     }
 
     fn _read_cpu(&mut self, address: u16, side_effects: bool) -> Option<u8> {
+        if side_effects {
+            self.snoop_cpu_read(address);
+        }
         match address {
             0x5204 => {
                 let mut status = 0;
@@ -378,6 +387,65 @@ impl Mmc5 {
             _ => return None
         }
     }
+
+    fn detect_scanline(&mut self) {
+        if self.in_frame {
+            self.current_scanline += 1;
+            if self.current_scanline == self.irq_scanline_compare {
+                self.irq_pending = true;
+            }
+        } else {
+            self.in_frame = true;
+            self.current_scanline = 0;
+            self.irq_pending = false;
+        }
+        if self.current_scanline == 241 {
+            self.in_frame = false;
+            self.irq_pending = false;
+            self.current_scanline = 0;
+        }
+    }
+
+    fn snoop_ppu_read(&mut self, address: u16) {
+        self.cpu_cycles_since_last_ppu_read = 0;
+        match address {
+            0x2000 ... 0x2FFF => {
+                if self.consecutive_nametable_count == 2 {
+                    self.detect_scanline();
+                }
+                if address == self.last_nametable_fetch {
+                    self.consecutive_nametable_count += 1;
+                } else {
+                    self.consecutive_nametable_count = 0;
+                }
+                self.last_nametable_fetch = address;
+            },
+            _ => {}
+        }
+    }
+
+    fn snoop_cpu_read(&mut self, address: u16) {
+        self.cpu_cycles_since_last_ppu_read += 1;
+        if self.cpu_cycles_since_last_ppu_read == 3 {
+            self.in_frame = false;
+        }
+        if address == 0xFFFA || address == 0xFFFB {
+            self.in_frame = false;
+            self.irq_pending = false;
+            self.current_scanline = 0;
+        }
+    }
+
+    fn _read_ppu(&mut self, address: u16, side_effects: bool) -> Option<u8> {
+        if side_effects {
+            self.snoop_ppu_read(address);
+        }
+        match address {
+            0x0000 ... 0x1FFF => {return Some(self.read_chr(address))},
+            0x2000 ... 0x3FFF => {return Some(self.read_nametable(address))},
+            _ => return None
+        }
+    }
 }
 
 impl Mapper for Mmc5 {
@@ -387,6 +455,10 @@ impl Mapper for Mmc5 {
         println!("PRG Mode: {}", self.prg_mode);
         println!("PRG Banks: A:{} B:{} C:{} D:{} RAM:{}", self.prg_bank_a, self.prg_bank_b, self.prg_bank_c, self.prg_bank_d, self.prg_ram_bank);
         println!("====================");
+    }
+
+    fn irq_flag(&self) -> bool {
+        return self.irq_enabled && self.irq_pending;
     }
 
     fn mirroring(&self) -> Mirroring {
@@ -446,12 +518,12 @@ impl Mapper for Mmc5 {
         }
     }
 
+    fn debug_read_ppu(&mut self, address: u16) -> Option<u8> {
+        return self._read_ppu(address, false);
+    }
+
     fn read_ppu(&mut self, address: u16) -> Option<u8> {
-        match address {
-            0x0000 ... 0x1FFF => {return Some(self.read_chr(address))},
-            0x2000 ... 0x3FFF => {return Some(self.read_nametable(address))},
-            _ => return None
-        }
+        return self._read_ppu(address, true);
     }
 
     fn write_ppu(&mut self, address: u16, data: u8) {
