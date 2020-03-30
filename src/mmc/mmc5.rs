@@ -45,6 +45,11 @@ pub struct Mmc5 {
     pub chr_last_write_ext: bool,
     pub ppu_read_mode: PpuMode,
     pub chr_bank_high_bits: usize,
+    pub irq_scanline_compare: u8,
+    pub irq_enabled: bool,
+    pub irq_pending: bool,
+    pub in_frame: bool,
+    pub current_scanline: u8,
 }
 
 fn banked_memory_index(data_store_length: usize, bank_size: usize, bank_number: usize, raw_address: usize) -> usize {
@@ -92,6 +97,11 @@ impl Mmc5 {
             chr_last_write_ext: false,
             ppu_read_mode: PpuMode::PpuData,
             chr_bank_high_bits: 0,
+            irq_scanline_compare: 0,
+            irq_enabled: false,
+            irq_pending: false,
+            in_frame: false,
+            current_scanline: 0,
         }
     }
 
@@ -342,6 +352,29 @@ impl Mmc5 {
             return self.chr_rom[chr_address];
         }
     }
+
+    fn _read_cpu(&mut self, address: u16, side_effects: bool) -> Option<u8> {
+        match address {
+            0x5204 => {
+                let mut status = 0;
+                if self.irq_pending {
+                    status |= 0b1000_0000;
+                }
+                if self.in_frame {
+                    status |= 0b0100_0000;
+                }
+                return Some(status);
+            }
+            0x5C00 ... 0x5FFF => {
+                match self.extended_ram_mode {
+                    2 ... 3 => {return Some(self.extram[address as usize - 0x5C00]);},
+                    _ => return None
+                }
+            }
+            0x6000 ... 0xFFFF => {return Some(self.read_prg(address))},
+            _ => return None
+        }
+    }
 }
 
 impl Mapper for Mmc5 {
@@ -358,16 +391,11 @@ impl Mapper for Mmc5 {
     }
     
     fn read_cpu(&mut self, address: u16) -> Option<u8> {
-        match address {
-            0x5C00 ... 0x5FFF => {
-                match self.extended_ram_mode {
-                    2 ... 3 => {return Some(self.extram[address as usize - 0x5C00]);},
-                    _ => return None
-                }
-            }
-            0x6000 ... 0xFFFF => {return Some(self.read_prg(address))},
-            _ => return None
-        }
+        return self._read_cpu(address, true);
+    }
+
+    fn debug_read_cpu(&mut self, address: u16) -> Option<u8> {
+        return self._read_cpu(address, false);
     }
 
     fn write_cpu(&mut self, address: u16, data: u8) {
@@ -408,6 +436,8 @@ impl Mapper for Mmc5 {
             0x5120 ... 0x5127 => {self.chr_banks[address as usize - 0x5120] = data as usize + self.chr_bank_high_bits;},
             0x5128 ... 0x512B => {self.chr_ext_banks[address as usize - 0x5128] = data as usize + self.chr_bank_high_bits;},
             0x5130 => {self.chr_bank_high_bits = (data as usize) << 8;},
+            0x5203 => {self.irq_scanline_compare = data},
+            0x5204 => {self.irq_enabled = (data & 0b1000_0000) != 0;},
             0x6000 ... 0xFFFF => {self.write_prg(address, data);},
             _ => {}
         }
