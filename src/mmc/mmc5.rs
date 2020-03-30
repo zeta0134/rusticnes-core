@@ -50,7 +50,7 @@ pub struct Mmc5 {
     pub irq_pending: bool,
     pub in_frame: bool,
     pub current_scanline: u8,
-    pub last_nametable_fetch: u16,
+    pub last_ppu_fetch: u16,
     pub consecutive_nametable_count: u8,
     pub cpu_cycles_since_last_ppu_read: u8,
     pub ppu_fetches_this_scanline: u16,
@@ -108,7 +108,7 @@ impl Mmc5 {
             irq_pending: false,
             in_frame: false,
             current_scanline: 0,
-            last_nametable_fetch: 0,
+            last_ppu_fetch: 0,
             consecutive_nametable_count: 0,
             cpu_cycles_since_last_ppu_read: 0,
             ppu_fetches_this_scanline: 0,
@@ -157,7 +157,7 @@ impl Mmc5 {
     pub fn read_nametable(&self, address: u16) -> u8 {
         let masked_address = address & 0xFFF;
         let quadrant = masked_address / 0x400;
-        let nametable_select = (self.nametable_mapping >> quadrant * 2) & 0b11;
+        let nametable_select = (self.nametable_mapping >> (quadrant * 2)) & 0b11;
         return match nametable_select {
             0 => self.nametable_vram_low(masked_address),
             1 => self.nametable_vram_high(masked_address),
@@ -171,7 +171,7 @@ impl Mmc5 {
         let address_within_nametables = address & 0xFFF;
         let address_within_quadrant = address & 0x3FF;
         let quadrant = address_within_nametables / 0x400;
-        let nametable_select = (self.nametable_mapping >> quadrant * 2) & 0b11;
+        let nametable_select = (self.nametable_mapping >> (quadrant * 2)) & 0b11;
         match nametable_select {
             0 => {self.vram[address_within_quadrant as usize] = data;},
             1 => {self.vram[address_within_quadrant as usize + 0x400] = data;},
@@ -431,25 +431,20 @@ impl Mmc5 {
         if self.ppu_fetches_this_scanline > 127 {
             self.ppu_read_mode = PpuMode::Sprites;
         }
-        match address {
-            0x2000 ... 0x2FFF => {
-                if self.consecutive_nametable_count == 2 {
-                    self.detect_scanline();
-                }
-                if address == self.last_nametable_fetch {
-                    self.consecutive_nametable_count += 1;
-                } else {
-                    self.consecutive_nametable_count = 0;
-                }
-                self.last_nametable_fetch = address;
-            },
-            _ => {}
+        if self.consecutive_nametable_count == 2 {
+            self.detect_scanline();
         }
+        if address == self.last_ppu_fetch && address >= 0x2000 && address <= 0x2FFF {
+            self.consecutive_nametable_count += 1;
+        } else {
+            self.consecutive_nametable_count = 0;
+        }
+        self.last_ppu_fetch = address;
     }
 
     fn snoop_cpu_read(&mut self, address: u16) {
         self.cpu_cycles_since_last_ppu_read += 1;
-        if self.cpu_cycles_since_last_ppu_read == 3 {
+        if self.cpu_cycles_since_last_ppu_read == 4 {
             self.in_frame = false;
             self.ppu_read_mode = PpuMode::PpuData;
         }
@@ -476,10 +471,13 @@ impl Mmc5 {
 impl Mapper for Mmc5 {
     fn print_debug_status(&self) {
         println!("======= MMC5 =======");
-        println!("PRG ROM: {}k, PRG RAM: {}k", self.prg_rom.len() / 1024, self.prg_ram.len() / 1024);
+        println!("PRG ROM: {}k, PRG RAM: {}k, CHR ROM: {}k", self.prg_rom.len() / 1024, self.prg_ram.len() / 1024, self.chr_rom.len() / 1024);
         println!("PRG Mode: {} CHR Mode: {}, ExRAM Mode: {}", self.prg_mode, self.chr_mode, self.extended_ram_mode);
         println!("PRG Banks: A:{} B:{} C:{} D:{} RAM:{}", self.prg_bank_a, self.prg_bank_b, self.prg_bank_c, self.prg_bank_d, self.prg_ram_bank);
         println!("IRQ E:{} P:{} CMP:{} Current Scanline: {}", self.irq_enabled, self.irq_pending, self.irq_scanline_compare, self.current_scanline);
+        println!("CHR Banks: A:{}, B:{}, C:{}, D:{}, E:{}, F:{}, G:{}, H:{}", self.chr_banks[0], self.chr_banks[1], self.chr_banks[2], self.chr_banks[3], self.chr_banks[4], self.chr_banks[5], self.chr_banks[6], self.chr_banks[7]);
+        println!("CHR Ext:   AA:{}, BB:{}, CC:{}, DD:{}", self.chr_ext_banks[0], self.chr_ext_banks[1], self.chr_ext_banks[2], self.chr_ext_banks[3]);
+        println!("Nametables: Q1:{}, Q2:{}, Q3:{}, Q4:{}", self.nametable_mapping & 0b0000_0011, (self.nametable_mapping & 0b0000_1100) >> 2, (self.nametable_mapping & 0b0011_0000) >> 4, (self.nametable_mapping & 0b1100_0000) >> 6);
         println!("====================");
     }
 
