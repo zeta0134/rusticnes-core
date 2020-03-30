@@ -53,6 +53,7 @@ pub struct Mmc5 {
     pub last_nametable_fetch: u16,
     pub consecutive_nametable_count: u8,
     pub cpu_cycles_since_last_ppu_read: u8,
+    pub ppu_fetches_this_scanline: u16,
 }
 
 fn banked_memory_index(data_store_length: usize, bank_size: usize, bank_number: usize, raw_address: usize) -> usize {
@@ -108,6 +109,7 @@ impl Mmc5 {
             last_nametable_fetch: 0,
             consecutive_nametable_count: 0,
             cpu_cycles_since_last_ppu_read: 0,
+            ppu_fetches_this_scanline: 0,
         }
     }
 
@@ -389,6 +391,10 @@ impl Mmc5 {
     }
 
     fn detect_scanline(&mut self) {
+        // Note: we are *currently* processing fetch #1, so we will not yet consider
+        // it to have passed.
+        self.ppu_fetches_this_scanline = 0;
+        self.ppu_read_mode = PpuMode::Backgrounds;
         if self.in_frame {
             self.current_scanline += 1;
             if self.current_scanline == self.irq_scanline_compare {
@@ -403,11 +409,16 @@ impl Mmc5 {
             self.in_frame = false;
             self.irq_pending = false;
             self.current_scanline = 0;
+            self.ppu_read_mode = PpuMode::PpuData;
         }
     }
 
     fn snoop_ppu_read(&mut self, address: u16) {
         self.cpu_cycles_since_last_ppu_read = 0;
+        self.ppu_fetches_this_scanline += 1;
+        if self.ppu_fetches_this_scanline > 127 {
+            self.ppu_read_mode = PpuMode::Sprites;
+        }
         match address {
             0x2000 ... 0x2FFF => {
                 if self.consecutive_nametable_count == 2 {
@@ -428,11 +439,13 @@ impl Mmc5 {
         self.cpu_cycles_since_last_ppu_read += 1;
         if self.cpu_cycles_since_last_ppu_read == 3 {
             self.in_frame = false;
+            self.ppu_read_mode = PpuMode::PpuData;
         }
         if address == 0xFFFA || address == 0xFFFB {
             self.in_frame = false;
             self.irq_pending = false;
             self.current_scanline = 0;
+            self.ppu_read_mode = PpuMode::PpuData;
         }
     }
 
@@ -452,8 +465,9 @@ impl Mapper for Mmc5 {
     fn print_debug_status(&self) {
         println!("======= MMC5 =======");
         println!("PRG ROM: {}k, PRG RAM: {}k", self.prg_rom.len() / 1024, self.prg_ram.len() / 1024);
-        println!("PRG Mode: {}", self.prg_mode);
+        println!("PRG Mode: {} CHR Mode: {}, ExRAM Mode: {}", self.prg_mode, self.chr_mode, self.extended_ram_mode);
         println!("PRG Banks: A:{} B:{} C:{} D:{} RAM:{}", self.prg_bank_a, self.prg_bank_b, self.prg_bank_c, self.prg_bank_d, self.prg_ram_bank);
+        println!("IRQ E:{} P:{} CMP:{} Current Scanline: {}", self.irq_enabled, self.irq_pending, self.irq_scanline_compare, self.current_scanline);
         println!("====================");
     }
 
@@ -508,9 +522,15 @@ impl Mapper for Mmc5 {
                     self.extram[address as usize - 0x5C00] = data;
                 }
             }
-            0x5120 ... 0x5127 => {self.chr_banks[address as usize - 0x5120] = data as usize + self.chr_bank_high_bits;},
-            0x5128 ... 0x512B => {self.chr_ext_banks[address as usize - 0x5128] = data as usize + self.chr_bank_high_bits;},
-            0x5130 => {self.chr_bank_high_bits = (data as usize) << 8;},
+            0x5120 ... 0x5127 => {
+                self.chr_banks[address as usize - 0x5120] = data as usize + self.chr_bank_high_bits;
+                self.chr_last_write_ext = false;
+            },
+            0x5128 ... 0x512B => {
+                self.chr_ext_banks[address as usize - 0x5128] = data as usize + self.chr_bank_high_bits;
+                self.chr_last_write_ext = true;
+            },
+            0x5130 => {self.chr_bank_high_bits = ((data & 0b0000_0011) as usize) << 8;},
             0x5203 => {self.irq_scanline_compare = data},
             0x5204 => {self.irq_enabled = (data & 0b1000_0000) != 0;},
             0x6000 ... 0xFFFF => {self.write_prg(address, data);},
