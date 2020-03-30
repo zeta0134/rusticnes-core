@@ -363,6 +363,9 @@ impl Mmc5 {
                 if self.in_frame {
                     status |= 0b0100_0000;
                 }
+                if side_effects {
+                    self.irq_pending = false;
+                }
                 return Some(status);
             }
             0x5C00 ... 0x5FFF => {
