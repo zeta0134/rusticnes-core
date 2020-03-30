@@ -145,6 +145,23 @@ impl Mmc5 {
         }
     }
 
+    pub fn write_nametable(&mut self, address: u16, data: u8) {
+        let address_within_nametables = address & 0xFFF;
+        let address_within_quadrant = address & 0x3FF;
+        let quadrant = address_within_nametables / 0x400;
+        let nametable_select = (self.nametable_mapping >> quadrant * 2) & 0b11;
+        match nametable_select {
+            0 => {self.vram[address_within_quadrant as usize] = data;},
+            1 => {self.vram[address_within_quadrant as usize + 0x400] = data;},
+            2 => {
+                if self.extended_ram_mode == 0 || self.extended_ram_mode == 1 {
+                    self.extram[address_within_quadrant as usize] = data;
+                }
+            },
+            _ => {}
+        }
+    }
+
     pub fn read_prg_mode_0(&self, address: u16) -> u8 {
         let (datastore, bank_number, bank_size) = match address {
             0x6000 ... 0x7FFF => (&self.prg_ram, self.prg_ram_bank, 8 * 1024),
@@ -406,6 +423,7 @@ impl Mapper for Mmc5 {
 
     fn write_ppu(&mut self, address: u16, data: u8) {
         match address {
+            0x2000 ... 0x3FFF => {self.write_nametable(address, data)},
             _ => {}
         }
     }
