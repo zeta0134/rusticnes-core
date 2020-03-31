@@ -474,6 +474,18 @@ impl PpuState {
 
     fn fetch_sprite_tiles(&mut self, mapper: &mut Mapper) {
         let sub_cycle = (self.current_scanline_cycle - 257) % 8;
+        match sub_cycle {
+            // Note: the nametable address fetches here are thrown away, but they are performed, and
+            // do affect any mappers listening to PPU activity. I'm unsuire of the address that should be
+            // fetched here, but existing documentation seems to suggest it would simply be whatever the
+            // vram counter currently points to, without any updates to that counter:
+            // http://nesdev.com/2C02%20technical%20reference.TXT
+            0  | 2 => {
+                let tile_address = 0x2000 | (self.current_vram_address & 0x0FFF);
+                let _ = self.read_byte(mapper, tile_address);
+            },
+            _ => {}
+        }
         if sub_cycle == 4 || sub_cycle == 6 {
             let sprite_index: usize = ((self.current_scanline_cycle - 257) / 8) as usize;
             let mut tile_index = self.secondary_oam[sprite_index].tile_index;
