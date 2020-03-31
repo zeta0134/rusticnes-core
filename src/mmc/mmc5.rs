@@ -431,6 +431,9 @@ impl Mmc5 {
         if self.ppu_fetches_this_scanline >= 127 {
             self.ppu_read_mode = PpuMode::Sprites;
         }
+        if self.ppu_fetches_this_scanline >= 159 {
+            self.ppu_read_mode = PpuMode::Backgrounds;
+        }
         if self.consecutive_nametable_count == 2 {
             self.detect_scanline();
         }
