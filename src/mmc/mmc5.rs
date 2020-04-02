@@ -449,10 +449,10 @@ impl Mmc5 {
     fn snoop_ppu_read(&mut self, address: u16) {
         self.cpu_cycles_since_last_ppu_read = 0;
         self.ppu_fetches_this_scanline += 1;
-        if self.ppu_fetches_this_scanline >= 127 {
+        if self.in_frame && self.ppu_fetches_this_scanline >= 127 {
             self.ppu_read_mode = PpuMode::Sprites;
         }
-        if self.ppu_fetches_this_scanline >= 159 {
+        if self.in_frame && self.ppu_fetches_this_scanline >= 159 {
             self.ppu_read_mode = PpuMode::Backgrounds;
         }
         if self.consecutive_nametable_count == 2 {
