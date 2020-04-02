@@ -51,6 +51,7 @@ pub struct Mmc5 {
     pub in_frame: bool,
     pub current_scanline: u8,
     pub last_ppu_fetch: u16,
+    pub last_bg_tile_fetch: u16,
     pub consecutive_nametable_count: u8,
     pub cpu_cycles_since_last_ppu_read: u8,
     pub ppu_fetches_this_scanline: u16,
@@ -109,6 +110,7 @@ impl Mmc5 {
             in_frame: false,
             current_scanline: 0,
             last_ppu_fetch: 0,
+            last_bg_tile_fetch: 0,
             consecutive_nametable_count: 0,
             cpu_cycles_since_last_ppu_read: 0,
             ppu_fetches_this_scanline: 0,
@@ -249,6 +251,7 @@ impl Mmc5 {
         };
 
         let datastore_offset = banked_memory_index(datastore.len(), bank_size, bank_number as usize, address as usize);
+
         return datastore[datastore_offset];
     }
 
@@ -336,7 +339,7 @@ impl Mmc5 {
         }
     }
 
-    pub fn read_chr(&self, address: u16) -> u8 {
+    pub fn read_banked_chr(&self, address: u16) -> u8 {
         let chr_bank_size = match self.chr_mode {
             0 => 8192,
             1 => 4096,
@@ -363,6 +366,25 @@ impl Mmc5 {
             let chr_address = banked_memory_index(self.chr_rom.len(), chr_bank_size as usize, chr_bank, address as usize);
             return self.chr_rom[chr_address];
         }
+    }
+
+    pub fn read_extended_chr(&self, address: u16) -> u8 {
+        let chr_bank_size = 4096;
+        let nametable_index = self.last_bg_tile_fetch & 0x3FF;
+        let extended_tile_attributes = self.extram[nametable_index as usize];
+        let chr_bank = (self.chr_bank_high_bits << 6) | ((extended_tile_attributes as usize) & 0b0011_1111);
+        let chr_address = banked_memory_index(self.chr_rom.len(), chr_bank_size as usize, chr_bank, address as usize);
+        return self.chr_rom[chr_address];
+    }
+
+        pub fn read_extended_attribute(&self) -> u8 {
+        let nametable_index = self.last_bg_tile_fetch & 0x3FF;
+        let extended_tile_attributes = self.extram[nametable_index as usize];
+        let palette_index = (extended_tile_attributes & 0b1100_0000) >> 6;
+        // Duplicate the palette four times; this is easier than working out which sub-index the PPU is going to
+        // read here. We're overriding every fetch anyway.
+        let combined_attribute = palette_index << 6 | palette_index << 4 | palette_index << 2 | palette_index;
+        return combined_attribute as u8;
     }
 
     fn _read_cpu(&mut self, address: u16, side_effects: bool) -> Option<u8> {
@@ -442,6 +464,11 @@ impl Mmc5 {
         } else {
             self.consecutive_nametable_count = 0;
         }
+        if self.ppu_fetches_this_scanline % 4 == 0 {
+            // The LAST byte we fetched was the nametable byte. Hold onto that address,
+            // we need to keep track of it for ExRAM attributes.
+            self.last_bg_tile_fetch = self.last_ppu_fetch;
+        }
         self.last_ppu_fetch = address;
     }
 
@@ -459,13 +486,40 @@ impl Mmc5 {
         }
     }
 
+    fn is_extended_attribute(&self) -> bool {
+        let ppu_rendering_backgrounds = self.ppu_read_mode == PpuMode::Backgrounds;
+        let extended_attributes_enabled = self.extended_ram_mode == 1;
+        let reading_attribute_byte = (self.ppu_fetches_this_scanline % 4) == 0;
+        return ppu_rendering_backgrounds & extended_attributes_enabled & reading_attribute_byte;
+    }
+
+    fn is_extended_pattern(&self) -> bool {
+        let ppu_rendering_backgrounds = self.ppu_read_mode == PpuMode::Backgrounds;
+        let extended_attributes_enabled = self.extended_ram_mode == 1;
+        let tile_sub_cycle = self.ppu_fetches_this_scanline % 4;
+        let reading_pattern_byte = (tile_sub_cycle == 1) || (tile_sub_cycle == 2);
+        return ppu_rendering_backgrounds & extended_attributes_enabled & reading_pattern_byte;
+    }
+
     fn _read_ppu(&mut self, address: u16, side_effects: bool) -> Option<u8> {
         if side_effects {
             self.snoop_ppu_read(address);
         }
         match address {
-            0x0000 ... 0x1FFF => {return Some(self.read_chr(address))},
-            0x2000 ... 0x3FFF => {return Some(self.read_nametable(address))},
+            0x0000 ... 0x1FFF => {
+                if self.is_extended_pattern() {
+                    return Some(self.read_extended_chr(address));
+                } else {
+                    return Some(self.read_banked_chr(address));
+                }
+            },
+            0x2000 ... 0x3FFF => {
+                if self.is_extended_attribute() {
+                    return Some(self.read_extended_attribute());
+                } else {
+                    return Some(self.read_nametable(address));
+                }
+            },
             _ => return None
         }
     }
@@ -538,10 +592,20 @@ impl Mapper for Mmc5 {
             },
             0x5117 => {self.prg_bank_d = data & 0b0111_1111;},
             0x5C00 ... 0x5FFF => {
+                if self.extended_ram_mode == 0 || self.extended_ram_mode == 1 {
+                    // Mapped as either a nametable or extended attributes. Can only write while
+                    // PPU is currently rendering, otherwise 0 is written.
+                    if self.in_frame {
+                        self.extram[address as usize - 0x5C00] = data;
+                    } else {
+                        self.extram[address as usize - 0x5C00] = 0;
+                    }
+                }
                 if self.extended_ram_mode == 2 {
+                    // Mapped as ExRAM, unconditional write
                     self.extram[address as usize - 0x5C00] = data;
                 }
-            }
+            },
             0x5120 ... 0x5127 => {
                 self.chr_banks[address as usize - 0x5120] = data as usize + self.chr_bank_high_bits;
                 self.chr_last_write_ext = false;
