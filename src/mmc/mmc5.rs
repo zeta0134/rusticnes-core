@@ -76,7 +76,7 @@ impl Mmc5 {
 
         return Mmc5 {
             prg_rom: prg.to_vec(),
-            prg_ram: vec![0u8; 8 * 1024],
+            prg_ram: vec![0u8; 64 * 1024],
             chr_rom: chr_rom,
             mirroring: header.mirroring,
             ppuctrl_monitor: 0,
@@ -251,7 +251,6 @@ impl Mmc5 {
         };
 
         let datastore_offset = banked_memory_index(datastore.len(), bank_size, bank_number as usize, address as usize);
-
         return datastore[datastore_offset];
     }
 
