@@ -504,6 +504,26 @@ pub struct ApuState {
     pub buffer_index: usize,
     pub generated_samples: u64,
     pub next_sample_at: u64,
+
+    // Lookup tables for emulating the mixer
+    pub pulse_table: Vec<f32>,
+    pub tnd_table: Vec<f32>,
+}
+
+fn generate_pulse_table() -> Vec<f32> {
+    let mut pulse_table = vec!(0f32; 31);
+    for n in 0 .. 31 {
+        pulse_table[n] = 95.52 / (8128.0 / (n as f32) + 100.0);
+    }
+    return pulse_table;
+}
+
+fn generate_tnd_table() -> Vec<f32> {
+    let mut tnd_table = vec!(0f32; 203);
+    for n in 0 .. 203 {
+        tnd_table[n] = 163.67 / (24329.0 / (n as f32) + 100.0);
+    }
+    return tnd_table;
 }
 
 impl ApuState {
@@ -529,6 +549,8 @@ impl ApuState {
             buffer_index: 0,
             generated_samples: 0,
             next_sample_at: 0,
+            pulse_table: generate_pulse_table(),
+            tnd_table: generate_tnd_table(),
         }
     }
 
