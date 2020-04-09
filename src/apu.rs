@@ -887,37 +887,45 @@ impl ApuState {
         }
 
         if self.current_cycle >= self.next_sample_at {
-            // Mixing? Bah! Just throw the sample in the buffer.
-            let mut composite_sample: i16 = 0;
+            // Collect current samples from the various channels
             let pulse_1_sample = self.pulse_1.output();
-            self.pulse_1.debug_buffer[self.buffer_index] = pulse_1_sample;
-            if !(self.pulse_1.debug_disable) {
-                composite_sample += pulse_1_sample * 256; // Sure, why not?
-            }
-
             let pulse_2_sample = self.pulse_2.output();
-            self.pulse_2.debug_buffer[self.buffer_index] = pulse_2_sample;
-            if !(self.pulse_2.debug_disable) {
-                composite_sample += pulse_2_sample * 256; // Sure, why not?
-            }
-
             let triangle_sample = self.triangle.output();
-            self.triangle.debug_buffer[self.buffer_index] = triangle_sample;
-            if !(self.triangle.debug_disable) {
-                composite_sample += triangle_sample * 256; // Sure, why not?
-            }
-
             let noise_sample = self.noise.output();
-            self.noise.debug_buffer[self.buffer_index] = noise_sample;
-            if !(self.noise.debug_disable) {
-                composite_sample += noise_sample * 256; // Sure, why not?
-            }
-
             let dmc_sample = self.dmc.output();
+
+            // Write debug buffers from these, regardless of enable / disable status
+            self.pulse_1.debug_buffer[self.buffer_index] = pulse_1_sample;
+            self.pulse_2.debug_buffer[self.buffer_index] = pulse_2_sample;
+            self.triangle.debug_buffer[self.buffer_index] = triangle_sample;
+            self.noise.debug_buffer[self.buffer_index] = noise_sample;
             self.dmc.debug_buffer[self.buffer_index] = dmc_sample;
-            if !(self.dmc.debug_disable) {
-                composite_sample += dmc_sample * 64; // Sure, why not?
+
+            // Mix samples, using the LUT we generated earlier, based on documentation here:
+            // https://wiki.nesdev.com/w/index.php/APU_Mixer
+            let mut combined_pulse = 0;
+            if !(self.pulse_1.debug_disable) {
+                combined_pulse += pulse_1_sample;
             }
+            if !(self.pulse_2.debug_disable) {
+                combined_pulse += pulse_2_sample;
+            }
+            let pulse_output = self.pulse_table[combined_pulse as usize];
+
+            let mut tnd_index = 0;
+            if !(self.triangle.debug_disable) {
+                tnd_index += triangle_sample * 3;
+            }
+            if !(self.noise.debug_disable) {
+                tnd_index += noise_sample * 2;
+            }
+            if !(self.dmc.debug_disable) {
+                tnd_index += dmc_sample;
+            }
+            let tnd_output = self.tnd_table[tnd_index as usize];
+
+            let composite_output = pulse_output + tnd_output;
+            let composite_sample = ((composite_output * 32767.0) - 16384.0) as i16;
 
             self.sample_buffer[self.buffer_index] = composite_sample;
             self.buffer_index = (self.buffer_index + 1) % self.sample_buffer.len();
