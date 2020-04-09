@@ -506,24 +506,46 @@ pub struct ApuState {
     pub next_sample_at: u64,
 
     // Lookup tables for emulating the mixer
-    pub pulse_table: Vec<f32>,
-    pub tnd_table: Vec<f32>,
+    pub pulse_table: Vec<f64>,
+    pub tnd_table: Vec<f64>,
+
+    // Partial results from the filters
+    pub last_dac_sample: f64,
+    pub last_90hz_hp_sample: f64,
+    pub last_440hz_hp_sample: f64,
+    pub last_14khz_lp_sample: f64,
 }
 
-fn generate_pulse_table() -> Vec<f32> {
-    let mut pulse_table = vec!(0f32; 31);
+fn generate_pulse_table() -> Vec<f64> {
+    let mut pulse_table = vec!(0f64; 31);
     for n in 0 .. 31 {
-        pulse_table[n] = 95.52 / (8128.0 / (n as f32) + 100.0);
+        pulse_table[n] = 95.52 / (8128.0 / (n as f64) + 100.0);
     }
     return pulse_table;
 }
 
-fn generate_tnd_table() -> Vec<f32> {
-    let mut tnd_table = vec!(0f32; 203);
+fn generate_tnd_table() -> Vec<f64> {
+    let mut tnd_table = vec!(0f64; 203);
     for n in 0 .. 203 {
-        tnd_table[n] = 163.67 / (24329.0 / (n as f32) + 100.0);
+        tnd_table[n] = 163.67 / (24329.0 / (n as f64) + 100.0);
     }
     return tnd_table;
+}
+
+fn low_pass(sample_rate: f64, cutoff_frequency: f64, previous_output: f64, current_input: f64) -> f64 {
+    let delta_t = 1.0 / sample_rate;
+    let tau = 1.0 / cutoff_frequency;
+    let alpha = delta_t / tau;
+    let current_output = previous_output + alpha * (current_input - previous_output);
+    return current_output;
+}
+
+fn high_pass(sample_rate: f64, cutoff_frequency: f64, previous_output: f64, current_input: f64, previous_input: f64) -> f64 {
+    let delta_t = 1.0 / sample_rate;
+    let alpha = cutoff_frequency / (cutoff_frequency + delta_t);
+    let change_in_input = current_input - previous_input;
+    let current_output = alpha * previous_output + alpha * change_in_input;
+    return current_output;
 }
 
 impl ApuState {
@@ -551,6 +573,10 @@ impl ApuState {
             next_sample_at: 0,
             pulse_table: generate_pulse_table(),
             tnd_table: generate_tnd_table(),
+            last_dac_sample: 0.0,
+            last_90hz_hp_sample: 0.0,
+            last_440hz_hp_sample: 0.0,
+            last_14khz_lp_sample: 0.0,
         }
     }
 
@@ -923,9 +949,21 @@ impl ApuState {
                 tnd_index += dmc_sample;
             }
             let tnd_output = self.tnd_table[tnd_index as usize];
+            
+            let current_dac_sample = (pulse_output - 0.5) + (tnd_output - 0.5);
+            let current_90hz_hp_sample = high_pass(self.sample_rate as f64, 90.0, self.last_90hz_hp_sample, current_dac_sample, self.last_dac_sample);
+            let current_440hz_hp_sample = high_pass(self.sample_rate as f64, 440.0, self.last_440hz_hp_sample, current_90hz_hp_sample, self.last_90hz_hp_sample);
+            let current_14khz_lp_sample = low_pass(self.sample_rate as f64, 14000.0, self.last_14khz_lp_sample, current_440hz_hp_sample);
 
-            let composite_output = pulse_output + tnd_output;
-            let composite_sample = ((composite_output * 32767.0) - 16384.0) as i16;
+            self.last_dac_sample = current_dac_sample;
+            self.last_90hz_hp_sample = current_90hz_hp_sample;
+            self.last_440hz_hp_sample = current_440hz_hp_sample;
+            self.last_14khz_lp_sample = current_14khz_lp_sample;
+
+            let composite_sample = (current_14khz_lp_sample * 32767.0) as i16;
+            //let composite_sample = ((current_14khz_lp_sample * 32767.0)) as i16;
+
+
 
             self.sample_buffer[self.buffer_index] = composite_sample;
             self.buffer_index = (self.buffer_index + 1) % self.sample_buffer.len();
