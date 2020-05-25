@@ -461,7 +461,7 @@ impl DmcState {
 
     pub fn clock(&mut self, mapper: &mut Mapper) {
         if self.period_current == 0 {
-            self.period_current = self.period_initial;
+            self.period_current = self.period_initial - 1;
             self.update_output_unit();
         } else {
             self.period_current -= 1;
