@@ -374,6 +374,8 @@ pub struct DmcState {
 
     pub interrupt_enabled: bool,
     pub interrupt_flag: bool,
+    pub rdy_line: bool,
+    pub rdy_delay: u8,
 }
 
 impl DmcState {
@@ -398,6 +400,8 @@ impl DmcState {
             silence_flag: false,
             interrupt_enabled: true,
             interrupt_flag: false,
+            rdy_line: false,
+            rdy_delay: 0,
         }
     }
 
@@ -425,6 +429,8 @@ impl DmcState {
             }
         }
         self.sample_buffer_empty = false;
+        self.rdy_line = false;
+        self.rdy_delay = 0;
     }
 
     pub fn begin_output_cycle(&mut self) {
@@ -467,7 +473,11 @@ impl DmcState {
             self.period_current -= 1;
         }
         if self.sample_buffer_empty && self.bytes_remaining > 0 {
-            self.read_next_sample(mapper);
+            self.rdy_line = true;
+            self.rdy_delay += 1;
+            if self.rdy_delay > 4 {
+                self.read_next_sample(mapper);
+            }
         }
     }
 
