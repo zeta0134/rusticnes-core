@@ -360,10 +360,9 @@ pub fn advance_oam_dma(nes: &mut NesState) {
     let oam_byte = read_byte(nes, address);
     write_byte(nes, 0x2004, oam_byte);
     nes.cpu.oam_dma_address += 1;
-    nes.cpu.oam_dma_cycle += 1;
   }
   
-  if nes.cpu.oam_dma_cycle & 0b1 == 0 && nes.apu.dmc.rdy_line == false {
+  if nes.cpu.oam_dma_cycle & 0b1 == 0 || nes.apu.dmc.rdy_line == false {
     nes.cpu.oam_dma_cycle += 1;
   }  
 
@@ -375,6 +374,12 @@ pub fn advance_oam_dma(nes: &mut NesState) {
 pub fn run_one_clock(nes: &mut NesState) {
   if nes.cpu.oam_dma_active {
     advance_oam_dma(nes);
+    return;
+  }
+
+  if nes.cpu.upcoming_write == false && nes.apu.dmc.rdy_line == true {
+    // The DMC DMA is active during an upcoming READ cycle. PAUSE until the rdy_line
+    // is no longer being asserted by the APU.
     return;
   }
 
