@@ -475,9 +475,12 @@ impl DmcState {
         if self.sample_buffer_empty && self.bytes_remaining > 0 {
             self.rdy_line = true;
             self.rdy_delay += 1;
-            if self.rdy_delay > 4 {
+            if self.rdy_delay > 2 {
                 self.read_next_sample(mapper);
             }
+        } else {
+            self.rdy_line = false;
+            self.rdy_delay = 0;
         }
     }
 
