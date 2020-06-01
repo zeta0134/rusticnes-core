@@ -131,12 +131,16 @@ pub fn absolute_read(nes: &mut NesState, opcode_func: ReadOpcode) {
 pub fn absolute_write(nes: &mut NesState, opcode_func: WriteOpcode) {
   match nes.cpu.tick {
     2 => read_address_low(nes),
-    3 => read_address_high(nes),
+    3 => {
+      read_address_high(nes);
+      nes.cpu.upcoming_write = true;
+    },
     4 => {
       let effective_address = nes.cpu.temp_address;
       let data = opcode_func(&mut nes.registers);
       write_byte(nes, effective_address, data);
       nes.cpu.tick = 0;
+      nes.cpu.upcoming_write = false;
     },
     _ => ()
   }
@@ -149,6 +153,7 @@ pub fn absolute_modify(nes: &mut NesState, opcode_func: ModifyOpcode) {
     4 => {
       let effective_address = nes.cpu.temp_address;
       nes.cpu.data1 = read_byte(nes, effective_address);
+      nes.cpu.upcoming_write = true;
     },
     5 => {
       // Dummy write the original value back to the effective address
@@ -165,6 +170,7 @@ pub fn absolute_modify(nes: &mut NesState, opcode_func: ModifyOpcode) {
       write_byte(nes, effective_address, data);
       // All done
       nes.cpu.tick = 0;
+      nes.cpu.upcoming_write = false;
     },
     _ => ()
   }
@@ -189,12 +195,16 @@ pub fn zero_page_read(nes: &mut NesState, opcode_func: ReadOpcode) {
 
 pub fn zero_page_write(nes: &mut NesState, opcode_func: WriteOpcode) {
   match nes.cpu.tick {
-    2 => read_data1(nes),
+    2 => {
+      read_data1(nes);
+      nes.cpu.upcoming_write = true;
+    },
     3 => {
       let effective_address = nes.cpu.data1 as u16;
       let data = opcode_func(&mut nes.registers);
       write_byte(nes, effective_address, data);
       nes.cpu.tick = 0;
+      nes.cpu.upcoming_write = false;
     },
     _ => ()
   }
@@ -206,6 +216,7 @@ pub fn zero_page_modify(nes: &mut NesState, opcode_func: ModifyOpcode) {
     3 => {
       let effective_address = nes.cpu.data1 as u16;
       nes.cpu.data2 = read_byte(nes, effective_address);
+      nes.cpu.upcoming_write = true;
     },
     4 => {
       // Dummy write to the zero-page address
@@ -223,6 +234,7 @@ pub fn zero_page_modify(nes: &mut NesState, opcode_func: ModifyOpcode) {
       let data = nes.cpu.data2;
       write_byte(nes, effective_address, data);
       nes.cpu.tick = 0;
+      nes.cpu.upcoming_write = false;
     },
     _ => ()
   }
@@ -256,12 +268,17 @@ pub fn zero_page_indexed_x_read(nes: &mut NesState, opcode_func: ReadOpcode) {
 pub fn zero_page_indexed_x_write(nes: &mut NesState, opcode_func: WriteOpcode) {
   match nes.cpu.tick {
     2 => read_data1(nes),
-    3 => {let offset = nes.registers.x; add_to_zero_page_address(nes, offset)},
+    3 => {
+      let offset = nes.registers.x; 
+      add_to_zero_page_address(nes, offset);
+      nes.cpu.upcoming_write = true;
+    },
     4 => {
       let effective_address = nes.cpu.data1 as u16;
       let data = opcode_func(&mut nes.registers);
       write_byte(nes, effective_address, data);
       nes.cpu.tick = 0;
+      nes.cpu.upcoming_write = false;
     },
     _ => ()
   }
@@ -275,6 +292,7 @@ pub fn zero_page_indexed_x_modify(nes: &mut NesState, opcode_func: ModifyOpcode)
       // Read the value at our effective address for processing
       let effective_address = nes.cpu.data1 as u16;
       nes.cpu.data2 = read_byte(nes, effective_address);
+      nes.cpu.upcoming_write = true;
     },
     5 => {
       // Dummy write back to effective address
@@ -290,6 +308,7 @@ pub fn zero_page_indexed_x_modify(nes: &mut NesState, opcode_func: ModifyOpcode)
       let data = nes.cpu.data2;
       write_byte(nes, effective_address, data);
       nes.cpu.tick = 0;
+      nes.cpu.upcoming_write = false;
     },
     _ => ()
   }
@@ -316,12 +335,17 @@ pub fn zero_page_indexed_y_read(nes: &mut NesState, opcode_func: ReadOpcode) {
 pub fn zero_page_indexed_y_write(nes: &mut NesState, opcode_func: WriteOpcode) {
   match nes.cpu.tick {
     2 => read_data1(nes),
-    3 => {let offset = nes.registers.y; add_to_zero_page_address(nes, offset)},
+    3 => {
+      let offset = nes.registers.y; 
+      add_to_zero_page_address(nes, offset);
+      nes.cpu.upcoming_write = true;
+    },
     4 => {
       let effective_address = nes.cpu.data1 as u16;
       let data = opcode_func(&mut nes.registers);
       write_byte(nes, effective_address, data);
       nes.cpu.tick = 0;
+      nes.cpu.upcoming_write = false;
     },
     _ => ()
   }
@@ -335,6 +359,7 @@ pub fn zero_page_indexed_y_modify(nes: &mut NesState, opcode_func: ModifyOpcode)
       // Read the value at our effective address for processing
       let effective_address = nes.cpu.data1 as u16;
       nes.cpu.data2 = read_byte(nes, effective_address);
+      nes.cpu.upcoming_write = true;
     },
     5 => {
       // Dummy write back to effective address
@@ -350,6 +375,7 @@ pub fn zero_page_indexed_y_modify(nes: &mut NesState, opcode_func: ModifyOpcode)
       let data = nes.cpu.data2;
       write_byte(nes, effective_address, data);
       nes.cpu.tick = 0;
+      nes.cpu.upcoming_write = false;
     },
     _ => ()
   }
@@ -392,8 +418,12 @@ pub fn indexed_indirect_x_write(nes: &mut NesState, opcode_func: WriteOpcode) {
       // Read high byte of indirect address
       let effective_address = nes.cpu.data1 as u16;
       nes.cpu.temp_address = ((read_byte(nes, effective_address) as u16) << 8) | nes.cpu.temp_address;
+      nes.cpu.upcoming_write = true;
     },
-    6 => write_opcode_to_temp_address(nes, opcode_func, true),
+    6 => {
+      write_opcode_to_temp_address(nes, opcode_func, true);
+      nes.cpu.upcoming_write = false;
+    },
     _ => {}
   }
 }
@@ -417,6 +447,7 @@ pub fn indexed_indirect_x_modify(nes: &mut NesState, opcode_func: ModifyOpcode) 
       // Read value from effective address
       let effective_address = nes.cpu.temp_address;
       nes.cpu.data1 = read_byte(nes, effective_address);
+      nes.cpu.upcoming_write = true;
     },
     7 => {
       // Dummy write of the original value
@@ -432,6 +463,7 @@ pub fn indexed_indirect_x_modify(nes: &mut NesState, opcode_func: ModifyOpcode) 
       let data = nes.cpu.data1;
       write_byte(nes, effective_address, data);
       nes.cpu.tick = 0;
+      nes.cpu.upcoming_write = false;
     },
     _ => ()
   }
@@ -505,8 +537,12 @@ pub fn indirect_indexed_y_write(nes: &mut NesState, opcode_func: WriteOpcode) {
         // Fix the high byte of the address by adding 1 to it
         nes.cpu.temp_address = nes.cpu.temp_address.wrapping_add(0x100);
       }
+      nes.cpu.upcoming_write = true;
     },
-    6 => write_opcode_to_temp_address(nes, opcode_func, true),
+    6 => {
+      write_opcode_to_temp_address(nes, opcode_func, true);
+      nes.cpu.upcoming_write = false;
+    },
     _ => {}
   }
 }
@@ -543,6 +579,7 @@ pub fn indirect_indexed_y_modify(nes: &mut NesState, opcode_func: ModifyOpcode) 
       // Read value from effective address
       let effective_address = nes.cpu.temp_address;
       nes.cpu.data1 = read_byte(nes, effective_address);
+      nes.cpu.upcoming_write = true;
     },
     7 => {
       // Dummy write of the original value
@@ -558,6 +595,7 @@ pub fn indirect_indexed_y_modify(nes: &mut NesState, opcode_func: ModifyOpcode) 
       let data = nes.cpu.data1;
       write_byte(nes, effective_address, data);
       nes.cpu.tick = 0;
+      nes.cpu.upcoming_write = false;
     },
     _ => ()
   }
@@ -611,8 +649,12 @@ pub fn absolute_indexed_x_write(nes: &mut NesState, opcode_func: WriteOpcode) {
         // Fix the high byte of the address by adding 1 to it
         nes.cpu.temp_address = nes.cpu.temp_address.wrapping_add(0x100);
       }
+      nes.cpu.upcoming_write = true;
     },
-    5 => write_opcode_to_temp_address(nes, opcode_func, true),
+    5 => {
+      write_opcode_to_temp_address(nes, opcode_func, true);
+      nes.cpu.upcoming_write = false;
+    },
     _ => {}
   }
 }
@@ -638,6 +680,7 @@ pub fn absolute_indexed_x_modify(nes: &mut NesState, opcode_func: ModifyOpcode) 
     5 => {
       let effective_address = nes.cpu.temp_address;
       nes.cpu.data1 = read_byte(nes, effective_address);
+      nes.cpu.upcoming_write = true;
     },
     6 => {
       // Dummy write
@@ -653,6 +696,7 @@ pub fn absolute_indexed_x_modify(nes: &mut NesState, opcode_func: ModifyOpcode) 
       let data = nes.cpu.data1;
       write_byte(nes, temp_address, data);
       nes.cpu.tick = 0;
+      nes.cpu.upcoming_write = false;
     }
     _ => (),
   }
@@ -705,8 +749,12 @@ pub fn absolute_indexed_y_write(nes: &mut NesState, opcode_func: WriteOpcode) {
         // Fix the high byte of the address by adding 1 to it
         nes.cpu.temp_address = nes.cpu.temp_address.wrapping_add(0x100);
       }
+      nes.cpu.upcoming_write = true;
     },
-    5 => write_opcode_to_temp_address(nes, opcode_func, true),
+    5 => {
+      write_opcode_to_temp_address(nes, opcode_func, true);
+      nes.cpu.upcoming_write = false;
+    },
     _ => {}
   }
 }
@@ -732,6 +780,7 @@ pub fn absolute_indexed_y_modify(nes: &mut NesState, opcode_func: ModifyOpcode) 
     5 => {
       let effective_address = nes.cpu.temp_address;
       nes.cpu.data1 = read_byte(nes, effective_address);
+      nes.cpu.upcoming_write = true;
     },
     6 => {
       // Dummy write
@@ -747,6 +796,7 @@ pub fn absolute_indexed_y_modify(nes: &mut NesState, opcode_func: ModifyOpcode) 
       let data = nes.cpu.data1;
       write_byte(nes, temp_address, data);
       nes.cpu.tick = 0;
+      nes.cpu.upcoming_write = false;
     }
     _ => (),
   }

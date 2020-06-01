@@ -85,6 +85,7 @@ pub struct CpuState {
   pub nmi_requested: bool,
   pub irq_requested: bool,
   pub last_nmi: bool,
+  pub upcoming_write: bool,
 
   pub oam_dma_active: bool,
   pub oam_dma_cycle: u16,
@@ -106,6 +107,7 @@ impl CpuState {
       oam_dma_active: false,
       oam_dma_cycle: 0,
       oam_dma_address: 0,
+      upcoming_write: false,
     }
   }
 }
