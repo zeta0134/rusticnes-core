@@ -282,8 +282,8 @@ impl TriangleChannelState {
             // to silence the channel, and returning 7 emulates the resulting clicks and pops.
             return 7;
         } else {
-            let triangle_sequence = [15,14,13,12,11,10,9,8,7,6,5,4,3,2,1,0,
-                                     0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15];
+            let triangle_sequence = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,
+                                     15,14,13,12,11,10,9,8,7,6,5,4,3,2,1,0];
             return triangle_sequence[self.sequence_counter as usize];
         }
     }
@@ -957,8 +957,7 @@ impl ApuState {
             self.last_14khz_lp_sample = current_14khz_lp_sample;
 
             let composite_sample = (current_14khz_lp_sample * 32767.0) as i16;
-            //let composite_sample = ((current_14khz_lp_sample * 32767.0)) as i16;
-
+            //let composite_sample = (current_dac_sample * 32767.0) as i16;
 
 
             self.sample_buffer[self.buffer_index] = composite_sample;
@@ -989,7 +988,7 @@ impl ApuState {
         // turn our sample buffer into a simple file buffer for output
         let mut buffer = [0u8; 4096 * 2];
         for i in 0 .. 4096 {
-            let sample = self.sample_buffer[i];
+            let sample = self.output_buffer[i];
             buffer[i * 2]     = (((sample as u16) & 0xFF00) >> 8) as u8;
             buffer[i * 2 + 1] = (((sample as u16) & 0x00FF)     ) as u8;
         }
