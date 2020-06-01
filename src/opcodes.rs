@@ -373,6 +373,7 @@ pub fn service_interrupt(nes: &mut NesState) {
       // Fetch data byte from memory (and discard it)
       let pc = nes.registers.pc;
       nes.cpu.data1 = read_byte(nes, pc);
+      nes.cpu.upcoming_write = true;
     },
     3 => {
       let pc_high = ((nes.registers.pc & 0xFF00) >> 8) as u8;
@@ -393,6 +394,7 @@ pub fn service_interrupt(nes: &mut NesState) {
       }
       let status_byte = nes.registers.status_as_byte(false);
       push(nes, status_byte);
+      nes.cpu.upcoming_write = false;
     },
     6 => {
       // Read PCL from interrupt vector
@@ -420,6 +422,7 @@ pub fn brk(nes: &mut NesState) {
       let pc = nes.registers.pc;
       let _ = read_byte(nes, pc);
       nes.registers.pc = nes.registers.pc.wrapping_add(1);
+      nes.cpu.upcoming_write = true;
     },
     3 ... 4 => service_interrupt(nes),
     5 => {
@@ -434,6 +437,7 @@ pub fn brk(nes: &mut NesState) {
       // Here we set the B flag to signal a BRK, even if we end up servicing an NMI instead.
       let status_byte = nes.registers.status_as_byte(true);
       push(nes, status_byte);
+      nes.cpu.upcoming_write = false;
     },
     6 ... 7 => service_interrupt(nes),
     _ => ()
@@ -498,7 +502,7 @@ pub fn jsr(nes: &mut NesState) {
 pub fn rti(nes: &mut NesState) {
   match nes.cpu.tick {
     2 => addressing::dummy_data1(nes),
-    3 => {/* Would incremeent S here */},
+    3 => {/* Would increment S here */},
     4 => {
       let s = pop(nes);
       nes.registers.set_status_from_byte(s);
@@ -542,11 +546,15 @@ pub fn rts(nes: &mut NesState) {
 // Opcodes which access the stack
 pub fn pha(nes: &mut NesState) {
   match nes.cpu.tick {
-    2 => addressing::dummy_data1(nes),
+    2 => {
+      addressing::dummy_data1(nes);
+      nes.cpu.upcoming_write = true;
+    },
     3 => {
       let a = nes.registers.a;
       push(nes, a);
       nes.cpu.tick = 0;
+      nes.cpu.upcoming_write = false;
     },
     _ => (),
   }
@@ -554,11 +562,15 @@ pub fn pha(nes: &mut NesState) {
 
 pub fn php(nes: &mut NesState) {
   match nes.cpu.tick {
-    2 => addressing::dummy_data1(nes),
+    2 => {
+      addressing::dummy_data1(nes);
+      nes.cpu.upcoming_write = true;
+    },
     3 => {
       let status = nes.registers.status_as_byte(true);
       push(nes, status);
       nes.cpu.tick = 0;
+      nes.cpu.upcoming_write = false;
     },
     _ => (),
   }
