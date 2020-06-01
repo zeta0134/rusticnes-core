@@ -360,9 +360,12 @@ pub fn advance_oam_dma(nes: &mut NesState) {
     let oam_byte = read_byte(nes, address);
     write_byte(nes, 0x2004, oam_byte);
     nes.cpu.oam_dma_address += 1;
+    nes.cpu.oam_dma_cycle += 1;
   }
   
-  nes.cpu.oam_dma_cycle += 1;
+  if nes.cpu.oam_dma_cycle & 0b1 == 0 && nes.apu.dmc.rdy_line == false {
+    nes.cpu.oam_dma_cycle += 1;
+  }  
 
   if nes.cpu.oam_dma_cycle > 513 {
     nes.cpu.oam_dma_active = false;
