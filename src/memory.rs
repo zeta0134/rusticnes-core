@@ -38,10 +38,10 @@ fn _read_byte(nes: &mut NesState, address: u16, side_effects: bool) -> u8 {
         false => nes.mapper.debug_read_cpu(address).unwrap_or(memory.open_bus),
     };
     match address {
-        0x0000 ... 0x1FFF => {
+        0x0000 ..= 0x1FFF => {
             return memory.iram_raw[(address & 0x7FF) as usize];
         },
-        0x2000 ... 0x3FFF => {
+        0x2000 ..= 0x3FFF => {
             // PPU
             let ppu_reg = address & 0x7;
             match ppu_reg {
@@ -125,7 +125,7 @@ fn _read_byte(nes: &mut NesState, address: u16, side_effects: bool) -> u8 {
             nes.p2_data = nes.p2_data >> 1;
             return result;
         },
-        0x4020 ... 0xFFFF => {
+        0x4020 ..= 0xFFFF => {
             return mapped_byte;
         },
         _ => {
@@ -139,8 +139,8 @@ pub fn write_byte(nes: &mut NesState, address: u16, data: u8) {
     // Most mappers ignore writes to addresses below 0x6000. Some (notably MMC5) do not.
     nes.mapper.write_cpu(address, data);
     match address {
-        0x0000 ... 0x1FFF => nes.memory.iram_raw[(address & 0x7FF) as usize] = data,
-        0x2000 ... 0x3FFF => {
+        0x0000 ..= 0x1FFF => nes.memory.iram_raw[(address & 0x7FF) as usize] = data,
+        0x2000 ..= 0x3FFF => {
             // PPU
             let ppu_reg = address & 0x7;
             nes.ppu.latch = data;
@@ -236,7 +236,7 @@ pub fn write_byte(nes: &mut NesState, address: u16, data: u8) {
                 _ => ()
             }
         },
-        0x4000 ... 0x4013 => {
+        0x4000 ..= 0x4013 => {
             nes.apu.write_register(address, data);
         },
         0x4014 => {

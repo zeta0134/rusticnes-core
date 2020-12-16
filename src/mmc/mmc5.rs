@@ -188,8 +188,8 @@ impl Mmc5 {
 
     pub fn read_prg_mode_0(&self, address: u16) -> u8 {
         let (datastore, bank_number, bank_size) = match address {
-            0x6000 ... 0x7FFF => (&self.prg_ram, self.prg_ram_bank, 8 * 1024),
-            0x8000 ... 0xFFFF => (&self.prg_rom, self.prg_bank_d >> 2, 32 * 1024),
+            0x6000 ..= 0x7FFF => (&self.prg_ram, self.prg_ram_bank, 8 * 1024),
+            0x8000 ..= 0xFFFF => (&self.prg_rom, self.prg_bank_d >> 2, 32 * 1024),
             _ => {return 0}
         };
 
@@ -199,12 +199,12 @@ impl Mmc5 {
 
     pub fn read_prg_mode_1(&self, address: u16) -> u8 {
         let (datastore, bank_number, bank_size) = match address {
-            0x6000 ... 0x7FFF => (&self.prg_ram, self.prg_ram_bank, 8 * 1024),
-            0x8000 ... 0xBFFF => match self.prg_bank_b_isram {
+            0x6000 ..= 0x7FFF => (&self.prg_ram, self.prg_ram_bank, 8 * 1024),
+            0x8000 ..= 0xBFFF => match self.prg_bank_b_isram {
                 true  => (&self.prg_ram, self.prg_bank_b >> 1, 16 * 1024),
                 false => (&self.prg_rom, self.prg_bank_b >> 1, 16 * 1024)
             },
-            0xC000 ... 0xFFFF => (&self.prg_rom, self.prg_bank_d >> 1, 16 * 1024),
+            0xC000 ..= 0xFFFF => (&self.prg_rom, self.prg_bank_d >> 1, 16 * 1024),
             _ => {return 0}
         };
 
@@ -214,16 +214,16 @@ impl Mmc5 {
 
     pub fn read_prg_mode_2(&self, address: u16) -> u8 {
         let (datastore, bank_number, bank_size) = match address {
-            0x6000 ... 0x7FFF => (&self.prg_ram, self.prg_ram_bank, 8 * 1024),
-            0x8000 ... 0xBFFF => match self.prg_bank_b_isram {
+            0x6000 ..= 0x7FFF => (&self.prg_ram, self.prg_ram_bank, 8 * 1024),
+            0x8000 ..= 0xBFFF => match self.prg_bank_b_isram {
                 true  => (&self.prg_ram, self.prg_bank_b >> 1, 16 * 1024),
                 false => (&self.prg_rom, self.prg_bank_b >> 1, 16 * 1024)
             },
-            0xC000 ... 0xDFFF => match self.prg_bank_c_isram {
+            0xC000 ..= 0xDFFF => match self.prg_bank_c_isram {
                 true  => (&self.prg_ram, self.prg_bank_c, 8 * 1024),
                 false => (&self.prg_rom, self.prg_bank_c, 8 * 1024)
             },
-            0xE000 ... 0xFFFF => (&self.prg_rom, self.prg_bank_d, 8 * 1024),
+            0xE000 ..= 0xFFFF => (&self.prg_rom, self.prg_bank_d, 8 * 1024),
             _ => {return 0}
         };
 
@@ -233,20 +233,20 @@ impl Mmc5 {
 
     pub fn read_prg_mode_3(&self, address: u16) -> u8 {
         let (datastore, bank_number, bank_size) = match address {
-            0x6000 ... 0x7FFF => (&self.prg_ram, self.prg_ram_bank, 8 * 1024),
-            0x8000 ... 0x9FFF => match self.prg_bank_a_isram {
+            0x6000 ..= 0x7FFF => (&self.prg_ram, self.prg_ram_bank, 8 * 1024),
+            0x8000 ..= 0x9FFF => match self.prg_bank_a_isram {
                 true  => (&self.prg_ram, self.prg_bank_a, 8 * 1024),
                 false => (&self.prg_rom, self.prg_bank_a, 8 * 1024)
             },
-            0xA000 ... 0xBFFF => match self.prg_bank_b_isram {
+            0xA000 ..= 0xBFFF => match self.prg_bank_b_isram {
                 true  => (&self.prg_ram, self.prg_bank_b, 8 * 1024),
                 false => (&self.prg_rom, self.prg_bank_b, 8 * 1024)
             },
-            0xC000 ... 0xDFFF => match self.prg_bank_c_isram {
+            0xC000 ..= 0xDFFF => match self.prg_bank_c_isram {
                 true  => (&self.prg_ram, self.prg_bank_c, 8 * 1024),
                 false => (&self.prg_rom, self.prg_bank_c, 8 * 1024)
             },
-            0xE000 ... 0xFFFF => (&self.prg_rom, self.prg_bank_d, 8 * 1024),
+            0xE000 ..= 0xFFFF => (&self.prg_rom, self.prg_bank_d, 8 * 1024),
             _ => {return 0}
         };
 
@@ -266,7 +266,7 @@ impl Mmc5 {
 
     pub fn write_prg_mode_0(&mut self, address: u16, data: u8) {
         let (bank_number, bank_size) = match address {
-            0x6000 ... 0x7FFF => (self.prg_ram_bank, 8 * 1024),
+            0x6000 ..= 0x7FFF => (self.prg_ram_bank, 8 * 1024),
             _ => {return}
         };
 
@@ -276,8 +276,8 @@ impl Mmc5 {
 
     pub fn write_prg_mode_1(&mut self, address: u16, data: u8) {
         let (bank_number, bank_size) = match address {
-            0x6000 ... 0x7FFF => (self.prg_ram_bank, 8 * 1024),
-            0x8000 ... 0xBFFF => match self.prg_bank_b_isram {
+            0x6000 ..= 0x7FFF => (self.prg_ram_bank, 8 * 1024),
+            0x8000 ..= 0xBFFF => match self.prg_bank_b_isram {
                 true  => (self.prg_bank_b >> 1, 16 * 1024),
                 false => {return}
             },
@@ -290,12 +290,12 @@ impl Mmc5 {
 
     pub fn write_prg_mode_2(&mut self, address: u16, data: u8) {
         let (bank_number, bank_size) = match address {
-            0x6000 ... 0x7FFF => (self.prg_ram_bank, 8 * 1024),
-            0x8000 ... 0xBFFF => match self.prg_bank_b_isram {
+            0x6000 ..= 0x7FFF => (self.prg_ram_bank, 8 * 1024),
+            0x8000 ..= 0xBFFF => match self.prg_bank_b_isram {
                 true  => (self.prg_bank_b >> 1, 16 * 1024),
                 false => {return}
             },
-            0xC000 ... 0xDFFF => match self.prg_bank_c_isram {
+            0xC000 ..= 0xDFFF => match self.prg_bank_c_isram {
                 true  => (self.prg_bank_c, 8 * 1024),
                 false => {return}
             },
@@ -308,16 +308,16 @@ impl Mmc5 {
 
     pub fn write_prg_mode_3(&mut self, address: u16, data: u8) {
         let (bank_number, bank_size) = match address {
-            0x6000 ... 0x7FFF => (self.prg_ram_bank, 8 * 1024),
-            0x8000 ... 0x9FFF => match self.prg_bank_a_isram {
+            0x6000 ..= 0x7FFF => (self.prg_ram_bank, 8 * 1024),
+            0x8000 ..= 0x9FFF => match self.prg_bank_a_isram {
                 true  => (self.prg_bank_a, 8 * 1024),
                 false => {return}
             },
-            0xA000 ... 0xBFFF => match self.prg_bank_b_isram {
+            0xA000 ..= 0xBFFF => match self.prg_bank_b_isram {
                 true  => (self.prg_bank_b, 8 * 1024),
                 false => {return}
             },
-            0xC000 ... 0xDFFF => match self.prg_bank_c_isram {
+            0xC000 ..= 0xDFFF => match self.prg_bank_c_isram {
                 true  => (self.prg_bank_c, 8 * 1024),
                 false => {return}
             },
@@ -404,9 +404,9 @@ impl Mmc5 {
                 }
                 return Some(status);
             }
-            0x5C00 ... 0x5FFF => {
+            0x5C00 ..= 0x5FFF => {
                 match self.extended_ram_mode {
-                    2 ... 3 => {return Some(self.extram[address as usize - 0x5C00]);},
+                    2 ..= 3 => {return Some(self.extram[address as usize - 0x5C00]);},
                     _ => return None
                 }
             }
@@ -418,7 +418,7 @@ impl Mmc5 {
                 let result = self.multiplicand_a as u16 * self.multiplicand_b as u16;
                 return Some(((result & 0xFF00) >> 8) as u8);
             },            
-            0x6000 ... 0xFFFF => {return Some(self.read_prg(address))},
+            0x6000 ..= 0xFFFF => {return Some(self.read_prg(address))},
             _ => return None
         }
     }
@@ -505,14 +505,14 @@ impl Mmc5 {
             self.snoop_ppu_read(address);
         }
         match address {
-            0x0000 ... 0x1FFF => {
+            0x0000 ..= 0x1FFF => {
                 if self.is_extended_pattern() {
                     return Some(self.read_extended_chr(address));
                 } else {
                     return Some(self.read_banked_chr(address));
                 }
             },
-            0x2000 ... 0x3FFF => {
+            0x2000 ..= 0x3FFF => {
                 if self.is_extended_attribute() {
                     return Some(self.read_extended_attribute());
                 } else {
@@ -590,7 +590,7 @@ impl Mapper for Mmc5 {
                 self.prg_bank_c_isram = (data & 0b1000_0000) == 0;
             },
             0x5117 => {self.prg_bank_d = data & 0b0111_1111;},
-            0x5C00 ... 0x5FFF => {
+            0x5C00 ..= 0x5FFF => {
                 if self.extended_ram_mode == 0 || self.extended_ram_mode == 1 {
                     // Mapped as either a nametable or extended attributes. Can only write while
                     // PPU is currently rendering, otherwise 0 is written.
@@ -605,11 +605,11 @@ impl Mapper for Mmc5 {
                     self.extram[address as usize - 0x5C00] = data;
                 }
             },
-            0x5120 ... 0x5127 => {
+            0x5120 ..= 0x5127 => {
                 self.chr_banks[address as usize - 0x5120] = data as usize + self.chr_bank_high_bits;
                 self.chr_last_write_ext = false;
             },
-            0x5128 ... 0x512B => {
+            0x5128 ..= 0x512B => {
                 self.chr_ext_banks[address as usize - 0x5128] = data as usize + self.chr_bank_high_bits;
                 self.chr_last_write_ext = true;
             },
@@ -618,7 +618,7 @@ impl Mapper for Mmc5 {
             0x5204 => {self.irq_enabled = (data & 0b1000_0000) != 0;},
             0x5205 => {self.multiplicand_a = data;},
             0x5206 => {self.multiplicand_b = data;},
-            0x6000 ... 0xFFFF => {self.write_prg(address, data);},
+            0x6000 ..= 0xFFFF => {self.write_prg(address, data);},
             _ => {}
         }
     }
@@ -633,7 +633,7 @@ impl Mapper for Mmc5 {
 
     fn write_ppu(&mut self, address: u16, data: u8) {
         match address {
-            0x2000 ... 0x3FFF => {self.write_nametable(address, data)},
+            0x2000 ..= 0x3FFF => {self.write_nametable(address, data)},
             _ => {}
         }
     }

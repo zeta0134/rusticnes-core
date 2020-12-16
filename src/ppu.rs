@@ -186,7 +186,7 @@ impl PpuState {
     pub fn read_latched_byte(&mut self, mapper: &mut Mapper, address: u16) -> u8 {
         let masked_address = address & 0x3FFF;
         match masked_address {
-            0x3F00 ... 0x3FFF => {
+            0x3F00 ..= 0x3FFF => {
                 // We're going to return palette data from read_byte, but we place data from "underneath" the palette
                 // space in the read_buffer. This is intentional, a very odd quirk of PPU reading due to the way
                 // palette reads are implemented in hardware.
@@ -216,7 +216,7 @@ impl PpuState {
             self.recent_reads.truncate(20);
         }*/
         match masked_address {
-            0x0000 ... 0x3EFF => {
+            0x0000 ..= 0x3EFF => {
                 if side_effects {
                     self.open_bus = match mapper.read_ppu(masked_address) {
                         Some(byte) => byte,
@@ -230,7 +230,7 @@ impl PpuState {
                     };
                 }
             },
-            0x3F00 ... 0x3FFF => {
+            0x3F00 ..= 0x3FFF => {
                 let mut palette_address = masked_address & 0x1F;
                 // Weird background masking
                 if palette_address & 0x13 == 0x10 {
@@ -250,8 +250,8 @@ impl PpuState {
         self.recent_writes.insert(0, masked_address);
         self.recent_writes.truncate(20);
         match masked_address {
-            0x0000 ... 0x3EFF => mapper.write_ppu(masked_address, data),
-            0x3F00 ... 0x3FFF => {
+            0x0000 ..= 0x3EFF => mapper.write_ppu(masked_address, data),
+            0x3F00 ..= 0x3FFF => {
                 // palette data is 6-bits, so mask off the upper two:
                 let palette_entry = data & 0b0011_1111;
                 let mut palette_address = masked_address & 0x1F;
@@ -546,7 +546,7 @@ impl PpuState {
                     self.fetch_bg_tile(mapper, 0);
                 }
             },
-            2 ... 256 => {
+            2 ..= 256 => {
                 if self.rendering_enabled() {
                     let sub_cycle = (self.current_scanline_cycle - 1) % 8;
                     self.fetch_bg_tile(mapper, sub_cycle);  
@@ -563,12 +563,12 @@ impl PpuState {
                     self.fetch_sprite_tiles(mapper);
                 }
             },
-            258 ... 279 => {
+            258 ..= 279 => {
                 if self.rendering_enabled() {
                     self.fetch_sprite_tiles(mapper);
                 }
             },
-            280 ... 304 => {
+            280 ..= 304 => {
                 if self.rendering_enabled() {
                     // Reload the Y scroll components
                     self.current_vram_address &= 0b000_01_00000_11111;
@@ -576,12 +576,12 @@ impl PpuState {
                     self.fetch_sprite_tiles(mapper);
                 }
             },
-            305 ... 320 => {
+            305 ..= 320 => {
                 if self.rendering_enabled() {
                     self.fetch_sprite_tiles(mapper);
                 }
             }
-            321 ... 336 => {
+            321 ..= 336 => {
                 if self.rendering_enabled() {
                     self.shift_bg_registers();
                     // Fetch nametable tiles for the first two tiles on the next scanline
@@ -617,7 +617,7 @@ impl PpuState {
         if self.rendering_enabled() {
             match self.current_scanline_cycle {
                 // cycle 0 is a dummy cycle, nothing happens
-                1 ... 256 => {
+                1 ..= 256 => {
                     self.draw_pixel(mapper);
                     self.shift_bg_registers();
                     self.shift_sprites();
@@ -628,7 +628,7 @@ impl PpuState {
                         self.increment_fine_y();
                     }
                 },
-                257 ... 320 => {
+                257 ..= 320 => {
                     if self.current_scanline_cycle == 257 {
                         // Reload the X scroll components
                         self.current_vram_address &= 0b111_10_11111_00000;
@@ -641,7 +641,7 @@ impl PpuState {
                     }
                     self.fetch_sprite_tiles(mapper);
                 },
-                321 ... 336 => {
+                321 ..= 336 => {
                     self.shift_bg_registers();
                     // Fetch nametable tiles for the first two tiles on the next scanline
                     let sub_cycle = (self.current_scanline_cycle - 321) % 8;
@@ -658,7 +658,7 @@ impl PpuState {
         } else {
             match self.current_scanline_cycle {
                 // cycle 0 is a dummy cycle, nothing happens
-                1 ... 256 => {
+                1 ..= 256 => {
                     // The PPU is disabled. Usually, we should show the backdrop color:
                     let mut pixel_color = self.read_byte(mapper, 0x3F00);
                     // However, if the current VRAM address is within palette memory, instead
@@ -686,7 +686,7 @@ impl PpuState {
 
     pub fn clock(&mut self, mapper: &mut Mapper) {
         match self.current_scanline {
-            0 ... 239 => self.render_scanline(mapper),
+            0 ..= 239 => self.render_scanline(mapper),
             241 => self.vblank_scanline(),
             261 => self.prerender_scanline(mapper),
             _ => ()
@@ -739,7 +739,7 @@ pub fn nametable_address(read_address: u16, mirroring: Mirroring) -> u16 {
     let nt_offset = (0x000, 0x400, 0x800, 0xC00);
     match read_address {
         // Nametable 0 (top-left)
-        0x2000 ... 0x23FF => {
+        0x2000 ..= 0x23FF => {
             return match mirroring {
                 Mirroring::Horizontal       => nt_address + nt_offset.0, // A
                 Mirroring::Vertical         => nt_address + nt_offset.0, // A
@@ -749,7 +749,7 @@ pub fn nametable_address(read_address: u16, mirroring: Mirroring) -> u16 {
             }
         },
         // Nametable 1 (top-right)
-        0x2400 ... 0x27FF => {
+        0x2400 ..= 0x27FF => {
             return match mirroring {
                 Mirroring::Horizontal       => nt_address + nt_offset.0, // A
                 Mirroring::Vertical         => nt_address + nt_offset.1, // B
@@ -759,7 +759,7 @@ pub fn nametable_address(read_address: u16, mirroring: Mirroring) -> u16 {
             }
         },
         // Nametable 2 (bottom-left)
-        0x2800 ... 0x2BFF => {
+        0x2800 ..= 0x2BFF => {
             return match mirroring {
                 Mirroring::Horizontal       => nt_address + nt_offset.1, // B
                 Mirroring::Vertical         => nt_address + nt_offset.0, // A
@@ -769,7 +769,7 @@ pub fn nametable_address(read_address: u16, mirroring: Mirroring) -> u16 {
             }
         },
         // Nametable 3 (bottom-right)
-        0x2C00 ... 0x2FFF => {
+        0x2C00 ..= 0x2FFF => {
             return match mirroring {
                 Mirroring::Horizontal       => nt_address + nt_offset.1, // B
                 Mirroring::Vertical         => nt_address + nt_offset.1, // B

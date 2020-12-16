@@ -38,7 +38,7 @@ impl Mapper for AxRom {
 
     fn read_cpu(&mut self, address: u16) -> Option<u8> {
         match address {
-            0x8000 ... 0xFFFF => {
+            0x8000 ..= 0xFFFF => {
                 let prg_rom_len = self.prg_rom.len();
                 return Some(self.prg_rom[((self.prg_bank * 0x8000) + (address as usize - 0x8000)) % prg_rom_len]);
             },
@@ -48,7 +48,7 @@ impl Mapper for AxRom {
 
     fn write_cpu(&mut self, address: u16, data: u8) {
         match address {
-            0x8000 ... 0xFFFF => {
+            0x8000 ..= 0xFFFF => {
                 self.prg_bank = (data & 0x07) as usize;
                 if data & 0x10 == 0 {
                     self.mirroring = Mirroring::OneScreenLower;
@@ -62,8 +62,8 @@ impl Mapper for AxRom {
 
     fn read_ppu(&mut self, address: u16) -> Option<u8> {
         match address {
-            0x0000 ... 0x1FFF => return Some(self.chr_ram[address as usize]),
-            0x2000 ... 0x3FFF => return match self.mirroring {
+            0x0000 ..= 0x1FFF => return Some(self.chr_ram[address as usize]),
+            0x2000 ..= 0x3FFF => return match self.mirroring {
                 Mirroring::OneScreenLower => Some(self.vram[mirroring::one_screen_lower(address) as usize]),
                 Mirroring::OneScreenUpper => Some(self.vram[mirroring::one_screen_upper(address) as usize]),
                 _ => None
@@ -74,8 +74,8 @@ impl Mapper for AxRom {
 
     fn write_ppu(&mut self, address: u16, data: u8) {
         match address {
-            0x0000 ... 0x1FFF => self.chr_ram[address as usize] = data,
-            0x2000 ... 0x3FFF => match self.mirroring {
+            0x0000 ..= 0x1FFF => self.chr_ram[address as usize] = data,
+            0x2000 ..= 0x3FFF => match self.mirroring {
                 Mirroring::OneScreenLower => self.vram[mirroring::one_screen_lower(address) as usize] = data,
                 Mirroring::OneScreenUpper => self.vram[mirroring::one_screen_upper(address) as usize] = data,
                 _ => {}

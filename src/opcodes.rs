@@ -424,7 +424,7 @@ pub fn brk(nes: &mut NesState) {
       nes.registers.pc = nes.registers.pc.wrapping_add(1);
       nes.cpu.upcoming_write = true;
     },
-    3 ... 4 => service_interrupt(nes),
+    3 ..= 4 => service_interrupt(nes),
     5 => {
       // At this point, NMI always takes priority, otherwise we run
       // an IRQ. This is the source of the BRK hijack quirk / bug.
@@ -439,7 +439,7 @@ pub fn brk(nes: &mut NesState) {
       push(nes, status_byte);
       nes.cpu.upcoming_write = false;
     },
-    6 ... 7 => service_interrupt(nes),
+    6 ..= 7 => service_interrupt(nes),
     _ => ()
   }
 }

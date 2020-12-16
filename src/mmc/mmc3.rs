@@ -87,7 +87,7 @@ impl Mmc3 {
     fn _read_ppu(&mut self, address: u16, side_effects: bool) -> Option<u8> {
         match address {
             // CHR
-            0x0000 ... 0x1FFF => {
+            0x0000 ..= 0x1FFF => {
                 if side_effects {
                     self.last_chr_read = address;
                     let current_a12 = ((address & 0b0001_0000_0000_0000) >> 12) as u8;
@@ -107,27 +107,27 @@ impl Mmc3 {
                 let chr_rom_len = self.chr_rom.len();
                 if self.switch_chr_banks {
                     match address {
-                        0x0000 ... 0x03FF => return Some(self.chr_rom[((self.chr1_bank_2 * 0x400) + (address as usize -  0x000)) % chr_rom_len]),
-                        0x0400 ... 0x07FF => return Some(self.chr_rom[((self.chr1_bank_3 * 0x400) + (address as usize -  0x400)) % chr_rom_len]),
-                        0x0800 ... 0x0BFF => return Some(self.chr_rom[((self.chr1_bank_4 * 0x400) + (address as usize -  0x800)) % chr_rom_len]),
-                        0x0C00 ... 0x0FFF => return Some(self.chr_rom[((self.chr1_bank_5 * 0x400) + (address as usize -  0xC00)) % chr_rom_len]),
-                        0x1000 ... 0x17FF => return Some(self.chr_rom[((self.chr2_bank_0 * 0x400) + (address as usize - 0x1000)) % chr_rom_len]),
-                        0x1800 ... 0x1FFF => return Some(self.chr_rom[((self.chr2_bank_1 * 0x400) + (address as usize - 0x1800)) % chr_rom_len]),
+                        0x0000 ..= 0x03FF => return Some(self.chr_rom[((self.chr1_bank_2 * 0x400) + (address as usize -  0x000)) % chr_rom_len]),
+                        0x0400 ..= 0x07FF => return Some(self.chr_rom[((self.chr1_bank_3 * 0x400) + (address as usize -  0x400)) % chr_rom_len]),
+                        0x0800 ..= 0x0BFF => return Some(self.chr_rom[((self.chr1_bank_4 * 0x400) + (address as usize -  0x800)) % chr_rom_len]),
+                        0x0C00 ..= 0x0FFF => return Some(self.chr_rom[((self.chr1_bank_5 * 0x400) + (address as usize -  0xC00)) % chr_rom_len]),
+                        0x1000 ..= 0x17FF => return Some(self.chr_rom[((self.chr2_bank_0 * 0x400) + (address as usize - 0x1000)) % chr_rom_len]),
+                        0x1800 ..= 0x1FFF => return Some(self.chr_rom[((self.chr2_bank_1 * 0x400) + (address as usize - 0x1800)) % chr_rom_len]),
                         _ => return None,
                     }
                 } else {
                     match address {
-                        0x0000 ... 0x07FF => return Some(self.chr_rom[((self.chr2_bank_0 * 0x400) + (address as usize -  0x000)) % chr_rom_len]),
-                        0x0800 ... 0x0FFF => return Some(self.chr_rom[((self.chr2_bank_1 * 0x400) + (address as usize -  0x800)) % chr_rom_len]),
-                        0x1000 ... 0x13FF => return Some(self.chr_rom[((self.chr1_bank_2 * 0x400) + (address as usize - 0x1000)) % chr_rom_len]),
-                        0x1400 ... 0x17FF => return Some(self.chr_rom[((self.chr1_bank_3 * 0x400) + (address as usize - 0x1400)) % chr_rom_len]),
-                        0x1800 ... 0x1BFF => return Some(self.chr_rom[((self.chr1_bank_4 * 0x400) + (address as usize - 0x1800)) % chr_rom_len]),
-                        0x1C00 ... 0x1FFF => return Some(self.chr_rom[((self.chr1_bank_5 * 0x400) + (address as usize - 0x1C00)) % chr_rom_len]),
+                        0x0000 ..= 0x07FF => return Some(self.chr_rom[((self.chr2_bank_0 * 0x400) + (address as usize -  0x000)) % chr_rom_len]),
+                        0x0800 ..= 0x0FFF => return Some(self.chr_rom[((self.chr2_bank_1 * 0x400) + (address as usize -  0x800)) % chr_rom_len]),
+                        0x1000 ..= 0x13FF => return Some(self.chr_rom[((self.chr1_bank_2 * 0x400) + (address as usize - 0x1000)) % chr_rom_len]),
+                        0x1400 ..= 0x17FF => return Some(self.chr_rom[((self.chr1_bank_3 * 0x400) + (address as usize - 0x1400)) % chr_rom_len]),
+                        0x1800 ..= 0x1BFF => return Some(self.chr_rom[((self.chr1_bank_4 * 0x400) + (address as usize - 0x1800)) % chr_rom_len]),
+                        0x1C00 ..= 0x1FFF => return Some(self.chr_rom[((self.chr1_bank_5 * 0x400) + (address as usize - 0x1C00)) % chr_rom_len]),
                         _ => return None,
                     }
                 }
             },
-            0x2000 ... 0x3FFF => return match self.mirroring {
+            0x2000 ..= 0x3FFF => return match self.mirroring {
                 Mirroring::Horizontal => Some(self.vram[mirroring::horizontal_mirroring(address) as usize]),
                 Mirroring::Vertical   => Some(self.vram[mirroring::vertical_mirroring(address) as usize]),
                 Mirroring::FourScreen => Some(self.vram[mirroring::four_banks(address) as usize]),
@@ -158,26 +158,26 @@ impl Mapper for Mmc3 {
     fn read_cpu(&mut self, address: u16) -> Option<u8> {
         match address {
             // PRG RAM
-            0x6000 ... 0x7FFF => {
+            0x6000 ..= 0x7FFF => {
                 return Some(self.prg_ram[(address - 0x6000) as usize]);
             },
             // PRG ROM
-            0x8000 ... 0xFFFF => {
+            0x8000 ..= 0xFFFF => {
                 let prg_rom_len = self.prg_rom.len();
                 if self.switch_prg_banks {
                     match address {
-                        0x8000 ... 0x9FFF => return Some(self.prg_rom[((self.prg_rom.len() - 0x4000) + (address as usize -  0x8000)) % prg_rom_len]),
-                        0xA000 ... 0xBFFF => return Some(self.prg_rom[((self.prg_bank_7 * 0x2000)    + (address as usize -  0xA000)) % prg_rom_len]),
-                        0xC000 ... 0xDFFF => return Some(self.prg_rom[((self.prg_bank_6 * 0x2000)    + (address as usize -  0xC000)) % prg_rom_len]),
-                        0xE000 ... 0xFFFF => return Some(self.prg_rom[((self.prg_rom.len() - 0x2000) + (address as usize -  0xE000)) % prg_rom_len]),
+                        0x8000 ..= 0x9FFF => return Some(self.prg_rom[((self.prg_rom.len() - 0x4000) + (address as usize -  0x8000)) % prg_rom_len]),
+                        0xA000 ..= 0xBFFF => return Some(self.prg_rom[((self.prg_bank_7 * 0x2000)    + (address as usize -  0xA000)) % prg_rom_len]),
+                        0xC000 ..= 0xDFFF => return Some(self.prg_rom[((self.prg_bank_6 * 0x2000)    + (address as usize -  0xC000)) % prg_rom_len]),
+                        0xE000 ..= 0xFFFF => return Some(self.prg_rom[((self.prg_rom.len() - 0x2000) + (address as usize -  0xE000)) % prg_rom_len]),
                         _ => return None,
                     }
                 } else {
                     match address {
-                        0x8000 ... 0x9FFF => return Some(self.prg_rom[((self.prg_bank_6 * 0x2000)    + (address as usize -  0x8000)) % prg_rom_len]),
-                        0xA000 ... 0xBFFF => return Some(self.prg_rom[((self.prg_bank_7 * 0x2000)    + (address as usize -  0xA000)) % prg_rom_len]),
-                        0xC000 ... 0xDFFF => return Some(self.prg_rom[((self.prg_rom.len() - 0x4000) + (address as usize -  0xC000)) % prg_rom_len]),
-                        0xE000 ... 0xFFFF => return Some(self.prg_rom[((self.prg_rom.len() - 0x2000) + (address as usize -  0xE000)) % prg_rom_len]),
+                        0x8000 ..= 0x9FFF => return Some(self.prg_rom[((self.prg_bank_6 * 0x2000)    + (address as usize -  0x8000)) % prg_rom_len]),
+                        0xA000 ..= 0xBFFF => return Some(self.prg_rom[((self.prg_bank_7 * 0x2000)    + (address as usize -  0xA000)) % prg_rom_len]),
+                        0xC000 ..= 0xDFFF => return Some(self.prg_rom[((self.prg_rom.len() - 0x4000) + (address as usize -  0xC000)) % prg_rom_len]),
+                        0xE000 ..= 0xFFFF => return Some(self.prg_rom[((self.prg_rom.len() - 0x2000) + (address as usize -  0xE000)) % prg_rom_len]),
                         _ => return None,
                     }
                 }
@@ -189,23 +189,23 @@ impl Mapper for Mmc3 {
     fn write_cpu(&mut self, address: u16, data: u8) {
         match address {
             // PRG RAM
-            0x6000 ... 0x7FFF => {
+            0x6000 ..= 0x7FFF => {
                 // Note: Intentionally omitting PRG RAM protection feature, since this
                 // retains compatability with assumptions about iNES mapper 004
                 self.prg_ram[address as usize - 0x6000] = data;
             },
             // Registers
-            0x8000 ... 0xFFFF => {
+            0x8000 ..= 0xFFFF => {
                 if address & 0b1 == 0 {
                     // Even Registers
                     match address {
-                        0x8000 ... 0x9FFF => {
+                        0x8000 ..= 0x9FFF => {
                             // Bank Select
                             self.bank_select =      data & 0b0000_0111;
                             self.switch_prg_banks = (data & 0b0100_0000) != 0;
                             self.switch_chr_banks = (data & 0b1000_0000) != 0;
                         },
-                        0xA000 ... 0xBFFF => {
+                        0xA000 ..= 0xBFFF => {
                             if self.mirroring != Mirroring::FourScreen {
                                 if data & 0b1 == 0 {
                                     self.mirroring = Mirroring::Vertical;
@@ -214,10 +214,10 @@ impl Mapper for Mmc3 {
                                 }
                             }
                         },
-                        0xC000 ... 0xDFFF => {
+                        0xC000 ..= 0xDFFF => {
                             self.irq_reload = data;
                         },
-                        0xE000 ... 0xFFFF => {
+                        0xE000 ..= 0xFFFF => {
                             self.irq_enabled = false;
                             self.irq_flag = false;
                         }
@@ -227,7 +227,7 @@ impl Mapper for Mmc3 {
                 } else {
                     // Odd Registers
                     match address {
-                        0x8000 ... 0x9FFF => {
+                        0x8000 ..= 0x9FFF => {
                             // Bank Data
                             match self.bank_select {
                                 0 => self.chr2_bank_0 = (data & 0b1111_1110) as usize,
@@ -241,14 +241,14 @@ impl Mapper for Mmc3 {
                                 _ => (),
                             }
                         },
-                        0xA000 ... 0xBFFF => {
+                        0xA000 ..= 0xBFFF => {
                             // PRG RAM Protect
                             // Intentionally not emulated, for compatability with iNES mapper 004
                         },
-                        0xC000 ... 0xDFFF => {
+                        0xC000 ..= 0xDFFF => {
                             self.irq_reload_requested = true;
                         },
-                        0xE000 ... 0xFFFF => {
+                        0xE000 ..= 0xFFFF => {
                             self.irq_enabled = true;
                         }
                         _ => (),
@@ -270,7 +270,7 @@ impl Mapper for Mmc3 {
     fn write_ppu(&mut self, address: u16, data: u8) {
         match address {
             // CHR RAM (if enabled)
-            0x0000 ... 0x1FFF => {
+            0x0000 ..= 0x1FFF => {
                 self.last_chr_read = address;
                 let current_a12 = ((address & 0b0001_0000_0000_0000) >> 12) as u8;
                 if current_a12 == 1 && self.last_a12 == 0 {
@@ -289,28 +289,28 @@ impl Mapper for Mmc3 {
                     let chr_rom_len = self.chr_rom.len();
                     if self.switch_chr_banks {
                         match address {
-                            0x0000 ... 0x03FF => self.chr_rom[((self.chr1_bank_2 * 0x400) + (address as usize -  0x000)) % chr_rom_len] = data,
-                            0x0400 ... 0x07FF => self.chr_rom[((self.chr1_bank_3 * 0x400) + (address as usize -  0x400)) % chr_rom_len] = data,
-                            0x0800 ... 0x0BFF => self.chr_rom[((self.chr1_bank_4 * 0x400) + (address as usize -  0x800)) % chr_rom_len] = data,
-                            0x0C00 ... 0x0FFF => self.chr_rom[((self.chr1_bank_5 * 0x400) + (address as usize -  0xC00)) % chr_rom_len] = data,
-                            0x1000 ... 0x17FF => self.chr_rom[((self.chr2_bank_0 * 0x400) + (address as usize - 0x1000)) % chr_rom_len] = data,
-                            0x1800 ... 0x1FFF => self.chr_rom[((self.chr2_bank_1 * 0x400) + (address as usize - 0x1800)) % chr_rom_len] = data,
+                            0x0000 ..= 0x03FF => self.chr_rom[((self.chr1_bank_2 * 0x400) + (address as usize -  0x000)) % chr_rom_len] = data,
+                            0x0400 ..= 0x07FF => self.chr_rom[((self.chr1_bank_3 * 0x400) + (address as usize -  0x400)) % chr_rom_len] = data,
+                            0x0800 ..= 0x0BFF => self.chr_rom[((self.chr1_bank_4 * 0x400) + (address as usize -  0x800)) % chr_rom_len] = data,
+                            0x0C00 ..= 0x0FFF => self.chr_rom[((self.chr1_bank_5 * 0x400) + (address as usize -  0xC00)) % chr_rom_len] = data,
+                            0x1000 ..= 0x17FF => self.chr_rom[((self.chr2_bank_0 * 0x400) + (address as usize - 0x1000)) % chr_rom_len] = data,
+                            0x1800 ..= 0x1FFF => self.chr_rom[((self.chr2_bank_1 * 0x400) + (address as usize - 0x1800)) % chr_rom_len] = data,
                             _ => (),
                         }
                     } else {
                         match address {
-                            0x0000 ... 0x07FF => self.chr_rom[((self.chr2_bank_0 * 0x400) + (address as usize -  0x000)) % chr_rom_len] = data,
-                            0x0800 ... 0x0FFF => self.chr_rom[((self.chr2_bank_1 * 0x400) + (address as usize -  0x800)) % chr_rom_len] = data,
-                            0x1000 ... 0x13FF => self.chr_rom[((self.chr1_bank_2 * 0x400) + (address as usize - 0x1000)) % chr_rom_len] = data,
-                            0x1400 ... 0x17FF => self.chr_rom[((self.chr1_bank_3 * 0x400) + (address as usize - 0x1400)) % chr_rom_len] = data,
-                            0x1800 ... 0x1BFF => self.chr_rom[((self.chr1_bank_4 * 0x400) + (address as usize - 0x1800)) % chr_rom_len] = data,
-                            0x1C00 ... 0x1FFF => self.chr_rom[((self.chr1_bank_5 * 0x400) + (address as usize - 0x1C00)) % chr_rom_len] = data,
+                            0x0000 ..= 0x07FF => self.chr_rom[((self.chr2_bank_0 * 0x400) + (address as usize -  0x000)) % chr_rom_len] = data,
+                            0x0800 ..= 0x0FFF => self.chr_rom[((self.chr2_bank_1 * 0x400) + (address as usize -  0x800)) % chr_rom_len] = data,
+                            0x1000 ..= 0x13FF => self.chr_rom[((self.chr1_bank_2 * 0x400) + (address as usize - 0x1000)) % chr_rom_len] = data,
+                            0x1400 ..= 0x17FF => self.chr_rom[((self.chr1_bank_3 * 0x400) + (address as usize - 0x1400)) % chr_rom_len] = data,
+                            0x1800 ..= 0x1BFF => self.chr_rom[((self.chr1_bank_4 * 0x400) + (address as usize - 0x1800)) % chr_rom_len] = data,
+                            0x1C00 ..= 0x1FFF => self.chr_rom[((self.chr1_bank_5 * 0x400) + (address as usize - 0x1C00)) % chr_rom_len] = data,
                             _ => (),
                         }
                     }
                 }
             },
-            0x2000 ... 0x3FFF => match self.mirroring {
+            0x2000 ..= 0x3FFF => match self.mirroring {
                 Mirroring::Horizontal => self.vram[mirroring::horizontal_mirroring(address) as usize] = data,
                 Mirroring::Vertical   => self.vram[mirroring::vertical_mirroring(address) as usize] = data,
                 Mirroring::FourScreen => self.vram[mirroring::four_banks(address) as usize] = data,

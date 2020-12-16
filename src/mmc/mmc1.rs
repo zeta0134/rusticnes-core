@@ -84,7 +84,7 @@ impl Mapper for Mmc1 {
         self.last_write = false;
         match address {
             // PRG RAM
-            0x6000 ... 0x7FFF => {
+            0x6000 ..= 0x7FFF => {
                 let prg_ram_len = self.prg_ram.len();
                 if prg_ram_len > 0 {
                     return Some(self.prg_ram[(address - 0x6000) as usize]);
@@ -93,7 +93,7 @@ impl Mapper for Mmc1 {
                 }
             },
             // PRG ROM - First 16k Page
-            0x8000 ... 0xBFFF => {
+            0x8000 ..= 0xBFFF => {
                 let prg_rom_len = self.prg_rom.len();
                 if prg_rom_len > 0 {
                     let prg_mode = (self.control >> 2) & 0x3;
@@ -118,7 +118,7 @@ impl Mapper for Mmc1 {
                 }
             },
             // PRG ROM - Last 16k Page
-            0xC000 ... 0xFFFF => {
+            0xC000 ..= 0xFFFF => {
                 let prg_rom_len = self.prg_rom.len();
                 if prg_rom_len > 0 {
                     let prg_mode = (self.control >> 2) & 0x3;
@@ -150,7 +150,7 @@ impl Mapper for Mmc1 {
     fn write_cpu(&mut self, address: u16, data: u8) {
         match address {
             // PRG RAM
-            0x6000 ... 0x7FFF => {
+            0x6000 ..= 0x7FFF => {
                 if self.prg_ram_enabled {
                     let prg_ram_len = self.prg_ram.len();
                     if prg_ram_len > 0 {
@@ -159,7 +159,7 @@ impl Mapper for Mmc1 {
                 }
             },
             // Control Registers
-            0x8000 ... 0xFFFF => {
+            0x8000 ..= 0xFFFF => {
                 if self.last_write {
                     // Ignore this write! MMC1 ignores successive writes, and will clear this flag
                     // on the next read cycle.
@@ -183,7 +183,7 @@ impl Mapper for Mmc1 {
                         // https://wiki.nesdev.com/w/index.php/MMC1#Registers
                         let register = address & 0b1110_0000_0000_0000;
                         match register {
-                            0x8000 ... 0x9F00 => {
+                            0x8000 ..= 0x9F00 => {
                                 self.control = self.shift_data;
                                 let nametable_mode = self.control & 0b0_0011;
                                 match nametable_mode {
@@ -194,9 +194,9 @@ impl Mapper for Mmc1 {
                                     _ => println!("Bad mirroring mode!! {}", nametable_mode),
                                 }
                             },
-                            0xA000 ... 0xBF00 => self.chr_bank_0 = self.shift_data as usize,
-                            0xC000 ... 0xDF00 => self.chr_bank_1 = self.shift_data as usize,
-                            0xE000 ... 0xFF00 => {
+                            0xA000 ..= 0xBF00 => self.chr_bank_0 = self.shift_data as usize,
+                            0xC000 ..= 0xDF00 => self.chr_bank_1 = self.shift_data as usize,
+                            0xE000 ..= 0xFF00 => {
                                 // The 5th bit disables RAM, so invert it here to decide when
                                 // RAM should be enabled.
                                 // TODO: This is ignored on certain MMC variants!
@@ -217,7 +217,7 @@ impl Mapper for Mmc1 {
     fn read_ppu(&mut self, address: u16) -> Option<u8> {
         match address {
             // CHR Bank 0
-            0x0000 ... 0x0FFF => {
+            0x0000 ..= 0x0FFF => {
                 let chr_rom_len = self.chr_rom.len();
                 if self.control & 0x10 == 0 {
                     // 8kb CHR mode, bit 0 is treated as cleared
@@ -229,7 +229,7 @@ impl Mapper for Mmc1 {
                 }
             },
             // CHR Bank 1
-            0x1000 ... 0x1FFF => {
+            0x1000 ..= 0x1FFF => {
                 let chr_rom_len = self.chr_rom.len();
                 if self.control & 0x10 == 0 {
                     // 8kb CHR mode, bit 0 is treated as set
@@ -240,7 +240,7 @@ impl Mapper for Mmc1 {
                     return Some(self.chr_rom[((self.chr_bank_1 * 0x1000) +  (address as usize - 0x1000)) % chr_rom_len]);
                 }
             },
-            0x2000 ... 0x3FFF => return match self.mirroring {
+            0x2000 ..= 0x3FFF => return match self.mirroring {
                 Mirroring::Horizontal => Some(self.vram[mirroring::horizontal_mirroring(address) as usize]),
                 Mirroring::Vertical   => Some(self.vram[mirroring::vertical_mirroring(address) as usize]),
                 Mirroring::OneScreenLower => Some(self.vram[mirroring::one_screen_lower(address) as usize]),
@@ -254,7 +254,7 @@ impl Mapper for Mmc1 {
     fn write_ppu(&mut self, address: u16, data: u8) {
         match address {
             // CHR Bank 0
-            0x0000 ... 0x0FFF => {
+            0x0000 ..= 0x0FFF => {
                 if self.chr_ram {
                     let chr_rom_len = self.chr_rom.len();
                     if self.control & 0x10 == 0 {
@@ -268,7 +268,7 @@ impl Mapper for Mmc1 {
                 }
             },
             // CHR Bank 1
-            0x1000 ... 0x1FFF => {
+            0x1000 ..= 0x1FFF => {
                 if self.chr_ram {
                     let chr_rom_len = self.chr_rom.len();
                     if self.control & 0x10 == 0 {
@@ -281,7 +281,7 @@ impl Mapper for Mmc1 {
                     }
                 }
             },
-            0x2000 ... 0x3FFF => match self.mirroring {
+            0x2000 ..= 0x3FFF => match self.mirroring {
                 Mirroring::Horizontal => self.vram[mirroring::horizontal_mirroring(address) as usize] = data,
                 Mirroring::Vertical   => self.vram[mirroring::vertical_mirroring(address) as usize] = data,
                 Mirroring::OneScreenLower => self.vram[mirroring::one_screen_lower(address) as usize] = data,

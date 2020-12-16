@@ -38,7 +38,7 @@ impl Mapper for CnRom {
 
     fn read_cpu(&mut self, address: u16) -> Option<u8> {
         match address {
-            0x8000 ... 0xFFFF => {
+            0x8000 ..= 0xFFFF => {
                 let prg_rom_len = self.prg_rom.len();
                 return Some(self.prg_rom[(address as usize - 0x8000) % prg_rom_len]);
             },
@@ -48,7 +48,7 @@ impl Mapper for CnRom {
 
     fn write_cpu(&mut self, address: u16, data: u8) {
         match address {
-            0x8000 ... 0xFFFF => {
+            0x8000 ..= 0xFFFF => {
                 self.chr_bank = data as usize;
             }
             _ => {}
@@ -57,11 +57,11 @@ impl Mapper for CnRom {
 
     fn read_ppu(&mut self, address: u16) -> Option<u8> {
         match address {
-            0x0000 ... 0x1FFF => {
+            0x0000 ..= 0x1FFF => {
                 let chr_rom_len = self.chr_rom.len();
                 return Some(self.chr_rom[((self.chr_bank * 0x2000) + (address as usize)) % chr_rom_len]);
             },
-            0x2000 ... 0x3FFF => return match self.mirroring {
+            0x2000 ..= 0x3FFF => return match self.mirroring {
                 Mirroring::Horizontal => Some(self.vram[mirroring::horizontal_mirroring(address) as usize]),
                 Mirroring::Vertical   => Some(self.vram[mirroring::vertical_mirroring(address) as usize]),
                 _ => None
@@ -72,7 +72,7 @@ impl Mapper for CnRom {
 
     fn write_ppu(&mut self, address: u16, data: u8) {
         match address {
-            0x2000 ... 0x3FFF => match self.mirroring {
+            0x2000 ..= 0x3FFF => match self.mirroring {
                 Mirroring::Horizontal => self.vram[mirroring::horizontal_mirroring(address) as usize] = data,
                 Mirroring::Vertical   => self.vram[mirroring::vertical_mirroring(address) as usize] = data,
                 _ => {}
