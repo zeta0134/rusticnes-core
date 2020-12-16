@@ -472,7 +472,9 @@ impl Mmc5 {
     }
 
     fn snoop_cpu_read(&mut self, address: u16) {
-        self.cpu_cycles_since_last_ppu_read += 1;
+        if self.cpu_cycles_since_last_ppu_read < 255 {
+            self.cpu_cycles_since_last_ppu_read += 1;
+        }
         if self.cpu_cycles_since_last_ppu_read == 4 {
             self.in_frame = false;
             self.ppu_read_mode = PpuMode::PpuData;
