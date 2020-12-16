@@ -178,13 +178,13 @@ impl PulseChannelState {
         let change_amount = self.period_initial >> self.sweep_shift;
         if self.sweep_negate {
             if self.sweep_ones_compliment {
-                if self.sweep_shift == 0 {
-                // Special case: in one's compliment mode, this would overflow to
-                // 0xFFFF, but that's not what real hardware appears to do. This solves
-                // a muting bug with negate-mode sweep on Pulse 1 in some publishers
-                // games.
-                return 0;
-            }
+                if self.sweep_shift == 0 || self.period_initial == 0 {
+                    // Special case: in one's compliment mode, this would overflow to
+                    // 0xFFFF, but that's not what real hardware appears to do. This solves
+                    // a muting bug with negate-mode sweep on Pulse 1 in some publishers
+                    // games.
+                    return 0;
+                }
                 return self.period_initial - change_amount - 1;
             } else {
                 return self.period_initial - change_amount;
