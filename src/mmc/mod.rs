@@ -2,6 +2,7 @@ pub mod mapper;
 pub mod mirroring;
 
 pub mod axrom;
+pub mod bnrom;
 pub mod cnrom;
 pub mod gxrom;
 pub mod mmc1;

@@ -1,5 +1,6 @@
 use mmc::mapper::*;
 use mmc::axrom::AxRom;
+use mmc::bnrom::BnRom;
 use mmc::cnrom::CnRom;
 use mmc::gxrom::GxRom;
 use mmc::nrom::Nrom;
@@ -131,6 +132,7 @@ pub fn load_from_cartridge(nes_header: NesHeader, cartridge: &[u8]) -> Result<Bo
         5 => Box::new(Mmc5::new(header, chr_rom, prg_rom)),
         7 => Box::new(AxRom::new(header, chr_rom, prg_rom)),
         9 => Box::new(PxRom::new(header, chr_rom, prg_rom)),
+        34 => Box::new(BnRom::new(header, chr_rom, prg_rom)),
         66 => Box::new(GxRom::new(header, chr_rom, prg_rom)),
         _ => {
             return Err(format!("Unsupported iNES mapper: {}", header.mapper_number));
