@@ -16,7 +16,7 @@ pub struct BnRom {
 }
 
 impl BnRom {
-    pub fn new(_: NesHeader, _: &[u8], prg: &[u8]) -> BnRom {
+    pub fn new(header: NesHeader, _: &[u8], prg: &[u8]) -> BnRom {
         return BnRom {
             prg_rom: prg.to_vec(),
             chr_ram: vec![0u8; 0x2000],
