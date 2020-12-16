@@ -385,7 +385,7 @@ impl DmcState {
             debug_buffer: vec!(0i16; 4096),
 
             looping: false,
-            period_initial: 0,
+            period_initial: 428,
             period_current: 0,
             output_level: 0,
             starting_address: 0,
