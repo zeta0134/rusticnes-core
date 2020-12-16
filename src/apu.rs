@@ -411,7 +411,7 @@ impl DmcState {
             self.bytes_remaining, self.bits_remaining);
     }
 
-    pub fn read_next_sample(&mut self, mapper: &mut Mapper) {
+    pub fn read_next_sample(&mut self, mapper: &mut dyn Mapper) {
         match mapper.read_cpu(0x8000 | (self.current_address & 0x7FFF)) {
             Some(byte) => self.sample_buffer = byte,
             None => self.sample_buffer = 0,
@@ -465,7 +465,7 @@ impl DmcState {
         }
     }
 
-    pub fn clock(&mut self, mapper: &mut Mapper) {
+    pub fn clock(&mut self, mapper: &mut dyn Mapper) {
         if self.period_current == 0 {
             self.period_current = self.period_initial - 1;
             self.update_output_unit();
@@ -906,7 +906,7 @@ impl ApuState {
         self.noise.length_counter.clock();
     }
 
-    pub fn clock_apu(&mut self, mapper: &mut Mapper) {
+    pub fn clock_apu(&mut self, mapper: &mut dyn Mapper) {
         self.clock_frame_sequencer();
 
         // Clock the triangle channel once per CPU cycle

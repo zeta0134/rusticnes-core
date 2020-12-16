@@ -20,11 +20,11 @@ pub struct NesState {
     pub p2_input: u8,
     pub p2_data: u8,
     pub input_latch: bool,
-    pub mapper: Box<Mapper>,
+    pub mapper: Box<dyn Mapper>,
 }
 
 impl NesState {
-    pub fn new(m: Box<Mapper>) -> NesState {
+    pub fn new(m: Box<dyn Mapper>) -> NesState {
         return NesState {
             apu: ApuState::new(),
             cpu: CpuState::new(),

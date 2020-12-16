@@ -103,7 +103,7 @@ pub fn extract_header(cartridge: &[u8]) -> NesHeader {
     return nes_header;
 }
 
-pub fn load_from_cartridge(nes_header: NesHeader, cartridge: &[u8]) -> Result<Box<Mapper>, String> {
+pub fn load_from_cartridge(nes_header: NesHeader, cartridge: &[u8]) -> Result<Box<dyn Mapper>, String> {
     let mut offset = 16;
     let mut header = nes_header;
 
@@ -123,7 +123,7 @@ pub fn load_from_cartridge(nes_header: NesHeader, cartridge: &[u8]) -> Result<Bo
         header.has_chr_ram = true;
     }
 
-    let mapper: Box<Mapper> = match header.mapper_number {
+    let mapper: Box<dyn Mapper> = match header.mapper_number {
         0 => Box::new(Nrom::new(header, chr_rom, prg_rom)),
         1 => Box::new(Mmc1::new(header, chr_rom, prg_rom)),
         2 => Box::new(UxRom::new(header, chr_rom, prg_rom)),

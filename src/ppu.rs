@@ -183,7 +183,7 @@ impl PpuState {
        };
     }
 
-    pub fn read_latched_byte(&mut self, mapper: &mut Mapper, address: u16) -> u8 {
+    pub fn read_latched_byte(&mut self, mapper: &mut dyn Mapper, address: u16) -> u8 {
         let masked_address = address & 0x3FFF;
         match masked_address {
             0x3F00 ..= 0x3FFF => {
@@ -201,15 +201,15 @@ impl PpuState {
         }
     }
 
-    pub fn passively_read_byte(&mut self, mapper: &mut Mapper, address: u16) -> u8 {
+    pub fn passively_read_byte(&mut self, mapper: &mut dyn Mapper, address: u16) -> u8 {
         return self.__read_byte(mapper, address, false);
     }
 
-    pub fn read_byte(&mut self, mapper: &mut Mapper, address: u16) -> u8 {
+    pub fn read_byte(&mut self, mapper: &mut dyn Mapper, address: u16) -> u8 {
         return self.__read_byte(mapper, address, true);
     }
 
-    pub fn __read_byte(&mut self, mapper: &mut Mapper, address: u16, side_effects: bool) -> u8 {
+    pub fn __read_byte(&mut self, mapper: &mut dyn Mapper, address: u16, side_effects: bool) -> u8 {
         let masked_address = address & 0x3FFF;
         /*if side_effects {
             self.recent_reads.insert(0, masked_address);
@@ -245,7 +245,7 @@ impl PpuState {
             _ => return 0
         }
     }
-    pub fn write_byte(&mut self, mapper: &mut Mapper, address: u16, data: u8) {
+    pub fn write_byte(&mut self, mapper: &mut dyn Mapper, address: u16, data: u8) {
         let masked_address = address & 0x3FFF;
         self.recent_writes.insert(0, masked_address);
         self.recent_writes.truncate(20);
@@ -340,7 +340,7 @@ impl PpuState {
         self.screen[index] = pixel_color;
     }
 
-    fn draw_pixel(&mut self, mapper: &mut Mapper) {
+    fn draw_pixel(&mut self, mapper: &mut dyn Mapper) {
         // Output a pixel based on the current background shifters
         let bg_x_bit = 0b1000_0000_0000_0000 >> self.fine_x;
         let bg_x_shift = 15 - self.fine_x;
@@ -431,7 +431,7 @@ impl PpuState {
         self.current_vram_address |= (fine_y & 0b111) << 12;
     }
 
-    fn fetch_bg_tile(&mut self, mapper: &mut Mapper, sub_cycle: u16) {
+    fn fetch_bg_tile(&mut self, mapper: &mut dyn Mapper, sub_cycle: u16) {
         let mut pattern_address: u16 = 0x0000;
         if (self.control & 0x10) != 0 {
             pattern_address = 0x1000;
@@ -472,7 +472,7 @@ impl PpuState {
         }
     }
 
-    fn fetch_sprite_tiles(&mut self, mapper: &mut Mapper) {
+    fn fetch_sprite_tiles(&mut self, mapper: &mut dyn Mapper) {
         let sub_cycle = (self.current_scanline_cycle - 257) % 8;
         match sub_cycle {
             // Note: the nametable address fetches here are thrown away, but they are performed, and
@@ -536,7 +536,7 @@ impl PpuState {
         }
     }
 
-    fn prerender_scanline(&mut self, mapper: &mut Mapper) {
+    fn prerender_scanline(&mut self, mapper: &mut dyn Mapper) {
         // Setup for next full frame
         match self.current_scanline_cycle {
             1 => {
@@ -613,7 +613,7 @@ impl PpuState {
         }
     }
 
-    fn render_scanline(&mut self, mapper: &mut Mapper) {
+    fn render_scanline(&mut self, mapper: &mut dyn Mapper) {
         if self.rendering_enabled() {
             match self.current_scanline_cycle {
                 // cycle 0 is a dummy cycle, nothing happens
@@ -684,7 +684,7 @@ impl PpuState {
         }
     }
 
-    pub fn clock(&mut self, mapper: &mut Mapper) {
+    pub fn clock(&mut self, mapper: &mut dyn Mapper) {
         match self.current_scanline {
             0 ..= 239 => self.render_scanline(mapper),
             241 => self.vblank_scanline(),
@@ -703,7 +703,7 @@ impl PpuState {
         }
     }
 
-    pub fn get_bg_tile(&mut self, mapper: &mut Mapper, tx: u8, ty: u8) -> u8 {
+    pub fn get_bg_tile(&mut self, mapper: &mut dyn Mapper, tx: u8, ty: u8) -> u8 {
         let mut address: u16 = 0x2000;
         if tx > 31 {
             address = address + 0x0400;
@@ -715,7 +715,7 @@ impl PpuState {
         return self.passively_read_byte(mapper, address);
     }
 
-    pub fn get_bg_palette(&mut self, mapper: &mut Mapper, tx: u8, ty: u8) -> u8 {
+    pub fn get_bg_palette(&mut self, mapper: &mut dyn Mapper, tx: u8, ty: u8) -> u8 {
         let mut address: u16 = 0x23C0;
         if tx > 31 {
             address = address + 0x0400;
