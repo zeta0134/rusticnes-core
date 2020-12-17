@@ -3,6 +3,7 @@
 
 use cartridge::NesHeader;
 use mmc::mapper::*;
+use mmc::mirroring;
 
 pub struct Fme7 {
     pub prg_rom: Vec<u8>,
@@ -13,6 +14,8 @@ pub struct Fme7 {
     pub prg_banks: Vec<usize>,
     pub prg_ram_enabled: bool,
     pub prg_ram_selected: bool,
+    pub vram: Vec<u8>,
+    pub mirroring: Mirroring,
 }
 
 impl Fme7 {
@@ -26,6 +29,8 @@ impl Fme7 {
             prg_banks: vec![0usize; 4],
             prg_ram_enabled: false,
             prg_ram_selected: false,
+            vram: vec![0u8; 0x1000],
+            mirroring: Mirroring::Vertical,
         }
     }
 }
@@ -58,8 +63,17 @@ impl Mapper for Fme7 {
         }
     }
 
-    fn read_ppu(&mut self, _: u16) -> Option<u8> {
-        return None;
+    fn read_ppu(&mut self, address: u16) -> Option<u8> {
+        match address {
+            0x2000 ..= 0x3FFF => return match self.mirroring {
+                Mirroring::Horizontal => Some(self.vram[mirroring::horizontal_mirroring(address) as usize]),
+                Mirroring::Vertical   => Some(self.vram[mirroring::vertical_mirroring(address) as usize]),
+                Mirroring::OneScreenLower => Some(self.vram[mirroring::one_screen_lower(address) as usize]),
+                Mirroring::OneScreenUpper => Some(self.vram[mirroring::one_screen_upper(address) as usize]),
+                _ => None
+            },
+            _ => return None
+        }
     }
 
     fn write_cpu(&mut self, address: u16, data: u8) {
@@ -86,6 +100,15 @@ impl Mapper for Fme7 {
                     0x9 ..= 0xB => {
                         self.prg_banks[(self.command - 0x8) as usize] = (data & 0b0011_1111) as usize;
                     },
+                    0xC => {
+                        match data & 0b0000_0011 {
+                            0 => self.mirroring = Mirroring::Vertical,
+                            1 => self.mirroring = Mirroring::Horizontal,
+                            2 => self.mirroring = Mirroring::OneScreenLower,
+                            3 => self.mirroring = Mirroring::OneScreenUpper,
+                            _ => {}
+                        }
+                    },
                     _ => {}
                 }
             }
@@ -93,7 +116,16 @@ impl Mapper for Fme7 {
         }
     }
 
-    fn write_ppu(&mut self, _: u16, _: u8) {
-        //Do nothing
-    }    
+    fn write_ppu(&mut self, address: u16, data: u8) {
+        match address {
+            0x2000 ..= 0x3FFF => match self.mirroring {
+                Mirroring::Horizontal => self.vram[mirroring::horizontal_mirroring(address) as usize] = data,
+                Mirroring::Vertical   => self.vram[mirroring::vertical_mirroring(address) as usize] = data,
+                Mirroring::OneScreenLower => self.vram[mirroring::one_screen_lower(address) as usize] = data,
+                Mirroring::OneScreenUpper => self.vram[mirroring::one_screen_upper(address) as usize] = data,
+                _ => {}
+            },
+            _ => {}
+        }
+    }
 }
