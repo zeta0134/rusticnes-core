@@ -107,6 +107,7 @@ impl NesState {
         self.ppu.clock(&mut *self.mapper);
         self.ppu.clock(&mut *self.mapper);
         self.apu.clock_apu(&mut *self.mapper);
+        self.mapper.clock_cpu();
     }
 
     pub fn step(&mut self) {

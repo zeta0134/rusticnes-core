@@ -30,4 +30,5 @@ pub trait Mapper: Send {
     fn get_sram(&self) -> Vec<u8> {return vec![0u8; 0];}
     fn load_sram(&mut self, _: Vec<u8>) {}
     fn irq_flag(&self) -> bool {return false;}
+    fn clock_cpu(&mut self) {}
 }

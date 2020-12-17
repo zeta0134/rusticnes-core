@@ -50,8 +50,14 @@ impl Fme7 {
             }
         }
     }
+}
 
-    fn _read_cpu(&mut self, address: u16) -> Option<u8> {
+impl Mapper for Fme7 {
+    fn mirroring(&self) -> Mirroring {
+        return Mirroring::Horizontal;
+    }
+    
+    fn read_cpu(&mut self, address: u16) -> Option<u8> {
         let prg_rom_len = self.prg_rom.len();
         let prg_ram_len = self.prg_ram.len();
         match address {
@@ -72,21 +78,10 @@ impl Fme7 {
             0xE000 ..= 0xFFFF => return Some(self.prg_rom[(prg_rom_len - 0x2000) + (address as usize - 0xE000)]),
             _ => return None
         }
-    }    
-}
-
-impl Mapper for Fme7 {
-    fn mirroring(&self) -> Mirroring {
-        return Mirroring::Horizontal;
     }
-    
-    fn read_cpu(&mut self, address: u16) -> Option<u8> {
+
+    fn clock_cpu(&mut self) {
         self.clock_irq();
-        return self._read_cpu(address);
-    }
-
-    fn debug_read_cpu(&mut self, address: u16) -> Option<u8> {
-        return self._read_cpu(address);   
     }
 
     fn read_ppu(&mut self, address: u16) -> Option<u8> {
@@ -112,7 +107,7 @@ impl Mapper for Fme7 {
     }
 
     fn write_cpu(&mut self, address: u16, data: u8) {
-        self.clock_irq();
+        //self.clock_irq();
         match address {
             0x6000 ..= 0x7FFF => {
                 if self.prg_ram_selected && self.prg_ram_enabled {
