@@ -16,6 +16,10 @@ pub struct Fme7 {
     pub prg_ram_selected: bool,
     pub vram: Vec<u8>,
     pub mirroring: Mirroring,
+    pub irq_enabled: bool,
+    pub irq_counter_enabled: bool,
+    pub irq_counter: u16,
+    pub irq_pending: bool,
 }
 
 impl Fme7 {
@@ -31,16 +35,23 @@ impl Fme7 {
             prg_ram_selected: false,
             vram: vec![0u8; 0x1000],
             mirroring: Mirroring::Vertical,
+            irq_enabled: false,
+            irq_counter_enabled: false,
+            irq_counter: 0,
+            irq_pending: false,
         }
     }
-}
 
-impl Mapper for Fme7 {
-    fn mirroring(&self) -> Mirroring {
-        return Mirroring::Horizontal;
+    pub fn clock_irq(&mut self) {
+        if self.irq_counter_enabled {
+            self.irq_counter = self.irq_counter.wrapping_sub(1);
+            if self.irq_counter == 0xFFFF {
+                self.irq_pending = true;
+            }
+        }
     }
-    
-    fn read_cpu(&mut self, address: u16) -> Option<u8> {
+
+    fn _read_cpu(&mut self, address: u16) -> Option<u8> {
         let prg_rom_len = self.prg_rom.len();
         let prg_ram_len = self.prg_ram.len();
         match address {
@@ -61,6 +72,21 @@ impl Mapper for Fme7 {
             0xE000 ..= 0xFFFF => return Some(self.prg_rom[(prg_rom_len - 0x2000) + (address as usize - 0xE000)]),
             _ => return None
         }
+    }    
+}
+
+impl Mapper for Fme7 {
+    fn mirroring(&self) -> Mirroring {
+        return Mirroring::Horizontal;
+    }
+    
+    fn read_cpu(&mut self, address: u16) -> Option<u8> {
+        self.clock_irq();
+        return self._read_cpu(address);
+    }
+
+    fn debug_read_cpu(&mut self, address: u16) -> Option<u8> {
+        return self._read_cpu(address);   
     }
 
     fn read_ppu(&mut self, address: u16) -> Option<u8> {
@@ -86,6 +112,7 @@ impl Mapper for Fme7 {
     }
 
     fn write_cpu(&mut self, address: u16, data: u8) {
+        self.clock_irq();
         match address {
             0x6000 ..= 0x7FFF => {
                 if self.prg_ram_selected && self.prg_ram_enabled {
@@ -118,6 +145,18 @@ impl Mapper for Fme7 {
                             _ => {}
                         }
                     },
+                    0xD => {
+                        // writes to this register always acknowledge any pending IRQ
+                        self.irq_pending = false;
+                        self.irq_enabled = (data & 0b0000_0001) != 0;
+                        self.irq_counter_enabled = (data & 0b1000_0000) != 0;
+                    },
+                    0xE => {
+                        self.irq_counter = (self.irq_counter & 0xFF00) + (data as u16);
+                    },
+                    0xF => {
+                        self.irq_counter = (self.irq_counter & 0x00FF) + ((data as u16) << 8);
+                    },
                     _ => {}
                 }
             }
@@ -136,5 +175,9 @@ impl Mapper for Fme7 {
             },
             _ => {}
         }
+    }
+
+    fn irq_flag(&self) -> bool {
+        return self.irq_enabled && self.irq_pending;
     }
 }
