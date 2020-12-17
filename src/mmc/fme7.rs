@@ -5,6 +5,9 @@ use cartridge::NesHeader;
 use mmc::mapper::*;
 
 pub struct Fme7 {
+    pub prg_rom: Vec<u8>,
+    pub prg_ram: Vec<u8>,
+    pub chr_rom: Vec<u8>,
     pub command: u8,
     pub chr_banks: Vec<usize>,
     pub prg_banks: Vec<usize>,
@@ -13,8 +16,11 @@ pub struct Fme7 {
 }
 
 impl Fme7 {
-    pub fn new(_: NesHeader, _: &[u8], _: &[u8]) -> Fme7 {
+    pub fn new(header: NesHeader, chr: &[u8], prg: &[u8]) -> Fme7 {
         return Fme7 {
+            prg_rom: prg.to_vec(),
+            chr_rom: chr.to_vec(),
+            prg_ram: vec![0u8; header.prg_ram_size],
             command: 0,
             chr_banks: vec![0usize; 8],
             prg_banks: vec![0usize; 4],
@@ -29,8 +35,27 @@ impl Mapper for Fme7 {
         return Mirroring::Horizontal;
     }
     
-    fn read_cpu(&mut self, _: u16) -> Option<u8> {
-        return None;
+    fn read_cpu(&mut self, address: u16) -> Option<u8> {
+        let prg_rom_len = self.prg_rom.len();
+        let prg_ram_len = self.prg_ram.len();
+        match address {
+            0x6000 ..= 0x7FFF => {
+                if self.prg_ram_selected {
+                    if self.prg_ram_enabled {
+                        return Some(self.prg_ram[((self.prg_banks[0] * 0x2000) + (address as usize - 0x6000)) % prg_ram_len]);
+                    } else {
+                        return None
+                    }
+                } else {
+                    return Some(self.prg_rom[((self.prg_banks[0] * 0x2000) + (address as usize - 0x6000)) % prg_ram_len]);
+                }
+            },
+            0x8000 ..= 0x9FFF => return Some(self.prg_rom[((self.prg_banks[1] * 0x2000) + (address as usize - 0x8000)) % prg_rom_len]),
+            0xA000 ..= 0xBFFF => return Some(self.prg_rom[((self.prg_banks[2] * 0x2000) + (address as usize - 0xA000)) % prg_rom_len]),
+            0xC000 ..= 0xDFFF => return Some(self.prg_rom[((self.prg_banks[3] * 0x2000) + (address as usize - 0xC000)) % prg_rom_len]),
+            0xE000 ..= 0xFFFF => return Some(self.prg_rom[(prg_rom_len - 0x2000) + (address as usize - 0xE000)]),
+            _ => return None
+        }
     }
 
     fn read_ppu(&mut self, _: u16) -> Option<u8> {
@@ -39,6 +64,12 @@ impl Mapper for Fme7 {
 
     fn write_cpu(&mut self, address: u16, data: u8) {
         match address {
+            0x6000 ..= 0x7FFF => {
+                if self.prg_ram_selected && self.prg_ram_enabled {
+                    let prg_ram_len = self.prg_ram.len();
+                    self.prg_ram[((self.prg_banks[0] * 0x2000) + (address as usize - 0x6000)) % prg_ram_len] = data;
+                }
+            },
             0x8000 ..= 0x9FFF => {
                 // Store the command to execute next
                 self.command = data & 0b0000_1111;
