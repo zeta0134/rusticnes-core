@@ -124,6 +124,11 @@ pub fn load_from_cartridge(nes_header: NesHeader, cartridge: &[u8]) -> Result<Bo
         header.has_chr_ram = true;
     }
 
+    if header.prg_ram_size == 0 {
+        // For iNES 1.0, assume a minimum PRG RAM size of 8k on boards which support varying sizes
+        header.prg_ram_size = 8 * 1024;
+    }
+
     let mapper: Box<dyn Mapper> = match header.mapper_number {
         0 => Box::new(Nrom::new(header, chr_rom, prg_rom)),
         1 => Box::new(Mmc1::new(header, chr_rom, prg_rom)),
