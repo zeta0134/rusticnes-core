@@ -64,7 +64,16 @@ impl Mapper for Fme7 {
     }
 
     fn read_ppu(&mut self, address: u16) -> Option<u8> {
+        let chr_rom_len = self.chr_rom.len();
         match address {
+            0x0000 ..= 0x03FF => return Some(self.chr_rom[((self.chr_banks[0] * 0x400) + (address as usize - 0x0000)) % chr_rom_len]),
+            0x0400 ..= 0x07FF => return Some(self.chr_rom[((self.chr_banks[1] * 0x400) + (address as usize - 0x0400)) % chr_rom_len]),
+            0x0800 ..= 0x0BFF => return Some(self.chr_rom[((self.chr_banks[2] * 0x400) + (address as usize - 0x0800)) % chr_rom_len]),
+            0x0C00 ..= 0x0FFF => return Some(self.chr_rom[((self.chr_banks[3] * 0x400) + (address as usize - 0x0C00)) % chr_rom_len]),
+            0x1000 ..= 0x13FF => return Some(self.chr_rom[((self.chr_banks[4] * 0x400) + (address as usize - 0x1000)) % chr_rom_len]),
+            0x1400 ..= 0x17FF => return Some(self.chr_rom[((self.chr_banks[5] * 0x400) + (address as usize - 0x1400)) % chr_rom_len]),
+            0x1800 ..= 0x1BFF => return Some(self.chr_rom[((self.chr_banks[6] * 0x400) + (address as usize - 0x1800)) % chr_rom_len]),
+            0x1C00 ..= 0x1FFF => return Some(self.chr_rom[((self.chr_banks[7] * 0x400) + (address as usize - 0x1C00)) % chr_rom_len]),
             0x2000 ..= 0x3FFF => return match self.mirroring {
                 Mirroring::Horizontal => Some(self.vram[mirroring::horizontal_mirroring(address) as usize]),
                 Mirroring::Vertical   => Some(self.vram[mirroring::vertical_mirroring(address) as usize]),
