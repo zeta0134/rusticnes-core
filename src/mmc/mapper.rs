@@ -31,4 +31,5 @@ pub trait Mapper: Send {
     fn load_sram(&mut self, _: Vec<u8>) {}
     fn irq_flag(&self) -> bool {return false;}
     fn clock_cpu(&mut self) {}
+    fn mix_expansion_audio(&self, nes_sample: f64) -> f64 {return nes_sample;}
 }

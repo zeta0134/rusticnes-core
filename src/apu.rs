@@ -958,8 +958,11 @@ impl ApuState {
                 tnd_index += dmc_sample;
             }
             let tnd_output = self.tnd_table[tnd_index as usize];
-            
-            let current_dac_sample = (pulse_output - 0.5) + (tnd_output - 0.5);
+            let current_2a03_sample = (pulse_output - 0.5) + (tnd_output - 0.5);
+            let current_dac_sample = mapper.mix_expansion_audio(current_2a03_sample);
+
+
+
             let current_90hz_hp_sample = high_pass(self.sample_rate as f64, 90.0, self.last_90hz_hp_sample, current_dac_sample, self.last_dac_sample);
             let current_440hz_hp_sample = high_pass(self.sample_rate as f64, 440.0, self.last_440hz_hp_sample, current_90hz_hp_sample, self.last_90hz_hp_sample);
             let current_14khz_lp_sample = low_pass(self.sample_rate as f64, 14000.0, self.last_14khz_lp_sample, current_440hz_hp_sample);
