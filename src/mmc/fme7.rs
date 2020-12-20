@@ -250,12 +250,102 @@ impl NoiseGenerator {
 }
 
 struct EnvelopeGenerator {
-    pub period_initial: u16,
+    pub period_compare: u16,
     pub period_current: u16,
     pub continue_flag: bool,
     pub attack_flag: bool,
     pub alternate_flag: bool,
     pub hold_flag: bool,
+    pub current_value: u8,
+    pub increasing: bool,
+    pub holding: bool,
+}
+
+impl EnvelopeGenerator {
+    pub fn new() -> EnvelopeGenerator {
+        return EnvelopeGenerator {
+            period_compare: 0,
+            period_current: 0,
+            continue_flag: false,
+            attack_flag: false,
+            alternate_flag: false,
+            hold_flag: false,
+            current_value: 0,
+            increasing: false,
+            holding: false,
+        }
+    }
+
+    pub fn restart_envelope(&mut self) {
+        self.holding = false;
+        if self.attack_flag {
+            self.increasing = true;
+            self.current_value = 0;
+        } else {
+            self.increasing = false;
+            self.current_value = 31;
+        }
+    }
+
+    pub fn advance_envelope(&mut self) {
+        if self.holding {
+            return;
+        }
+
+        if self.increasing {
+            self.current_value += 1;
+        } else {
+            self.current_value -= 1;
+        }
+
+        if (self.current_value == 0) || (self.current_value == 32) {
+            // We've reached a boundary; decide how to proceed
+            if !(self.continue_flag) {
+                // non-continue mode, choose a value to hold
+                // and exit immediately. Note an oddity here,
+                // we *always* hold the value 0 in non-continue
+                // mode.
+                self.current_value = 0;
+                self.holding = true;
+            } else {
+                if self.hold_flag {
+                    // Hold this value, with an optional flip first
+                    // (this is the only way to get the more intuitive
+                    // "increase and hold" behavior)
+                    self.holding = true;
+                    if self.alternate_flag {
+                        if self.attack_flag {
+                            self.current_value = 0;
+                        } else {
+                            self.current_value = 31;
+                        }
+                    }
+                }
+
+                // Deal with switching directions, and fix the 5-bit overflow
+                if self.alternate_flag {
+                    if self.increasing {
+                        self.current_value = 31;
+                    }
+                    self.increasing = !(self.increasing);
+                } else {
+                    if self.increasing {
+                        self.current_value = 0;
+                    } else {
+                        self.current_value = 31;
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn clock(&mut self) {
+        self.period_current += 1;
+        if self.period_current >= self.period_compare {
+            self.period_current = 0;
+            self.advance_envelope();
+        }
+    }
 }
 
 struct YmChannel {
@@ -274,3 +364,4 @@ struct YM2149F {
     pub envelope: EnvelopeGenerator,
     pub clock_divider_counter: u8,
 }
+
