@@ -205,11 +205,48 @@ impl ToneGenerator {
             self.output = self.output & 0b1;
         }
     }
+
+    pub fn output(&self) -> u8 {
+        return self.output;
+    }
 }
 
 struct NoiseGenerator {
-    pub period_initial: u16,
-    pub period_current: u16,   
+    pub period_compare: u16,
+    pub period_current: u16,
+    // Actually a 17bit register, higher bits are unused
+    pub shift_register: u32,
+}
+
+impl NoiseGenerator {
+    pub fn new() -> NoiseGenerator {
+        return NoiseGenerator {
+            period_compare: 0,
+            period_current: 0,
+            shift_register: 0,
+        }
+    }
+
+    pub fn advance_lfsr(&mut self) {
+        let output = self.shift_register & 0b1;
+        let tap13 = (self.shift_register & 0b0000_0010_0000_0000_0000) >> 13;
+        let tap16 = (self.shift_register & 0b0001_0000_0000_0000_0000) >> 16;
+        let new_bit_17 = output ^ tap13 ^ tap16;
+        self.shift_register = self.shift_register >> 1;
+        self.shift_register += new_bit_17 << 17
+    }
+
+    pub fn clock(&mut self) {
+        self.period_current += 1;
+        if self.period_current >= self.period_compare {
+            self.period_current = 0;
+            self.advance_lfsr();
+        }
+    }
+
+    pub fn output(&self) -> u8 {
+        return (self.shift_register & 0b1) as u8;
+    }
 }
 
 struct EnvelopeGenerator {
