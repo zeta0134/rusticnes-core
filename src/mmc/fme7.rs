@@ -20,6 +20,7 @@ pub struct Fme7 {
     pub irq_counter_enabled: bool,
     pub irq_counter: u16,
     pub irq_pending: bool,
+    pub audio_register_select: u8,
 }
 
 impl Fme7 {
@@ -39,6 +40,7 @@ impl Fme7 {
             irq_counter_enabled: false,
             irq_counter: 0,
             irq_pending: false,
+            audio_register_select: 0,
         }
     }
 
@@ -154,7 +156,11 @@ impl Mapper for Fme7 {
                     },
                     _ => {}
                 }
-            }
+            },
+            0xC000 ..= 0xDFFF => {
+                self.audio_register_select = (data & 0x0F);
+            },
+
             _ => {}
         }
     }
@@ -175,4 +181,41 @@ impl Mapper for Fme7 {
     fn irq_flag(&self) -> bool {
         return self.irq_enabled && self.irq_pending;
     }
+}
+
+struct ToneGenerator {
+    pub period_initial: u16,
+    pub period_current: u16,
+    pub output: u8,
+}
+
+struct NoiseGenerator {
+    pub period_initial: u16,
+    pub period_current: u16,   
+}
+
+struct EnvelopeGenerator {
+    pub period_initial: u16,
+    pub period_current: u16,
+    pub continue_flag: bool,
+    pub attack_flag: bool,
+    pub alternate_flag: bool,
+    pub hold_flag: bool,
+}
+
+struct YmChannel {
+    pub tone: ToneGenerator,
+    pub tone_enabled: bool,
+    pub noise_enabled: bool,
+    pub envelope_enabled: bool,
+    pub static_volume: u8
+}
+
+struct YM2149F {
+    pub channel_a: YmChannel,
+    pub channel_b: YmChannel,
+    pub channel_c: YmChannel,
+    pub noise: NoiseGenerator,
+    pub envelope: EnvelopeGenerator,
+    pub clock_divider_counter: u8,
 }
