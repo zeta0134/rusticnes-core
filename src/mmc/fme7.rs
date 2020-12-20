@@ -356,6 +356,18 @@ struct YmChannel {
     pub static_volume: u8
 }
 
+impl YmChannel {
+    pub fn new() -> YmChannel {
+        return YmChannel {
+            tone: ToneGenerator::new(),
+            tone_enabled: false,
+            noise_enabled: false,
+            envelope_enabled: false,
+            static_volume: 0,
+        }
+    }
+}
+
 struct YM2149F {
     pub channel_a: YmChannel,
     pub channel_b: YmChannel,
@@ -365,3 +377,15 @@ struct YM2149F {
     pub clock_divider_counter: u8,
 }
 
+impl YM2149F {
+    pub fn new() -> YM2149F {
+        return YM2149F {
+            channel_a: YmChannel::new(),
+            channel_b: YmChannel::new(),
+            channel_c: YmChannel::new(),
+            noise: NoiseGenerator::new(),
+            envelope: EnvelopeGenerator::new(),
+            clock_divider_counter: 0,
+        }
+    }
+}
