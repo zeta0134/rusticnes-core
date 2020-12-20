@@ -184,9 +184,27 @@ impl Mapper for Fme7 {
 }
 
 struct ToneGenerator {
-    pub period_initial: u16,
+    pub period_compare: u16,
     pub period_current: u16,
     pub output: u8,
+}
+
+impl ToneGenerator {
+    pub fn new() -> ToneGenerator {
+        return ToneGenerator {
+            period_compare: 0,
+            period_current: 0,
+            output: 0,
+        }
+    }
+
+    pub fn clock(&mut self) {
+        self.period_current += 1;
+        if self.period_current >= self.period_compare {
+            self.period_current = 0;
+            self.output = self.output & 0b1;
+        }
+    }
 }
 
 struct NoiseGenerator {
