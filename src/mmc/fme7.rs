@@ -514,6 +514,7 @@ impl YM2149F {
                 self.envelope.alternate_flag = (data & 0b0000_0010) == 0;
                 self.envelope.attack_flag =    (data & 0b0000_0100) == 0;
                 self.envelope.continue_flag =  (data & 0b0000_1000) == 0;
+                self.envelope.restart_envelope();
             },
             _ => {}
         }
