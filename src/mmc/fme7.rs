@@ -20,7 +20,8 @@ pub struct Fme7 {
     pub irq_counter_enabled: bool,
     pub irq_counter: u16,
     pub irq_pending: bool,
-    pub audio_register_select: u8,
+    pub audio_command_select: u8,
+    expansion_audio_chip: YM2149F,
 }
 
 impl Fme7 {
@@ -40,7 +41,8 @@ impl Fme7 {
             irq_counter_enabled: false,
             irq_counter: 0,
             irq_pending: false,
-            audio_register_select: 0,
+            audio_command_select: 0,
+            expansion_audio_chip: YM2149F::new(),
         }
     }
 
@@ -158,8 +160,11 @@ impl Mapper for Fme7 {
                 }
             },
             0xC000 ..= 0xDFFF => {
-                self.audio_register_select = data & 0x0F;
+                self.audio_command_select = data & 0x0F;
             },
+            0xE000 ..= 0xFFFF => {
+                self.expansion_audio_chip.execute_command(self.audio_command_select, data);
+            }
 
             _ => {}
         }
@@ -448,5 +453,64 @@ impl YM2149F {
         let channel_b = self.channel_output(&self.channel_b);
         let channel_c = self.channel_output(&self.channel_c);
         return channel_a + channel_b + channel_c;
+    }
+
+    pub fn execute_command(&mut self, command: u8, data: u8) {
+        match command {
+            0x0 => { 
+                self.channel_a.tone.period_compare = (self.channel_a.tone.period_compare & 0xFF00) + data as u16;
+            },
+            0x1 => { 
+                self.channel_a.tone.period_compare = (self.channel_a.tone.period_compare & 0x00FF) + ((data as u16 & 0xF) << 8);
+            },
+            0x2 => { 
+                self.channel_b.tone.period_compare = (self.channel_b.tone.period_compare & 0xFF00) + data as u16;
+            },
+            0x3 => { 
+                self.channel_b.tone.period_compare = (self.channel_b.tone.period_compare & 0x00FF) + ((data as u16 & 0xF) << 8);
+            },
+            0x4 => { 
+                self.channel_c.tone.period_compare = (self.channel_c.tone.period_compare & 0xFF00) + data as u16;
+            },
+            0x5 => { 
+                self.channel_c.tone.period_compare = (self.channel_c.tone.period_compare & 0x00FF) + ((data as u16 & 0xF) << 8);
+            },
+            0x6 => {
+                self.noise.period_compare = data as u16 & 0x1F;
+            },
+            0x7 => {
+                self.channel_a.tone_enabled =  (data & 0b0000_0001) == 0;
+                self.channel_b.tone_enabled =  (data & 0b0000_0010) == 0;
+                self.channel_c.tone_enabled =  (data & 0b0000_0100) == 0;
+                self.channel_a.noise_enabled = (data & 0b0000_1000) == 0;
+                self.channel_b.noise_enabled = (data & 0b0001_0000) == 0;
+                self.channel_c.noise_enabled = (data & 0b0010_0000) == 0;
+            },
+            0x8 => {
+                self.channel_a.envelope_enabled = (data & 0b0001_0000) != 0;
+                self.channel_a.static_volume = data & 0xF;
+            },
+            0x9 => {
+                self.channel_b.envelope_enabled = (data & 0b0001_0000) != 0;
+                self.channel_b.static_volume = data & 0xF;
+            },
+            0xA => {
+                self.channel_c.envelope_enabled = (data & 0b0001_0000) != 0;
+                self.channel_c.static_volume = data & 0xF;
+            },
+            0xB => {
+                self.envelope.period_compare = (self.envelope.period_compare & 0xFF00) + data as u16;
+            },
+            0xC => { 
+                self.envelope.period_compare = (self.envelope.period_compare & 0x00FF) + ((data as u16 & 0xF) << 8);
+            },
+            0xD => {
+                self.envelope.hold_flag =      (data & 0b0000_0001) == 0;
+                self.envelope.alternate_flag = (data & 0b0000_0010) == 0;
+                self.envelope.attack_flag =    (data & 0b0000_0100) == 0;
+                self.envelope.continue_flag =  (data & 0b0000_1000) == 0;
+            },
+            _ => {}
+        }
     }
 }
