@@ -13,3 +13,4 @@ pub mod none;
 pub mod nrom;
 pub mod pxrom;
 pub mod uxrom;
+pub mod vrc6;
