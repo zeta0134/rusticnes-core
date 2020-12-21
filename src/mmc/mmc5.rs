@@ -61,6 +61,9 @@ pub struct Mmc5 {
     pub pulse_1: PulseChannelState,
     pub pulse_2: PulseChannelState,
     pub pcm_level: u8,
+    pub pcm_read_mode: bool,
+    pub pcm_irq_enable: bool,
+    pub pcm_irq_pending: bool,
     pub audio_sequencer_counter: u16,
 }
 
@@ -124,6 +127,9 @@ impl Mmc5 {
             pulse_1: PulseChannelState::new(false),
             pulse_2: PulseChannelState::new(false),
             pcm_level: 0,
+            pcm_read_mode: false,
+            pcm_irq_enable: false,
+            pcm_irq_pending: false,
             audio_sequencer_counter: 0,
         }
     }
@@ -395,20 +401,45 @@ impl Mmc5 {
         return combined_attribute as u8;
     }
 
+    fn read_pcm_sample(&mut self, address: u16) {
+        if self.pcm_read_mode {
+            match address {
+                0x8000 ..= 0xBFFF => {
+                    self.pcm_level = self.read_prg(address);
+                },
+                _ => {}
+            }
+        }
+    }
+
     fn _read_cpu(&mut self, address: u16, side_effects: bool) -> Option<u8> {
         if side_effects {
             self.snoop_cpu_read(address);
+            self.read_pcm_sample(address);
         }
         match address {
+            0x5010 => {
+                let mut pcm_status = 0;
+                if self.pcm_read_mode {
+                    pcm_status |= 0b0000_0001;
+                }
+                if self.pcm_irq_pending {
+                    pcm_status |= 0b1000_0000;   
+                }
+                if side_effects {
+                    self.pcm_irq_pending = false;
+                }
+                return Some(pcm_status)
+            },
             0x5015 => {
-                let mut status = 0;
+                let mut pulse_status = 0;
                 if self.pulse_1.length_counter.length > 0 {
-                    status += 0b0000_0001;
+                    pulse_status += 0b0000_0001;
                 }
                 if self.pulse_2.length_counter.length > 0 {
-                    status += 0b0000_0010;
+                    pulse_status += 0b0000_0010;
                 }
-                return Some(status);
+                return Some(pulse_status);
             },
             0x5204 => {
                 let mut status = 0;
@@ -436,7 +467,7 @@ impl Mmc5 {
             0x5206 => {
                 let result = self.multiplicand_a as u16 * self.multiplicand_b as u16;
                 return Some(((result & 0xFF00) >> 8) as u8);
-            },            
+            },
             0x6000 ..= 0xFFFF => {return Some(self.read_prg(address))},
             _ => return None
         }
@@ -644,6 +675,15 @@ impl Mapper for Mmc5 {
                 self.pulse_2.sequence_counter = 0;
                 self.pulse_2.envelope.start_flag = true;
             },
+            0x5010 => {
+                self.pcm_read_mode =  (data & 0b0000_0001) != 0;
+                self.pcm_irq_enable =  (data & 0b1000_0000) != 0;
+            },
+            0x5011 => {
+                if !(self.pcm_read_mode) {
+                    self.pcm_level = data;
+                }
+            }
             0x4015 => {
                 self.pulse_1.length_counter.channel_enabled  = (data & 0b0001) != 0;
                 self.pulse_2.length_counter.channel_enabled  = (data & 0b0010) != 0;
@@ -749,8 +789,12 @@ impl Mapper for Mmc5 {
     fn mix_expansion_audio(&self, nes_sample: f64) -> f64 {
         let pulse_1_output = (self.pulse_1.output() as f64 / 15.0) - 0.5;
         let pulse_2_output = (self.pulse_2.output() as f64 / 15.0) - 0.5;
+        let pcm_output = (self.pcm_level as f64 / 256.0) - 0.5;
 
-        return (pulse_1_output + pulse_2_output) * 0.20 + nes_sample;
+        return 
+            (pulse_1_output + pulse_2_output) * 0.12 + 
+            pcm_output * 0.25 + 
+            nes_sample;
     }
 }
 
