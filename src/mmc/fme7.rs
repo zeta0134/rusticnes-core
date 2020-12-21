@@ -233,17 +233,16 @@ impl NoiseGenerator {
         return NoiseGenerator {
             period_compare: 0,
             period_current: 0,
-            shift_register: 0,
+            shift_register: 0b1_1111_1111_1111_1111,
         }
     }
 
     pub fn advance_lfsr(&mut self) {
-        let output = self.shift_register & 0b1;
-        let tap13 = (self.shift_register & 0b0000_0010_0000_0000_0000) >> 13;
-        let tap16 = (self.shift_register & 0b0001_0000_0000_0000_0000) >> 16;
-        let new_bit_17 = output ^ tap13 ^ tap16;
+        let tap16 = (self.shift_register & 0b0000_0000_0000_0000_0010) >> 1;
+        let tap13 = (self.shift_register & 0b0000_0000_0000_0001_0000) >> 4;
+        let new_bit_16 = tap13 ^ tap16;
         self.shift_register = self.shift_register >> 1;
-        self.shift_register += new_bit_17 << 17
+        self.shift_register += new_bit_16 << 16
     }
 
     pub fn clock(&mut self) {
