@@ -972,8 +972,8 @@ impl ApuState {
             self.last_440hz_hp_sample = current_440hz_hp_sample;
             self.last_14khz_lp_sample = current_14khz_lp_sample;
 
-            let composite_sample = (current_14khz_lp_sample * 32767.0) as i16;
-            //let composite_sample = (current_dac_sample * 32767.0) as i16;
+            //let composite_sample = (current_14khz_lp_sample * 32767.0) as i16;
+            let composite_sample = (current_dac_sample * 32767.0) as i16;
 
 
             self.sample_buffer[self.buffer_index] = composite_sample;
