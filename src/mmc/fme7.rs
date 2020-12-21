@@ -158,7 +158,7 @@ impl Mapper for Fme7 {
                 }
             },
             0xC000 ..= 0xDFFF => {
-                self.audio_register_select = (data & 0x0F);
+                self.audio_register_select = data & 0x0F;
             },
 
             _ => {}
@@ -256,7 +256,7 @@ struct EnvelopeGenerator {
     pub attack_flag: bool,
     pub alternate_flag: bool,
     pub hold_flag: bool,
-    pub current_value: u8,
+    pub current_value: usize,
     pub increasing: bool,
     pub holding: bool,
 }
@@ -346,6 +346,10 @@ impl EnvelopeGenerator {
             self.advance_envelope();
         }
     }
+
+    pub fn output(&self) -> usize {
+        return self.current_value;
+    }
 }
 
 struct YmChannel {
@@ -375,6 +379,7 @@ struct YM2149F {
     pub noise: NoiseGenerator,
     pub envelope: EnvelopeGenerator,
     pub clock_divider_counter: u8,
+    pub volume_lut: Vec<f64>,
 }
 
 impl YM2149F {
@@ -386,6 +391,62 @@ impl YM2149F {
             noise: NoiseGenerator::new(),
             envelope: EnvelopeGenerator::new(),
             clock_divider_counter: 0,
+            volume_lut: YM2149F::generate_volume_lut(),
         }
+    }
+
+    pub fn generate_volume_lut() -> Vec<f64> {
+        let mut lut = vec![0f64; 32];
+        lut[0] = 0.0;
+        lut[1] = 0.0; // First two entries emit silence
+        // The table should cap out at 1.0
+        let mut output = 1.0;
+        // Working our way down from the top...
+        for i in (2 ..= 31).rev() {
+            lut[i] = output;
+            // ...decrease by 1.5 dB every step
+            output /= 10f64.powf(1.5 * 0.05);
+        }
+        return lut;
+    }
+
+    pub fn clock(&mut self) {
+        self.clock_divider_counter += 1;
+        if self.clock_divider_counter == 16 {
+            self.channel_a.tone.clock();
+            self.channel_b.tone.clock();
+            self.channel_c.tone.clock();
+            self.envelope.clock();
+        }
+        if self.clock_divider_counter == 32 {
+            self.channel_a.tone.clock();
+            self.channel_b.tone.clock();
+            self.channel_c.tone.clock();
+            self.envelope.clock();
+            self.noise.clock();
+            self.clock_divider_counter = 0;
+        }
+    }
+
+    pub fn channel_output(&self, channel: &YmChannel) -> f64 {
+        let mut signal_bit = 1u8;
+        if channel.tone_enabled {
+            signal_bit &= channel.tone.output();
+        }
+        if channel.noise_enabled {
+            signal_bit &= self.noise.output();
+        }
+        let mut volume_index = (channel.static_volume as usize * 2) + 1;
+        if channel.envelope_enabled {
+            volume_index = self.envelope.output();
+        }
+        return (signal_bit as f64) * self.volume_lut[volume_index];
+    }
+
+    pub fn output(&self) -> f64 {
+        let channel_a = self.channel_output(&self.channel_a);
+        let channel_b = self.channel_output(&self.channel_b);
+        let channel_c = self.channel_output(&self.channel_c);
+        return channel_a + channel_b + channel_c;
     }
 }
