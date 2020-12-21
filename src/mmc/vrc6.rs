@@ -10,6 +10,7 @@ pub struct Vrc6 {
     pub chr_rom: Vec<u8>,
     pub mirroring: Mirroring,
     pub vram: Vec<u8>,
+    pub prg_ram_enable: bool
 }
 
 impl Vrc6 {
@@ -20,6 +21,7 @@ impl Vrc6 {
             chr_rom: chr.to_vec(),
             mirroring: header.mirroring,
             vram: vec![0u8; 0x1000],
+            prg_ram_enable: false,
         }
     }
 }
@@ -31,12 +33,21 @@ impl Mapper for Vrc6 {
 
     fn read_cpu(&mut self, address: u16) -> Option<u8> {
         match address {
+            0x6000 ..= 0x7FFF => {
+                return Some(self.prg_ram[(address - 0x6000) as usize]);
+            },
             _ => return None
         }
     }
 
     fn write_cpu(&mut self, address: u16, data: u8) {
         match address {
+            0x6000 ..= 0x7FFF => {
+                if self.prg_ram_enable {
+                    self.prg_ram[(address - 0x6000) as usize] = data;
+                }
+            },
+
             _ => {}
         }
     }
