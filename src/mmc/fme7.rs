@@ -265,7 +265,7 @@ struct EnvelopeGenerator {
     pub attack_flag: bool,
     pub alternate_flag: bool,
     pub hold_flag: bool,
-    pub current_value: usize,
+    pub current_value: i8,
     pub increasing: bool,
     pub holding: bool,
 }
@@ -307,7 +307,7 @@ impl EnvelopeGenerator {
             self.current_value -= 1;
         }
 
-        if (self.current_value == 0) || (self.current_value == 32) {
+        if (self.current_value == -1) || (self.current_value == 32) {
             // We've reached a boundary; decide how to proceed
             if !(self.continue_flag) {
                 // non-continue mode, choose a value to hold
@@ -335,6 +335,8 @@ impl EnvelopeGenerator {
                 if self.alternate_flag {
                     if self.increasing {
                         self.current_value = 31;
+                    } else {
+                        self.current_value = 0;
                     }
                     self.increasing = !(self.increasing);
                 } else {
@@ -357,7 +359,7 @@ impl EnvelopeGenerator {
     }
 
     pub fn output(&self) -> usize {
-        return self.current_value;
+        return self.current_value as usize;
     }
 }
 
@@ -509,11 +511,13 @@ impl YM2149F {
                 self.envelope.period_compare = (self.envelope.period_compare & 0x00FF) + ((data as u16 & 0xF) << 8);
             },
             0xD => {
-                self.envelope.hold_flag =      (data & 0b0000_0001) == 0;
-                self.envelope.alternate_flag = (data & 0b0000_0010) == 0;
-                self.envelope.attack_flag =    (data & 0b0000_0100) == 0;
-                self.envelope.continue_flag =  (data & 0b0000_1000) == 0;
+                self.envelope.hold_flag =      (data & 0b0000_0001) != 0;
+                self.envelope.alternate_flag = (data & 0b0000_0010) != 0;
+                self.envelope.attack_flag =    (data & 0b0000_0100) != 0;
+                self.envelope.continue_flag =  (data & 0b0000_1000) != 0;
                 self.envelope.restart_envelope();
+
+
             },
             _ => {}
         }
