@@ -400,6 +400,16 @@ impl Mmc5 {
             self.snoop_cpu_read(address);
         }
         match address {
+            0x5015 => {
+                let mut status = 0;
+                if self.pulse_1.length_counter.length > 0 {
+                    status += 0b0000_0001;
+                }
+                if self.pulse_2.length_counter.length > 0 {
+                    status += 0b0000_0010;
+                }
+                return Some(status);
+            },
             0x5204 => {
                 let mut status = 0;
                 if self.irq_pending {
@@ -572,9 +582,79 @@ impl Mapper for Mmc5 {
     }
 
     fn write_cpu(&mut self, address: u16, data: u8) {
+        let duty_table = [
+            0b1000_0000,
+            0b1100_0000,
+            0b1111_0000,
+            0b0011_1111,
+        ];
+
         match address {
             0x2000 => {self.ppuctrl_monitor = data},
             0x2001 => {self.ppumask_monitor = data},
+            0x5000 => {
+                let duty_index =      (data & 0b1100_0000) >> 6;
+                let length_disable =  (data & 0b0010_0000) != 0;
+                let constant_volume = (data & 0b0001_0000) != 0;
+
+                self.pulse_1.duty = duty_table[duty_index as usize];
+                self.pulse_1.length_counter.halt_flag = length_disable;
+                self.pulse_1.envelope.looping = length_disable;
+                self.pulse_1.envelope.enabled = !(constant_volume);
+                self.pulse_1.envelope.volume_register = data & 0b0000_1111;
+            },
+            0x5002 => {
+                let period_low = data as u16;
+                self.pulse_1.period_initial = (self.pulse_1.period_initial & 0xFF00) | period_low;
+            },
+            0x5003 => {
+                let period_high =  ((data & 0b0000_0111) as u16) << 8;
+                let length_index = (data & 0b1111_1000) >> 3;
+
+                self.pulse_1.period_initial = (self.pulse_1.period_initial & 0x00FF) | period_high;
+                self.pulse_1.length_counter.set_length(length_index);
+
+                // Start this note
+                self.pulse_1.sequence_counter = 0;
+                self.pulse_1.envelope.start_flag = true;
+            },
+            0x5004 => {
+                let duty_index =      (data & 0b1100_0000) >> 6;
+                let length_disable =  (data & 0b0010_0000) != 0;
+                let constant_volume = (data & 0b0001_0000) != 0;
+
+                self.pulse_2.duty = duty_table[duty_index as usize];
+                self.pulse_2.length_counter.halt_flag = length_disable;
+                self.pulse_2.envelope.looping = length_disable;
+                self.pulse_2.envelope.enabled = !(constant_volume);
+                self.pulse_2.envelope.volume_register = data & 0b0000_1111;
+            },
+            0x5006 => {
+                let period_low = data as u16;
+                self.pulse_2.period_initial = (self.pulse_2.period_initial & 0xFF00) | period_low;
+            },
+            0x5007 => {
+                let period_high =  ((data & 0b0000_0111) as u16) << 8;
+                let length_index =  (data & 0b1111_1000) >> 3;
+
+                self.pulse_2.period_initial = (self.pulse_2.period_initial & 0x00FF) | period_high;
+                self.pulse_2.length_counter.set_length(length_index);
+
+                // Start this note
+                self.pulse_2.sequence_counter = 0;
+                self.pulse_2.envelope.start_flag = true;
+            },
+            0x4015 => {
+                self.pulse_1.length_counter.channel_enabled  = (data & 0b0001) != 0;
+                self.pulse_2.length_counter.channel_enabled  = (data & 0b0010) != 0;
+              
+                if !(self.pulse_1.length_counter.channel_enabled) {
+                    self.pulse_1.length_counter.length = 0;
+                }
+                if !(self.pulse_2.length_counter.channel_enabled) {
+                    self.pulse_2.length_counter.length = 0;
+                }
+            }
             0x5100 => {self.prg_mode = data & 0b0000_0011;},
             0x5101 => {self.chr_mode = data & 0b0000_0011;},
             0x5102 => {self.prg_ram_magic_low  = data & 0b0000_0011;},
@@ -651,7 +731,7 @@ impl Mapper for Mmc5 {
 
     fn clock_cpu(&mut self) {
         self.audio_sequencer_counter += 1;
-        if self.audio_sequencer_counter & 0b1 == 0 {
+        if (self.audio_sequencer_counter & 0b1) == 0 {
             self.pulse_1.clock();
             self.pulse_2.clock();
         }
@@ -664,6 +744,13 @@ impl Mapper for Mmc5 {
             // from the underlying APU, but intentionally not clocking the sweep units.
             self.audio_sequencer_counter = 0;
         }
+    }
+
+    fn mix_expansion_audio(&self, nes_sample: f64) -> f64 {
+        let pulse_1_output = (self.pulse_1.output() as f64 / 15.0) - 0.5;
+        let pulse_2_output = (self.pulse_2.output() as f64 / 15.0) - 0.5;
+
+        return (pulse_1_output + pulse_2_output) * 0.20 + nes_sample;
     }
 }
 
