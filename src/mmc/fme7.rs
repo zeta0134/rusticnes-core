@@ -86,6 +86,7 @@ impl Mapper for Fme7 {
 
     fn clock_cpu(&mut self) {
         self.clock_irq();
+        self.expansion_audio_chip.clock();
     }
 
     fn read_ppu(&mut self, address: u16) -> Option<u8> {
@@ -186,6 +187,10 @@ impl Mapper for Fme7 {
     fn irq_flag(&self) -> bool {
         return self.irq_enabled && self.irq_pending;
     }
+
+    fn mix_expansion_audio(&self, nes_sample: f64) -> f64 {
+        return (self.expansion_audio_chip.output() - 0.5) * 0.35 + nes_sample;
+    }
 }
 
 struct ToneGenerator {
@@ -207,7 +212,7 @@ impl ToneGenerator {
         self.period_current += 1;
         if self.period_current >= self.period_compare {
             self.period_current = 0;
-            self.output = self.output & 0b1;
+            self.output = self.output ^ 0b1;
         }
     }
 
