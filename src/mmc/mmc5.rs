@@ -7,6 +7,7 @@ use cartridge::NesHeader;
 use mmc::mapper::*;
 use std::cmp::min;
 use std::cmp::max;
+use apu::PulseChannelState;
 
 #[derive(Copy, Clone, PartialEq)]
 pub enum PpuMode {
@@ -57,6 +58,10 @@ pub struct Mmc5 {
     pub ppu_fetches_this_scanline: u16,
     pub multiplicand_a: u8,
     pub multiplicand_b: u8,
+    pub pulse_1: PulseChannelState,
+    pub pulse_2: PulseChannelState,
+    pub pcm_level: u8,
+    pub audio_sequencer_counter: u16,
 }
 
 fn banked_memory_index(data_store_length: usize, bank_size: usize, bank_number: usize, raw_address: usize) -> usize {
@@ -116,6 +121,10 @@ impl Mmc5 {
             ppu_fetches_this_scanline: 0,
             multiplicand_a: 0xFF,
             multiplicand_b: 0xFF,
+            pulse_1: PulseChannelState::new(false),
+            pulse_2: PulseChannelState::new(false),
+            pcm_level: 0,
+            audio_sequencer_counter: 0,
         }
     }
 
@@ -637,6 +646,23 @@ impl Mapper for Mmc5 {
         match address {
             0x2000 ..= 0x3FFF => {self.write_nametable(address, data)},
             _ => {}
+        }
+    }
+
+    fn clock_cpu(&mut self) {
+        self.audio_sequencer_counter += 1;
+        if self.audio_sequencer_counter & 0b1 == 0 {
+            self.pulse_1.clock();
+            self.pulse_2.clock();
+        }
+        if self.audio_sequencer_counter >= 7446 {
+            self.pulse_1.envelope.clock();
+            self.pulse_2.envelope.clock();
+            self.pulse_1.length_counter.clock();
+            self.pulse_2.length_counter.clock();
+            // Note: MMC5 pulse channels don't support sweep. We're borrowing the implementation
+            // from the underlying APU, but intentionally not clocking the sweep units.
+            self.audio_sequencer_counter = 0;
         }
     }
 }
