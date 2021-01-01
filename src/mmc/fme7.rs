@@ -73,7 +73,7 @@ impl Mapper for Fme7 {
                         return None
                     }
                 } else {
-                    return Some(self.prg_rom[((self.prg_banks[0] * 0x2000) + (address as usize - 0x6000)) % prg_ram_len]);
+                    return Some(self.prg_rom[((self.prg_banks[0] * 0x2000) + (address as usize - 0x6000)) % prg_rom_len]);
                 }
             },
             0x8000 ..= 0x9FFF => return Some(self.prg_rom[((self.prg_banks[1] * 0x2000) + (address as usize - 0x8000)) % prg_rom_len]),
@@ -127,7 +127,9 @@ impl Mapper for Fme7 {
             0xA000 ..= 0xBFFF => {
                 // Execute the stored command with the provided parameter byte
                 match self.command {
-                    0x0 ..= 0x7 => { self.chr_banks[self.command as usize] = data as usize},
+                    0x0 ..= 0x7 => { 
+                        self.chr_banks[self.command as usize] = data as usize
+                    },
                     0x8 =>  {
                         self.prg_ram_enabled = (data & 0b1000_0000) != 0;
                         self.prg_ram_selected = (data & 0b0100_0000) != 0;
