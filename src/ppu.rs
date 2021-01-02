@@ -134,6 +134,25 @@ pub struct PpuState {
     pub recent_writes: Vec<u16>,
 }
 
+fn debug_default_palette() -> Vec<u8> {
+    // Completely arbitrary color selection here, a real NES's boot palette
+    // is somewhat random, determined by analog effects and RAM decay.
+    // My own NES produces this ugly cyan on failed loads, so that's what
+    // we get here.
+    return vec![
+        // BG, cool tones (note that 0c becomes global background color by default)
+        0x0c, 0x0c, 0x1c, 0x2c,
+        0x01, 0x11, 0x21, 0x31,
+        0x02, 0x12, 0x22, 0x32,
+        0x03, 0x13, 0x23, 0x33,
+        // OBJ, warm tones
+        0x05, 0x15, 0x25, 0x35,
+        0x06, 0x16, 0x26, 0x36,
+        0x07, 0x17, 0x27, 0x37,
+        0x08, 0x18, 0x28, 0x38,
+    ];
+}
+
 impl PpuState {
     pub fn new() -> PpuState {
         return PpuState {
@@ -141,7 +160,7 @@ impl PpuState {
             oam: vec!(0u8; 0x100),
             secondary_oam: vec!(SpriteLatch::new(); 8),
             secondary_oam_index: 0,
-            palette: vec!(0u8; 0x20),
+            palette: debug_default_palette(),
             current_frame: 0,
             current_scanline: 0,
             current_scanline_cycle: 0,
