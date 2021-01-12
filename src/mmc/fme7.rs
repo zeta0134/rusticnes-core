@@ -191,7 +191,7 @@ impl Mapper for Fme7 {
     }
 
     fn mix_expansion_audio(&self, nes_sample: f64) -> f64 {
-        return (self.expansion_audio_chip.output() - 0.5) * 0.35 + nes_sample;
+        return (self.expansion_audio_chip.output() - 0.5) * 1.06 - nes_sample;
     }
 }
 
@@ -460,7 +460,7 @@ impl YM2149F {
         let channel_a = self.channel_output(&self.channel_a);
         let channel_b = self.channel_output(&self.channel_b);
         let channel_c = self.channel_output(&self.channel_c);
-        return channel_a + channel_b + channel_c;
+        return (channel_a + channel_b + channel_c) / 3.0;
     }
 
     pub fn execute_command(&mut self, command: u8, data: u8) {
