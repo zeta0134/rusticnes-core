@@ -520,9 +520,7 @@ pub struct ApuState {
 
     // Partial results from the filters
     pub last_dac_sample: f64,
-    pub last_90hz_hp_sample: f64,
-    pub last_440hz_hp_sample: f64,
-    pub last_14khz_lp_sample: f64,
+    pub last_37hz_hp_sample: f64,
 }
 
 fn generate_pulse_table() -> Vec<f64> {
@@ -551,7 +549,8 @@ fn low_pass(sample_rate: f64, cutoff_frequency: f64, previous_output: f64, curre
 
 fn high_pass(sample_rate: f64, cutoff_frequency: f64, previous_output: f64, current_input: f64, previous_input: f64) -> f64 {
     let delta_t = 1.0 / sample_rate;
-    let alpha = cutoff_frequency / (cutoff_frequency + delta_t);
+    let time_constant = 1.0 / cutoff_frequency;    
+    let alpha = time_constant / (time_constant + delta_t);
     let change_in_input = current_input - previous_input;
     let current_output = alpha * previous_output + alpha * change_in_input;
     return current_output;
@@ -583,9 +582,7 @@ impl ApuState {
             pulse_table: generate_pulse_table(),
             tnd_table: generate_tnd_table(),
             last_dac_sample: 0.0,
-            last_90hz_hp_sample: 0.0,
-            last_440hz_hp_sample: 0.0,
-            last_14khz_lp_sample: 0.0,
+            last_37hz_hp_sample: 0.0,
         }
     }
 
@@ -961,20 +958,12 @@ impl ApuState {
             let current_2a03_sample = (pulse_output - 0.5) + (tnd_output - 0.5);
             let current_dac_sample = mapper.mix_expansion_audio(current_2a03_sample);
 
-
-
-            let current_90hz_hp_sample = high_pass(self.sample_rate as f64, 90.0, self.last_90hz_hp_sample, current_dac_sample, self.last_dac_sample);
-            let current_440hz_hp_sample = high_pass(self.sample_rate as f64, 440.0, self.last_440hz_hp_sample, current_90hz_hp_sample, self.last_90hz_hp_sample);
-            let current_14khz_lp_sample = low_pass(self.sample_rate as f64, 14000.0, self.last_14khz_lp_sample, current_440hz_hp_sample);
+            let current_37hz_hp_sample = high_pass(self.sample_rate as f64, 90.0, self.last_37hz_hp_sample, current_dac_sample, self.last_dac_sample);
 
             self.last_dac_sample = current_dac_sample;
-            self.last_90hz_hp_sample = current_90hz_hp_sample;
-            self.last_440hz_hp_sample = current_440hz_hp_sample;
-            self.last_14khz_lp_sample = current_14khz_lp_sample;
+            self.last_37hz_hp_sample = current_37hz_hp_sample;
 
-            //let composite_sample = (current_14khz_lp_sample * 32767.0) as i16;
-            let composite_sample = (current_dac_sample * 32767.0) as i16;
-
+            let composite_sample = (current_37hz_hp_sample * 32767.0) as i16;
 
             self.sample_buffer[self.buffer_index] = composite_sample;
             self.buffer_index = (self.buffer_index + 1) % self.sample_buffer.len();
