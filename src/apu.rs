@@ -539,14 +539,6 @@ fn generate_tnd_table() -> Vec<f64> {
     return tnd_table;
 }
 
-fn low_pass(sample_rate: f64, cutoff_frequency: f64, previous_output: f64, current_input: f64) -> f64 {
-    let delta_t = 1.0 / sample_rate;
-    let tau = 1.0 / cutoff_frequency;
-    let alpha = delta_t / tau;
-    let current_output = previous_output + alpha * (current_input - previous_output);
-    return current_output;
-}
-
 fn high_pass(sample_rate: f64, cutoff_frequency: f64, previous_output: f64, current_input: f64, previous_input: f64) -> f64 {
     let delta_t = 1.0 / sample_rate;
     let time_constant = 1.0 / cutoff_frequency;    
