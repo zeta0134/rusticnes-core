@@ -96,7 +96,7 @@ fn _read_byte(nes: &mut NesState, address: u16, side_effects: bool) -> u8 {
 
                         return nes.ppu.latch;
                     } else {
-                        return nes.ppu.passively_read_byte(&mut *nes.mapper, ppu_addr);
+                        return nes.ppu.debug_read_byte(& *nes.mapper, ppu_addr);
                     }
                 },
                 _ => return 0

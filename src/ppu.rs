@@ -220,34 +220,14 @@ impl PpuState {
         }
     }
 
-    pub fn passively_read_byte(&mut self, mapper: &mut dyn Mapper, address: u16) -> u8 {
-        return self.__read_byte(mapper, address, false);
-    }
-
-    pub fn read_byte(&mut self, mapper: &mut dyn Mapper, address: u16) -> u8 {
-        return self.__read_byte(mapper, address, true);
-    }
-
-    pub fn __read_byte(&mut self, mapper: &mut dyn Mapper, address: u16, side_effects: bool) -> u8 {
+    pub fn debug_read_byte(&self, mapper: &dyn Mapper, address: u16) -> u8 {
         let masked_address = address & 0x3FFF;
-        /*if side_effects {
-            self.recent_reads.insert(0, masked_address);
-            self.recent_reads.truncate(20);
-        }*/
         match masked_address {
             0x0000 ..= 0x3EFF => {
-                if side_effects {
-                    self.open_bus = match mapper.read_ppu(masked_address) {
-                        Some(byte) => byte,
-                        None => self.open_bus
-                    };
-                    return self.open_bus;
-                } else {
-                    return match mapper.debug_read_ppu(masked_address) {
-                        Some(byte) => byte,
-                        None => self.open_bus
-                    };
-                }
+                return match mapper.debug_read_ppu(masked_address) {
+                    Some(byte) => byte,
+                    None => self.open_bus
+                };
             },
             0x3F00 ..= 0x3FFF => {
                 let mut palette_address = masked_address & 0x1F;
@@ -264,6 +244,22 @@ impl PpuState {
             _ => return 0
         }
     }
+
+    pub fn read_byte(&mut self, mapper: &mut dyn Mapper, address: u16) -> u8 {
+        // process side effects here
+        let masked_address = address & 0x3FFF;
+        match masked_address {
+            0x0000 ..= 0x3EFF => {
+                self.open_bus = match mapper.read_ppu(masked_address) {
+                    Some(byte) => byte,
+                    None => self.open_bus
+                };
+                return self.open_bus;
+            }
+            _ => {return self.debug_read_byte(mapper, address);}
+        }
+    }
+
     pub fn write_byte(&mut self, mapper: &mut dyn Mapper, address: u16, data: u8) {
         let masked_address = address & 0x3FFF;
         self.recent_writes.insert(0, masked_address);
@@ -722,7 +718,7 @@ impl PpuState {
         }
     }
 
-    pub fn get_bg_tile(&mut self, mapper: &mut dyn Mapper, tx: u8, ty: u8) -> u8 {
+    pub fn get_bg_tile(&self, mapper: &dyn Mapper, tx: u8, ty: u8) -> u8 {
         let mut address: u16 = 0x2000;
         if tx > 31 {
             address = address + 0x0400;
@@ -731,10 +727,10 @@ impl PpuState {
             address = address + 0x0800;
         }
         address = address + ((ty % 30) as u16) * 32 + ((tx & 0x1F) as u16);
-        return self.passively_read_byte(mapper, address);
+        return self.debug_read_byte(mapper, address);
     }
 
-    pub fn get_bg_palette(&mut self, mapper: &mut dyn Mapper, tx: u8, ty: u8) -> u8 {
+    pub fn get_bg_palette(&self, mapper: &dyn Mapper, tx: u8, ty: u8) -> u8 {
         let mut address: u16 = 0x23C0;
         if tx > 31 {
             address = address + 0x0400;
@@ -744,7 +740,7 @@ impl PpuState {
         }
         address += ((tx & 0x1F) >> 2) as u16;
         address += (((ty % 30) >> 2) as u16)* 0x8;
-        let attr_byte = self.passively_read_byte(mapper, address);
+        let attr_byte = self.debug_read_byte(mapper, address);
         let shift = (((tx & 0x2) >> 1) + ((ty % 30) & 0x2)) << 1;
         let mask = 0x3 << shift;
         return (attr_byte & mask) >> shift;
