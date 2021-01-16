@@ -84,26 +84,32 @@ impl Mmc3 {
         }
     }
 
-    fn _read_ppu(&mut self, address: u16, side_effects: bool) -> Option<u8> {
+    fn snoop_ppu_read(&mut self, address: u16) {
+        match address {
+            0x0000 ..= 0x1FFF => {
+                self.last_chr_read = address;
+                let current_a12 = ((address & 0b0001_0000_0000_0000) >> 12) as u8;
+                if current_a12 == 1 && self.last_a12 == 0 {
+                    if self.irq_counter == 0 || self.irq_reload_requested {
+                        self.irq_counter = self.irq_reload;
+                        self.irq_reload_requested = false;
+                    } else {
+                        self.irq_counter -= 1;                        
+                    }
+                    if self.irq_counter == 0 && self.irq_enabled {
+                        self.irq_flag = true;                        
+                    }
+                }
+                self.last_a12 = current_a12;
+            }
+            _ => {}
+        }
+    }
+
+    fn _read_ppu(&self, address: u16) -> Option<u8> {
         match address {
             // CHR
             0x0000 ..= 0x1FFF => {
-                if side_effects {
-                    self.last_chr_read = address;
-                    let current_a12 = ((address & 0b0001_0000_0000_0000) >> 12) as u8;
-                    if current_a12 == 1 && self.last_a12 == 0 {
-                        if self.irq_counter == 0 || self.irq_reload_requested {
-                            self.irq_counter = self.irq_reload;
-                            self.irq_reload_requested = false;
-                        } else {
-                            self.irq_counter -= 1;                        
-                        }
-                        if self.irq_counter == 0 && self.irq_enabled {
-                            self.irq_flag = true;                        
-                        }
-                    }
-                    self.last_a12 = current_a12;
-                }
                 let chr_rom_len = self.chr_rom.len();
                 if self.switch_chr_banks {
                     match address {
@@ -155,7 +161,7 @@ impl Mapper for Mmc3 {
         return self.irq_flag;
     }
 
-    fn read_cpu(&mut self, address: u16) -> Option<u8> {
+    fn debug_read_cpu(&self, address: u16) -> Option<u8> {
         match address {
             // PRG RAM
             0x6000 ..= 0x7FFF => {
@@ -260,11 +266,12 @@ impl Mapper for Mmc3 {
     }
 
     fn read_ppu(&mut self, address: u16) -> Option<u8> {
-        return self._read_ppu(address, true);
+        self.snoop_ppu_read(address);
+        return self._read_ppu(address);
     }
 
-    fn debug_read_ppu(&mut self, address: u16) -> Option<u8> {
-        return self._read_ppu(address, false);
+    fn debug_read_ppu(&self, address: u16) -> Option<u8> {
+        return self._read_ppu(address);
     }
 
     fn write_ppu(&mut self, address: u16, data: u8) {

@@ -18,11 +18,11 @@ impl Mapper for NoneMapper {
         return Mirroring::Horizontal;
     }
     
-    fn read_cpu(&mut self, _: u16) -> Option<u8> {
+    fn debug_read_cpu(&self, _: u16) -> Option<u8> {
         return None;
     }
 
-    fn read_ppu(&mut self, _: u16) -> Option<u8> {
+    fn debug_read_ppu(&self, _: u16) -> Option<u8> {
         return None;
     }
 

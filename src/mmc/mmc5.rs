@@ -412,11 +412,7 @@ impl Mmc5 {
         }
     }
 
-    fn _read_cpu(&mut self, address: u16, side_effects: bool) -> Option<u8> {
-        if side_effects {
-            self.snoop_cpu_read(address);
-            self.read_pcm_sample(address);
-        }
+    fn _read_cpu(&self, address: u16) -> Option<u8> {
         match address {
             0x5010 => {
                 let mut pcm_status = 0;
@@ -425,9 +421,6 @@ impl Mmc5 {
                 }
                 if self.pcm_irq_pending {
                     pcm_status |= 0b1000_0000;   
-                }
-                if side_effects {
-                    self.pcm_irq_pending = false;
                 }
                 return Some(pcm_status)
             },
@@ -448,9 +441,6 @@ impl Mmc5 {
                 }
                 if self.in_frame {
                     status |= 0b0100_0000;
-                }
-                if side_effects {
-                    self.irq_pending = false;
                 }
                 return Some(status);
             }
@@ -535,6 +525,14 @@ impl Mmc5 {
             self.current_scanline = 0;
             self.ppu_read_mode = PpuMode::PpuData;
         }
+
+        self.read_pcm_sample(address);
+
+        match address {
+            0x5010 => {self.pcm_irq_pending = false;}
+            0x5204 => {self.irq_pending = false;}
+            _ => {}
+        }
     }
 
     fn is_extended_attribute(&self) -> bool {
@@ -552,10 +550,7 @@ impl Mmc5 {
         return ppu_rendering_backgrounds & extended_attributes_enabled & reading_pattern_byte;
     }
 
-    fn _read_ppu(&mut self, address: u16, side_effects: bool) -> Option<u8> {
-        if side_effects {
-            self.snoop_ppu_read(address);
-        }
+    fn _read_ppu(&self, address: u16) -> Option<u8> {
         match address {
             0x0000 ..= 0x1FFF => {
                 if self.is_extended_pattern() {
@@ -605,11 +600,12 @@ impl Mapper for Mmc5 {
     }
     
     fn read_cpu(&mut self, address: u16) -> Option<u8> {
-        return self._read_cpu(address, true);
+        self.snoop_cpu_read(address);
+        return self._read_cpu(address);
     }
 
-    fn debug_read_cpu(&mut self, address: u16) -> Option<u8> {
-        return self._read_cpu(address, false);
+    fn debug_read_cpu(&self, address: u16) -> Option<u8> {
+        return self._read_cpu(address);
     }
 
     fn write_cpu(&mut self, address: u16, data: u8) {
@@ -754,12 +750,13 @@ impl Mapper for Mmc5 {
         }
     }
 
-    fn debug_read_ppu(&mut self, address: u16) -> Option<u8> {
-        return self._read_ppu(address, false);
+    fn debug_read_ppu(&self, address: u16) -> Option<u8> {
+        return self._read_ppu(address);
     }
 
     fn read_ppu(&mut self, address: u16) -> Option<u8> {
-        return self._read_ppu(address, true);
+        self.snoop_ppu_read(address);
+        return self._read_ppu(address);
     }
 
     fn write_ppu(&mut self, address: u16, data: u8) {

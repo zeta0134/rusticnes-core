@@ -43,7 +43,7 @@ impl Mapper for Nrom {
         return self.mirroring;
     }
     
-    fn read_cpu(&mut self, address: u16) -> Option<u8> {
+    fn debug_read_cpu(&self, address: u16) -> Option<u8> {
         match address {
             0x6000 ..= 0x7FFF => {
                 let prg_ram_len = self.prg_ram.len();
@@ -73,7 +73,7 @@ impl Mapper for Nrom {
         }
     }
 
-    fn read_ppu(&mut self, address: u16) -> Option<u8> {
+    fn debug_read_ppu(&self, address: u16) -> Option<u8> {
         match address {
             0x0000 ..= 0x1FFF => return Some(self.chr_rom[address as usize]),
             0x2000 ..= 0x3FFF => return match self.mirroring {

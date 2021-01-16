@@ -82,6 +82,10 @@ impl Mapper for Mmc1 {
 
     fn read_cpu(&mut self, address: u16) -> Option<u8> {
         self.last_write = false;
+        return self.debug_read_cpu(address);
+    }
+
+    fn debug_read_cpu(&self, address: u16) -> Option<u8> {
         match address {
             // PRG RAM
             0x6000 ..= 0x7FFF => {
@@ -214,7 +218,7 @@ impl Mapper for Mmc1 {
         }
     }
 
-    fn read_ppu(&mut self, address: u16) -> Option<u8> {
+    fn debug_read_ppu(&self, address: u16) -> Option<u8> {
         match address {
             // CHR Bank 0
             0x0000 ..= 0x0FFF => {

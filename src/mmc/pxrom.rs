@@ -53,7 +53,7 @@ impl Mapper for PxRom {
         return self.mirroring;
     }
   
-    fn read_cpu(&mut self, address: u16) -> Option<u8> {
+    fn debug_read_cpu(&self, address: u16) -> Option<u8> {
         match address {
             0x6000 ..= 0x7FFF => {
                 let prg_ram_len = self.prg_ram.len();
@@ -101,6 +101,17 @@ impl Mapper for PxRom {
 
     fn read_ppu(&mut self, address: u16) -> Option<u8> {
         match address {
+            0x0FD8 => {self.chr_0_latch = 0;},
+            0x0FE8 => {self.chr_0_latch = 1;},
+            0x1FD8 ..= 0x1FDF => {self.chr_1_latch = 0;},
+            0x1FE8 ..= 0x1FEF => {self.chr_1_latch = 1;},
+            _ => {}
+        }
+        return self.debug_read_ppu(address);
+    }
+
+    fn debug_read_ppu(&self, address: u16) -> Option<u8> {
+        match address {
             0x0000 ..= 0x0FFF => {
                 let chr_rom_len = self.chr_rom.len();
                 let chr_bank = match self.chr_0_latch {
@@ -109,11 +120,6 @@ impl Mapper for PxRom {
                     _ => 0
                 };
                 let chr_byte = Some(self.chr_rom[((chr_bank * 0x1000) + (address as usize)) % chr_rom_len]);
-                match address {
-                    0x0FD8 => {self.chr_0_latch = 0;},
-                    0x0FE8 => {self.chr_0_latch = 1;},
-                    _ => {}
-                }
                 return chr_byte;
             },
             0x1000 ..= 0x1FFF => {
@@ -124,11 +130,6 @@ impl Mapper for PxRom {
                     _ => 0
                 };
                 let chr_byte = Some(self.chr_rom[((chr_bank * 0x1000) + ((address - 0x1000) as usize)) % chr_rom_len]);
-                match address {
-                    0x1FD8 ..= 0x1FDF => {self.chr_1_latch = 0;},
-                    0x1FE8 ..= 0x1FEF => {self.chr_1_latch = 1;},
-                    _ => {}
-                }
                 return chr_byte;
             },
             0x2000 ..= 0x3FFF => return match self.mirroring {

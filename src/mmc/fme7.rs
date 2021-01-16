@@ -61,7 +61,7 @@ impl Mapper for Fme7 {
         return Mirroring::Horizontal;
     }
     
-    fn read_cpu(&mut self, address: u16) -> Option<u8> {
+    fn debug_read_cpu(&self, address: u16) -> Option<u8> {
         let prg_rom_len = self.prg_rom.len();
         let prg_ram_len = self.prg_ram.len();
         match address {
@@ -89,7 +89,7 @@ impl Mapper for Fme7 {
         self.expansion_audio_chip.clock();
     }
 
-    fn read_ppu(&mut self, address: u16) -> Option<u8> {
+    fn debug_read_ppu(&self, address: u16) -> Option<u8> {
         let chr_rom_len = self.chr_rom.len();
         match address {
             0x0000 ..= 0x03FF => return Some(self.chr_rom[((self.chr_banks[0] * 0x400) + (address as usize - 0x0000)) % chr_rom_len]),

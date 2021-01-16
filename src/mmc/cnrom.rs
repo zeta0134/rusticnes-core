@@ -36,7 +36,7 @@ impl Mapper for CnRom {
         return self.mirroring;
     }
 
-    fn read_cpu(&mut self, address: u16) -> Option<u8> {
+    fn debug_read_cpu(&self, address: u16) -> Option<u8> {
         match address {
             0x8000 ..= 0xFFFF => {
                 let prg_rom_len = self.prg_rom.len();
@@ -55,7 +55,7 @@ impl Mapper for CnRom {
         }
     }
 
-    fn read_ppu(&mut self, address: u16) -> Option<u8> {
+    fn debug_read_ppu(&self, address: u16) -> Option<u8> {
         match address {
             0x0000 ..= 0x1FFF => {
                 let chr_rom_len = self.chr_rom.len();
