@@ -578,7 +578,7 @@ impl ApuState {
         }
     }
 
-    pub fn read_register(&mut self, address: u16) -> u8 {
+    pub fn debug_read_register(&self, address: u16) -> u8 {
         match address {
             0x4015 => {
                 let mut status = 0;
@@ -604,12 +604,21 @@ impl ApuState {
                 if self.dmc.interrupt_flag {
                     status += 0b1000_0000;   
                 }
-                // Reading from this register resets frame_interrupt:
-                self.frame_interrupt = false;
                 return status;
             },
             _ => return 0
         }
+    }
+
+    pub fn read_register(&mut self, address: u16) -> u8 {
+        match address {
+            0x4015 => {
+                // Reading from this register resets frame_interrupt:
+                self.frame_interrupt = false;                
+            },
+            _ => {}
+        }
+        return self.debug_read_register(address);
     }
 
     pub fn write_register(&mut self, address: u16, data: u8) {
