@@ -521,6 +521,7 @@ pub struct ApuState {
     // Partial results from the filters
     pub last_dac_sample: f64,
     pub last_37hz_hp_sample: f64,
+    pub last_lp_sample: f64,
 }
 
 fn generate_pulse_table() -> Vec<f64> {
@@ -545,6 +546,14 @@ fn high_pass(sample_rate: f64, cutoff_frequency: f64, previous_output: f64, curr
     let alpha = time_constant / (time_constant + delta_t);
     let change_in_input = current_input - previous_input;
     let current_output = alpha * previous_output + alpha * change_in_input;
+    return current_output;
+}
+
+fn low_pass(sample_rate: f64, cutoff_frequency: f64, previous_output: f64, current_input: f64) -> f64 {
+    let delta_t = 1.0 / sample_rate;
+    let time_constant = 1.0 / cutoff_frequency;
+    let alpha = delta_t / (time_constant + delta_t);
+    let current_output = previous_output + alpha * (current_input - previous_output);
     return current_output;
 }
 
@@ -575,6 +584,7 @@ impl ApuState {
             tnd_table: generate_tnd_table(),
             last_dac_sample: 0.0,
             last_37hz_hp_sample: 0.0,
+            last_lp_sample: 0.0,
         }
     }
 
@@ -918,14 +928,52 @@ impl ApuState {
             self.noise.clock();
             self.dmc.clock(mapper);
         }
+        
+        // Collect current samples from the various channels
+        let pulse_1_sample = self.pulse_1.output();
+        let pulse_2_sample = self.pulse_2.output();
+        let triangle_sample = self.triangle.output();
+        let noise_sample = self.noise.output();
+        let dmc_sample = self.dmc.output();
+
+        // Mix samples, using the LUT we generated earlier, based on documentation here:
+        // https://wiki.nesdev.com/w/index.php/APU_Mixer
+        let mut combined_pulse = 0;
+        if !(self.pulse_1.debug_disable) {
+            combined_pulse += pulse_1_sample;
+        }
+        if !(self.pulse_2.debug_disable) {
+            combined_pulse += pulse_2_sample;
+        }
+        let pulse_output = self.pulse_table[combined_pulse as usize];
+        let mut tnd_index = 0;
+        if !(self.triangle.debug_disable) {
+            tnd_index += triangle_sample * 3;
+        }
+        if !(self.noise.debug_disable) {
+            tnd_index += noise_sample * 2;
+        }
+        if !(self.dmc.debug_disable) {
+            tnd_index += dmc_sample;
+        }
+        let tnd_output = self.tnd_table[tnd_index as usize];
+        let current_2a03_sample = (pulse_output - 0.5) + (tnd_output - 0.5);
+        let current_dac_sample = mapper.mix_expansion_audio(current_2a03_sample);
+
+        // Apply FamiCom's low pass, using the CPU clock rate as the sample rate
+        let current_37hz_hp_sample = high_pass(self.cpu_clock_rate as f64, 37.0, self.last_37hz_hp_sample, current_dac_sample, self.last_dac_sample);
+        self.last_dac_sample = current_dac_sample;
+        self.last_37hz_hp_sample = current_37hz_hp_sample;
+
+        // Apply a high pass at half the target sample rate
+        let current_lp_sample = low_pass(self.cpu_clock_rate as f64, (self.sample_rate / 2) as f64, self.last_lp_sample, current_37hz_hp_sample);
+        self.last_lp_sample = current_lp_sample;
 
         if self.current_cycle >= self.next_sample_at {
-            // Collect current samples from the various channels
-            let pulse_1_sample = self.pulse_1.output();
-            let pulse_2_sample = self.pulse_2.output();
-            let triangle_sample = self.triangle.output();
-            let noise_sample = self.noise.output();
-            let dmc_sample = self.dmc.output();
+            //let composite_sample = (current_37hz_hp_sample * 32767.0) as i16;
+            let composite_sample = (current_lp_sample * 32767.0) as i16;
+
+            self.sample_buffer[self.buffer_index] = composite_sample;
 
             // Write debug buffers from these, regardless of enable / disable status
             self.pulse_1.debug_buffer[self.buffer_index] = pulse_1_sample;
@@ -934,41 +982,7 @@ impl ApuState {
             self.noise.debug_buffer[self.buffer_index] = noise_sample;
             self.dmc.debug_buffer[self.buffer_index] = dmc_sample;
 
-            // Mix samples, using the LUT we generated earlier, based on documentation here:
-            // https://wiki.nesdev.com/w/index.php/APU_Mixer
-            let mut combined_pulse = 0;
-            if !(self.pulse_1.debug_disable) {
-                combined_pulse += pulse_1_sample;
-            }
-            if !(self.pulse_2.debug_disable) {
-                combined_pulse += pulse_2_sample;
-            }
-            let pulse_output = self.pulse_table[combined_pulse as usize];
-
-            let mut tnd_index = 0;
-            if !(self.triangle.debug_disable) {
-                tnd_index += triangle_sample * 3;
-            }
-            if !(self.noise.debug_disable) {
-                tnd_index += noise_sample * 2;
-            }
-            if !(self.dmc.debug_disable) {
-                tnd_index += dmc_sample;
-            }
-            let tnd_output = self.tnd_table[tnd_index as usize];
-            let current_2a03_sample = (pulse_output - 0.5) + (tnd_output - 0.5);
-            let current_dac_sample = mapper.mix_expansion_audio(current_2a03_sample);
-
-            let current_37hz_hp_sample = high_pass(self.sample_rate as f64, 90.0, self.last_37hz_hp_sample, current_dac_sample, self.last_dac_sample);
-
-            self.last_dac_sample = current_dac_sample;
-            self.last_37hz_hp_sample = current_37hz_hp_sample;
-
-            let composite_sample = (current_37hz_hp_sample * 32767.0) as i16;
-
-            self.sample_buffer[self.buffer_index] = composite_sample;
             self.buffer_index = (self.buffer_index + 1) % self.sample_buffer.len();
-
             self.generated_samples += 1;
             self.next_sample_at = ((self.generated_samples + 1) * self.cpu_clock_rate) / self.sample_rate;
 
@@ -977,6 +991,8 @@ impl ApuState {
                 self.output_buffer.copy_from_slice(&self.sample_buffer);
                 self.buffer_full = true;
             }
+
+            
         }
 
         self.current_cycle += 1;
