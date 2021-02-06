@@ -1,0 +1,81 @@
+use super::length_counter::LengthCounterState;
+
+pub struct TriangleChannelState {
+    pub debug_disable: bool,
+    pub debug_buffer: Vec<i16>,
+    pub length_counter: LengthCounterState,
+
+    pub control_flag: bool,
+    pub linear_reload_flag: bool,
+    pub linear_counter_initial: u8,
+    pub linear_counter_current: u8,
+
+    pub sequence_counter: u8,
+    pub period_initial: u16,
+    pub period_current: u16,
+    pub length: u8,
+}
+
+impl TriangleChannelState {
+    pub fn new() -> TriangleChannelState {
+        return TriangleChannelState {
+            debug_disable: false,
+            debug_buffer: vec!(0i16; 4096),
+            length_counter: LengthCounterState::new(),
+            control_flag: false,
+            linear_reload_flag: false,
+            linear_counter_initial: 0,
+            linear_counter_current: 0,
+
+            sequence_counter: 0,
+            period_initial: 0,
+            period_current: 0,
+            length: 0,
+        }
+    }
+
+    pub fn update_linear_counter(&mut self) {
+        if self.linear_reload_flag {
+            self.linear_counter_current = self.linear_counter_initial;
+        } else {
+            if self.linear_counter_current > 0 {
+                self.linear_counter_current -= 1;
+            }
+        }
+        if !(self.control_flag) {
+            self.linear_reload_flag = false;
+        }
+    }
+
+    pub fn clock(&mut self) {
+        if self.linear_counter_current != 0 && self.length_counter.length > 0 {
+            if self.period_current == 0 {
+                // Reset the period timer, and clock the waveform generator
+                self.period_current = self.period_initial;
+
+                // The sequence counter starts at zero, but counts downwards, resulting in an odd
+                // lookup sequence of 0, 7, 6, 5, 4, 3, 2, 1
+                if self.sequence_counter >= 31 {
+                    self.sequence_counter = 0;
+                } else {
+                    self.sequence_counter += 1;
+                }
+            } else {
+                self.period_current -= 1;
+            }
+        }
+    }
+
+    pub fn output(&self) -> i16 {
+        if self.period_initial <= 2 {
+            // This frequency is so high that the hardware mixer can't keep up, and effectively
+            // receives 7.5. We'll just return 7 here (close enough). Some games use this
+            // to silence the channel, and returning 7 emulates the resulting clicks and pops.
+            return 7;
+        } else {
+            let triangle_sequence = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,
+                                     15,14,13,12,11,10,9,8,7,6,5,4,3,2,1,0];
+            return triangle_sequence[self.sequence_counter as usize];
+        }
+    }
+}
