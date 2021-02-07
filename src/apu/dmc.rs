@@ -1,8 +1,12 @@
 use mmc::mapper::Mapper;
+use super::audio_channel::AudioChannelState;
+use super::ring_buffer::RingBuffer;
 
 pub struct DmcState {
+    pub name: String,
     pub debug_disable: bool,
     pub debug_buffer: Vec<i16>,
+    pub output_buffer: RingBuffer,
 
     pub looping: bool,
     pub period_initial: u16,
@@ -26,10 +30,12 @@ pub struct DmcState {
 }
 
 impl DmcState {
-    pub fn new() -> DmcState {
+    pub fn new(channel_name: &str) -> DmcState {
         return DmcState {
+            name: String::from(channel_name),
             debug_disable: false,
             debug_buffer: vec!(0i16; 4096),
+            output_buffer: RingBuffer::new(32768),
 
             looping: false,
             period_initial: 428,
@@ -133,5 +139,39 @@ impl DmcState {
 
     pub fn output(&self) -> i16 {
         return self.output_level as i16;
+    }
+}
+
+impl AudioChannelState for DmcState {
+    fn name(&self) -> String {
+        return self.name.clone();
+    }
+
+    fn sample_buffer(&self) -> &RingBuffer {
+        return &self.output_buffer;
+    }
+
+    fn record_current_output(&mut self) {
+        self.output_buffer.push(self.output());
+    }
+
+    fn min_sample(&self) -> i16 {
+        return 0;
+    }
+
+    fn max_sample(&self) -> i16 {
+        return 127;
+    }
+
+    fn muted(&self) -> bool {
+        return self.debug_disable;
+    }
+
+    fn mute(&mut self) {
+        self.debug_disable = true;
+    }
+
+    fn unmute(&mut self) {
+        self.debug_disable = false;
     }
 }

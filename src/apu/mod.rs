@@ -3,16 +3,20 @@ use mmc::mapper::Mapper;
 use std::fs::OpenOptions;
 use std::io::prelude::*;
 
+mod audio_channel;
 mod dmc;
 mod length_counter;
 mod noise;
 mod pulse;
+mod ring_buffer;
 mod triangle;
 mod volume_envelope;
 
+pub use self::audio_channel::AudioChannelState;
 pub use self::dmc::DmcState;
 pub use self::noise::NoiseChannelState;
 pub use self::pulse::PulseChannelState;
+pub use self::ring_buffer::RingBuffer;
 pub use self::triangle::TriangleChannelState;
 
 pub struct ApuState {
@@ -31,7 +35,7 @@ pub struct ApuState {
     pub noise: NoiseChannelState,
     pub dmc: DmcState,
 
-    pub sample_buffer: Vec<i16>,
+    pub staging_buffer: RingBuffer,
     pub output_buffer: Vec<i16>,
     pub buffer_full: bool,
     pub sample_rate: u64,
@@ -93,12 +97,12 @@ impl ApuState {
             frame_reset_delay: 0,
             frame_interrupt: false,
             disable_interrupt: false,
-            pulse_1: PulseChannelState::new(true),
-            pulse_2: PulseChannelState::new(false),
-            triangle: TriangleChannelState::new(),
-            noise: NoiseChannelState::new(),
-            dmc: DmcState::new(),
-            sample_buffer: vec!(0i16; 4096),
+            pulse_1: PulseChannelState::new("[2A03] Pulse 1", true),
+            pulse_2: PulseChannelState::new("[2A03] Pulse 2", false),
+            triangle: TriangleChannelState::new("[2A03] Triangle"),
+            noise: NoiseChannelState::new("[2A03] Noise"),
+            dmc: DmcState::new("[2A03] DMC"),
+            staging_buffer: RingBuffer::new(4096),
             output_buffer: vec!(0i16; 4096),
             buffer_full: false,
             sample_rate: 44100,
@@ -112,6 +116,16 @@ impl ApuState {
             last_37hz_hp_sample: 0.0,
             last_lp_sample: 0.0,
         }
+    }
+
+    pub fn channels(&self) -> Vec<& dyn AudioChannelState> {
+        let mut channels: Vec<& dyn AudioChannelState> = Vec::new();
+        channels.push(&self.pulse_1);
+        channels.push(&self.pulse_2);
+        channels.push(&self.triangle);
+        channels.push(&self.noise);
+        channels.push(&self.dmc);
+        return channels;
     }
 
     pub fn debug_read_register(&self, address: u16) -> u8 {
@@ -499,22 +513,24 @@ impl ApuState {
             //let composite_sample = (current_37hz_hp_sample * 32767.0) as i16;
             let composite_sample = (current_lp_sample * 32767.0) as i16;
 
-            self.sample_buffer[self.buffer_index] = composite_sample;
+            //self.sample_buffer[self.buffer_index] = composite_sample;
+            self.staging_buffer.push(composite_sample);
 
             // Write debug buffers from these, regardless of enable / disable status
-            self.pulse_1.debug_buffer[self.buffer_index] = pulse_1_sample;
-            self.pulse_2.debug_buffer[self.buffer_index] = pulse_2_sample;
-            self.triangle.debug_buffer[self.buffer_index] = triangle_sample;
-            self.noise.debug_buffer[self.buffer_index] = noise_sample;
-            self.dmc.debug_buffer[self.buffer_index] = dmc_sample;
+            self.pulse_1.record_current_output();
+            self.pulse_2.record_current_output();
+            self.triangle.record_current_output();
+            self.noise.record_current_output();
+            self.dmc.record_current_output();
 
-            self.buffer_index = (self.buffer_index + 1) % self.sample_buffer.len();
+            //self.buffer_index = (self.buffer_index + 1) % self.sample_buffer.len();
+
             self.generated_samples += 1;
             self.next_sample_at = ((self.generated_samples + 1) * self.cpu_clock_rate) / self.sample_rate;
 
-            if self.buffer_index == 0 {
+            if self.staging_buffer.index() == 0 {
                 //self.dump_sample_buffer();
-                self.output_buffer.copy_from_slice(&self.sample_buffer);
+                self.output_buffer.copy_from_slice(self.staging_buffer.buffer());
                 self.buffer_full = true;
             }
 
@@ -546,5 +562,38 @@ impl ApuState {
 
     pub fn irq_signal(&self) -> bool {
         return self.frame_interrupt || self.dmc.interrupt_flag;
+    }
+}
+
+// The APU itself counts as a channel, loosely, mostly for debugging purposes. Its output is a
+// simple waveform, and it provides no useful frequency information.
+impl AudioChannelState for ApuState {
+    fn name(&self) -> String {
+        return "Final Mix".to_string();
+    }
+
+    fn sample_buffer(&self) -> &RingBuffer {
+        return &self.staging_buffer;
+    }
+
+    fn record_current_output(&mut self) {
+    }
+
+    fn min_sample(&self) -> i16 {
+        return -16384;
+    }
+
+    fn max_sample(&self) -> i16 {
+        return 16383;
+    }
+
+    fn muted(&self) -> bool {
+        return false;
+    }
+
+    fn mute(&mut self) {
+    }
+
+    fn unmute(&mut self) {        
     }
 }

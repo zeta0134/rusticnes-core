@@ -1,9 +1,13 @@
 use super::length_counter::LengthCounterState;
 use super::volume_envelope::VolumeEnvelopeState;
+use super::audio_channel::AudioChannelState;
+use super::ring_buffer::RingBuffer;
 
 pub struct NoiseChannelState {
+    pub name: String,
     pub debug_disable: bool,
     pub debug_buffer: Vec<i16>,
+    pub output_buffer: RingBuffer,
     pub length: u8,
     pub length_halt_flag: bool,
 
@@ -19,10 +23,12 @@ pub struct NoiseChannelState {
 }
 
 impl NoiseChannelState {
-    pub fn new() -> NoiseChannelState {
+    pub fn new(channel_name: &str) -> NoiseChannelState {
         return NoiseChannelState {
+            name: String::from(channel_name),
             debug_disable: false,
             debug_buffer: vec!(0i16; 4096),
+            output_buffer: RingBuffer::new(32768),
             length: 0,
             length_halt_flag: false,
 
@@ -62,5 +68,39 @@ impl NoiseChannelState {
         } else {
             return 0;
         }
+    }
+}
+
+impl AudioChannelState for NoiseChannelState {
+    fn name(&self) -> String {
+        return self.name.clone();
+    }
+
+    fn sample_buffer(&self) -> &RingBuffer {
+        return &self.output_buffer;
+    }
+
+    fn record_current_output(&mut self) {
+        self.output_buffer.push(self.output());
+    }
+
+    fn min_sample(&self) -> i16 {
+        return 0;
+    }
+
+    fn max_sample(&self) -> i16 {
+        return 15;
+    }
+
+    fn muted(&self) -> bool {
+        return self.debug_disable;
+    }
+
+    fn mute(&mut self) {
+        self.debug_disable = true;
+    }
+
+    fn unmute(&mut self) {
+        self.debug_disable = false;
     }
 }

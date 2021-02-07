@@ -1,8 +1,12 @@
 use super::length_counter::LengthCounterState;
+use super::audio_channel::AudioChannelState;
+use super::ring_buffer::RingBuffer;
 
 pub struct TriangleChannelState {
+    pub name: String,
     pub debug_disable: bool,
     pub debug_buffer: Vec<i16>,
+    pub output_buffer: RingBuffer,
     pub length_counter: LengthCounterState,
 
     pub control_flag: bool,
@@ -17,10 +21,12 @@ pub struct TriangleChannelState {
 }
 
 impl TriangleChannelState {
-    pub fn new() -> TriangleChannelState {
+    pub fn new(channel_name: &str) -> TriangleChannelState {
         return TriangleChannelState {
+            name: String::from(channel_name),
             debug_disable: false,
             debug_buffer: vec!(0i16; 4096),
+            output_buffer: RingBuffer::new(32768),
             length_counter: LengthCounterState::new(),
             control_flag: false,
             linear_reload_flag: false,
@@ -77,5 +83,39 @@ impl TriangleChannelState {
                                      15,14,13,12,11,10,9,8,7,6,5,4,3,2,1,0];
             return triangle_sequence[self.sequence_counter as usize];
         }
+    }
+}
+
+impl AudioChannelState for TriangleChannelState {
+    fn name(&self) -> String {
+        return self.name.clone();
+    }
+
+    fn sample_buffer(&self) -> &RingBuffer {
+        return &self.output_buffer;
+    }
+
+    fn record_current_output(&mut self) {
+        self.output_buffer.push(self.output());
+    }
+
+    fn min_sample(&self) -> i16 {
+        return 0;
+    }
+
+    fn max_sample(&self) -> i16 {
+        return 15;
+    }
+
+    fn muted(&self) -> bool {
+        return self.debug_disable;
+    }
+
+    fn mute(&mut self) {
+        self.debug_disable = true;
+    }
+
+    fn unmute(&mut self) {
+        self.debug_disable = false;
     }
 }

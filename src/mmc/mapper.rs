@@ -1,3 +1,5 @@
+use apu::AudioChannelState;
+
 #[derive(Copy, Clone, PartialEq)]
 pub enum Mirroring {
     Horizontal,
@@ -32,4 +34,5 @@ pub trait Mapper: Send {
     fn irq_flag(&self) -> bool {return false;}
     fn clock_cpu(&mut self) {}
     fn mix_expansion_audio(&self, nes_sample: f64) -> f64 {return nes_sample;}
+    fn channels(&self) ->  Vec<& dyn AudioChannelState> {return Vec::new();}
 }
