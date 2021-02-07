@@ -5,6 +5,9 @@ use cartridge::NesHeader;
 use mmc::mapper::*;
 use mmc::mirroring;
 
+use apu::AudioChannelState;
+use apu::RingBuffer;
+
 pub struct Fme7 {
     pub prg_rom: Vec<u8>,
     pub prg_ram: Vec<u8>,
@@ -193,6 +196,18 @@ impl Mapper for Fme7 {
     fn mix_expansion_audio(&self, nes_sample: f64) -> f64 {
         return (self.expansion_audio_chip.output() - 0.5) * 1.06 - nes_sample;
     }
+
+    fn channels(&self) ->  Vec<& dyn AudioChannelState> {
+        let mut channels: Vec<& dyn AudioChannelState> = Vec::new();
+        channels.push(&self.expansion_audio_chip.channel_a);
+        channels.push(&self.expansion_audio_chip.channel_b);
+        channels.push(&self.expansion_audio_chip.channel_c);
+        return channels;
+    }
+
+    fn record_expansion_audio_output(&mut self) {
+        self.expansion_audio_chip.record_output();
+    }
 }
 
 struct ToneGenerator {
@@ -366,6 +381,10 @@ impl EnvelopeGenerator {
 }
 
 struct YmChannel {
+    pub name: String,
+    pub output_buffer: RingBuffer,
+    pub muted: bool,
+
     pub tone: ToneGenerator,
     pub tone_enabled: bool,
     pub noise_enabled: bool,
@@ -374,14 +393,55 @@ struct YmChannel {
 }
 
 impl YmChannel {
-    pub fn new() -> YmChannel {
+    pub fn new(channel_name: &str) -> YmChannel {
         return YmChannel {
+            name: String::from(channel_name),
+            output_buffer: RingBuffer::new(32768),
+            muted: false,
             tone: ToneGenerator::new(),
             tone_enabled: false,
             noise_enabled: false,
             envelope_enabled: false,
             static_volume: 0,
         }
+    }
+
+    pub fn record_sample(&mut self, sample: i16) {
+        self.output_buffer.push(sample);
+    }
+}
+
+impl AudioChannelState for YmChannel {
+    fn name(&self) -> String {
+        return self.name.clone();
+    }
+
+    fn sample_buffer(&self) -> &RingBuffer {
+        return &self.output_buffer;
+    }
+
+    fn record_current_output(&mut self) {
+        // not used, we do this manually in YM2149F
+    }
+
+    fn min_sample(&self) -> i16 {
+        return 0;
+    }
+
+    fn max_sample(&self) -> i16 {
+        return 31;
+    }
+
+    fn muted(&self) -> bool {
+        return self.muted;
+    }
+
+    fn mute(&mut self) {
+        self.muted = true;
+    }
+
+    fn unmute(&mut self) {
+        self.muted = false;
     }
 }
 
@@ -398,9 +458,9 @@ struct YM2149F {
 impl YM2149F {
     pub fn new() -> YM2149F {
         return YM2149F {
-            channel_a: YmChannel::new(),
-            channel_b: YmChannel::new(),
-            channel_c: YmChannel::new(),
+            channel_a: YmChannel::new("[YM2149F] A"),
+            channel_b: YmChannel::new("[YM2149F] B"),
+            channel_c: YmChannel::new("[YM2149F] C"),
             noise: NoiseGenerator::new(),
             envelope: EnvelopeGenerator::new(),
             clock_divider_counter: 0,
@@ -441,7 +501,7 @@ impl YM2149F {
         }
     }
 
-    pub fn channel_output(&self, channel: &YmChannel) -> f64 {
+    pub fn channel_output(&self, channel: &YmChannel) -> usize {
         let mut signal_bit = 1u8;
         if channel.tone_enabled {
             signal_bit &= channel.tone.output();
@@ -449,18 +509,29 @@ impl YM2149F {
         if channel.noise_enabled {
             signal_bit &= self.noise.output();
         }
-        let mut volume_index = (channel.static_volume as usize * 2) + 1;
-        if channel.envelope_enabled {
-            volume_index = self.envelope.output();
+        if signal_bit != 0 {
+            let mut volume_index = (channel.static_volume as usize * 2) + 1;
+            if channel.envelope_enabled {
+                volume_index = self.envelope.output();
+            }
+            if volume_index > 1 {
+                return volume_index;
+            }
         }
-        return (signal_bit as f64) * self.volume_lut[volume_index];
+        return 0;
     }
 
     pub fn output(&self) -> f64 {
-        let channel_a = self.channel_output(&self.channel_a);
-        let channel_b = self.channel_output(&self.channel_b);
-        let channel_c = self.channel_output(&self.channel_c);
+        let channel_a = self.volume_lut[self.channel_output(&self.channel_a)];
+        let channel_b = self.volume_lut[self.channel_output(&self.channel_b)];
+        let channel_c = self.volume_lut[self.channel_output(&self.channel_c)];
         return (channel_a + channel_b + channel_c) / 3.0;
+    }
+
+    pub fn record_output(&mut self) {
+        self.channel_a.record_sample((self.channel_output(&self.channel_a)) as i16);
+        self.channel_b.record_sample((self.channel_output(&self.channel_b)) as i16);
+        self.channel_c.record_sample((self.channel_output(&self.channel_c)) as i16);
     }
 
     pub fn execute_command(&mut self, command: u8, data: u8) {
