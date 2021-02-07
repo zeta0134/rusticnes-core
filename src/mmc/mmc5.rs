@@ -180,8 +180,8 @@ impl Mmc5 {
             ppu_fetches_this_scanline: 0,
             multiplicand_a: 0xFF,
             multiplicand_b: 0xFF,
-            pulse_1: PulseChannelState::new("[MMC5] Pulse 1", false),
-            pulse_2: PulseChannelState::new("[MMC5] Pulse 2", false),
+            pulse_1: PulseChannelState::new("[MMC5] Pulse 1", 1_786_860, false),
+            pulse_2: PulseChannelState::new("[MMC5] Pulse 2", 1_786_860, false),
             audio_sequencer_counter: 0,
             pcm_channel: Mmc5PcmChannel::new(),
         }

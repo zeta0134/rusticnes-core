@@ -1,6 +1,9 @@
 use super::length_counter::LengthCounterState;
 use super::volume_envelope::VolumeEnvelopeState;
 use super::audio_channel::AudioChannelState;
+use super::audio_channel::PlaybackRate;
+use super::audio_channel::Volume;
+use super::audio_channel::Timbre;
 use super::ring_buffer::RingBuffer;
 
 pub struct PulseChannelState {
@@ -26,10 +29,11 @@ pub struct PulseChannelState {
     pub period_initial: u16,
     pub period_current: u16,
 
+    pub cpu_clock_rate: u64,
 }
 
 impl PulseChannelState {
-    pub fn new(channel_name: &str, sweep_ones_compliment: bool) -> PulseChannelState {
+    pub fn new(channel_name: &str, cpu_clock_rate: u64, sweep_ones_compliment: bool) -> PulseChannelState {
         return PulseChannelState {
             name: String::from(channel_name),
             debug_disable: false,
@@ -53,6 +57,7 @@ impl PulseChannelState {
             sequence_counter: 0,
             period_initial: 0,
             period_current: 0,
+            cpu_clock_rate: cpu_clock_rate,
         }
     }
 
@@ -155,5 +160,32 @@ impl AudioChannelState for PulseChannelState {
 
     fn unmute(&mut self) {
         self.debug_disable = false;
+    }
+
+    fn playing(&self) -> bool {
+        return 
+            (self.length_counter.length > 0) &&
+            (self.target_period() <= 0x7FF) &&
+            (self.period_initial > 8) &&
+            (self.envelope.current_volume() > 0);
+    }
+
+    fn rate(&self) -> PlaybackRate {
+        let frequency = self.cpu_clock_rate as f64 / (16.0 * (self.period_current as f64 + 1.0));
+        return PlaybackRate::FundamentalFrequency {frequency: frequency};
+    }
+
+    fn volume(&self) -> Option<Volume> {
+        return Some(Volume::VolumeIndex{ index: self.envelope.current_volume() as usize, max: 15 });
+    }
+
+    fn timbre(&self) -> Option<Timbre> {
+        return match self.duty {
+            0b1000_0000 => Some(Timbre::DutyIndex{ index: 0, max: 3 }),
+            0b1100_0000 => Some(Timbre::DutyIndex{ index: 1, max: 3 }),
+            0b1111_0000 => Some(Timbre::DutyIndex{ index: 2, max: 3 }),
+            0b0011_1111 => Some(Timbre::DutyIndex{ index: 3, max: 3 }),
+            _ => None
+        }
     }
 }
