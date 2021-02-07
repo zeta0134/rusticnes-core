@@ -35,5 +35,6 @@ pub trait Mapper: Send {
     fn clock_cpu(&mut self) {}
     fn mix_expansion_audio(&self, nes_sample: f64) -> f64 {return nes_sample;}
     fn channels(&self) ->  Vec<& dyn AudioChannelState> {return Vec::new();}
+    fn channels_mut(&mut self) ->  Vec<&mut dyn AudioChannelState> {return Vec::new();}
     fn record_expansion_audio_output(&mut self) {}
 }

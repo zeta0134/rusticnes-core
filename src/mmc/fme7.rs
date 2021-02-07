@@ -205,6 +205,14 @@ impl Mapper for Fme7 {
         return channels;
     }
 
+    fn channels_mut(&mut self) ->  Vec<&mut dyn AudioChannelState> {
+        let mut channels: Vec<&mut dyn AudioChannelState> = Vec::new();
+        channels.push(&mut self.expansion_audio_chip.channel_a);
+        channels.push(&mut self.expansion_audio_chip.channel_b);
+        channels.push(&mut self.expansion_audio_chip.channel_c);
+        return channels;
+    }
+
     fn record_expansion_audio_output(&mut self) {
         self.expansion_audio_chip.record_output();
     }

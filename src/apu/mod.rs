@@ -128,6 +128,16 @@ impl ApuState {
         return channels;
     }
 
+    pub fn channels_mut(&mut self) -> Vec<&mut dyn AudioChannelState> {
+        let mut channels: Vec<&mut  dyn AudioChannelState> = Vec::new();
+        channels.push(&mut self.pulse_1);
+        channels.push(&mut self.pulse_2);
+        channels.push(&mut self.triangle);
+        channels.push(&mut self.noise);
+        channels.push(&mut self.dmc);
+        return channels;
+    }
+
     pub fn debug_read_register(&self, address: u16) -> u8 {
         match address {
             0x4015 => {
@@ -557,6 +567,24 @@ impl ApuState {
     pub fn irq_signal(&self) -> bool {
         return self.frame_interrupt || self.dmc.interrupt_flag;
     }
+
+    pub fn mute_channel(&mut self, mapper: &mut dyn Mapper, channel_index: usize) {
+        let mut channels: Vec<&mut dyn AudioChannelState> = Vec::new();
+        channels.extend(self.channels_mut());
+        channels.extend(mapper.channels_mut());
+        if channel_index < channels.len() {
+            channels[channel_index].mute();
+        }
+    }
+
+    pub fn unmute_channel(&mut self, mapper: &mut dyn Mapper, channel_index: usize) {
+        let mut channels: Vec<&mut dyn AudioChannelState> = Vec::new();
+        channels.extend(self.channels_mut());
+        channels.extend(mapper.channels_mut());
+        if channel_index < channels.len() {
+            channels[channel_index].unmute();
+        }
+    }    
 }
 
 // The APU itself counts as a channel, loosely, mostly for debugging purposes. Its output is a
