@@ -517,7 +517,7 @@ impl YM2149F {
         if channel.noise_enabled {
             signal_bit &= self.noise.output();
         }
-        if signal_bit != 0 {
+        if signal_bit != 0 && !channel.muted {
             let mut volume_index = (channel.static_volume as usize * 2) + 1;
             if channel.envelope_enabled {
                 volume_index = self.envelope.output();
