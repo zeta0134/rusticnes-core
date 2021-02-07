@@ -510,10 +510,8 @@ impl ApuState {
         self.last_lp_sample = current_lp_sample;
 
         if self.current_cycle >= self.next_sample_at {
-            //let composite_sample = (current_37hz_hp_sample * 32767.0) as i16;
             let composite_sample = (current_lp_sample * 32767.0) as i16;
 
-            //self.sample_buffer[self.buffer_index] = composite_sample;
             self.staging_buffer.push(composite_sample);
 
             // Write debug buffers from these, regardless of enable / disable status
@@ -522,19 +520,15 @@ impl ApuState {
             self.triangle.record_current_output();
             self.noise.record_current_output();
             self.dmc.record_current_output();
-
-            //self.buffer_index = (self.buffer_index + 1) % self.sample_buffer.len();
+            mapper.record_expansion_audio_output();
 
             self.generated_samples += 1;
             self.next_sample_at = ((self.generated_samples + 1) * self.cpu_clock_rate) / self.sample_rate;
 
             if self.staging_buffer.index() == 0 {
-                //self.dump_sample_buffer();
                 self.output_buffer.copy_from_slice(self.staging_buffer.buffer());
                 self.buffer_full = true;
             }
-
-            
         }
 
         self.current_cycle += 1;
