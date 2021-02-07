@@ -171,6 +171,7 @@ impl ApuState {
     }
 
     pub fn read_register(&mut self, address: u16) -> u8 {
+        let data = self.debug_read_register(address);
         match address {
             0x4015 => {
                 // Reading from this register resets frame_interrupt:
@@ -178,7 +179,7 @@ impl ApuState {
             },
             _ => {}
         }
-        return self.debug_read_register(address);
+        return data;
     }
 
     pub fn write_register(&mut self, address: u16, data: u8) {
