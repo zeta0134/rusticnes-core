@@ -1,5 +1,8 @@
 use super::length_counter::LengthCounterState;
 use super::audio_channel::AudioChannelState;
+use super::audio_channel::PlaybackRate;
+use super::audio_channel::Volume;
+use super::audio_channel::Timbre;
 use super::ring_buffer::RingBuffer;
 
 pub struct TriangleChannelState {
@@ -18,10 +21,12 @@ pub struct TriangleChannelState {
     pub period_initial: u16,
     pub period_current: u16,
     pub length: u8,
+
+    pub cpu_clock_rate: u64,
 }
 
 impl TriangleChannelState {
-    pub fn new(channel_name: &str) -> TriangleChannelState {
+    pub fn new(channel_name: &str, cpu_clock_rate: u64) -> TriangleChannelState {
         return TriangleChannelState {
             name: String::from(channel_name),
             debug_disable: false,
@@ -37,6 +42,8 @@ impl TriangleChannelState {
             period_initial: 0,
             period_current: 0,
             length: 0,
+
+            cpu_clock_rate: cpu_clock_rate,
         }
     }
 
@@ -117,5 +124,25 @@ impl AudioChannelState for TriangleChannelState {
 
     fn unmute(&mut self) {
         self.debug_disable = false;
+    }
+
+    fn playing(&self) -> bool {
+        return 
+            self.length_counter.length > 0 && 
+            self.linear_counter_current != 0 &&
+            self.period_initial > 2;
+    }
+
+    fn rate(&self) -> PlaybackRate {
+        let frequency = self.cpu_clock_rate as f64 / (32.0 * (self.period_initial as f64 + 1.0));
+        return PlaybackRate::FundamentalFrequency {frequency: frequency};
+    }
+
+    fn volume(&self) -> Option<Volume> {
+        return None;
+    }
+
+    fn timbre(&self) -> Option<Timbre> {
+        return None;
     }
 }

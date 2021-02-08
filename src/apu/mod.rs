@@ -102,7 +102,7 @@ impl ApuState {
             disable_interrupt: false,
             pulse_1: PulseChannelState::new("[2A03] Pulse 1", 1_789_773, true),
             pulse_2: PulseChannelState::new("[2A03] Pulse 2", 1_789_773, false),
-            triangle: TriangleChannelState::new("[2A03] Triangle"),
+            triangle: TriangleChannelState::new("[2A03] Triangle", 1_789_773),
             noise: NoiseChannelState::new("[2A03] Noise"),
             dmc: DmcState::new("[2A03] DMC"),
             staging_buffer: RingBuffer::new(4096),
