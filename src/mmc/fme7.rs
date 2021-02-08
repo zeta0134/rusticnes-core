@@ -6,6 +6,9 @@ use mmc::mapper::*;
 use mmc::mirroring;
 
 use apu::AudioChannelState;
+use apu::PlaybackRate;
+use apu::Volume;
+use apu::Timbre;
 use apu::RingBuffer;
 
 pub struct Fme7 {
@@ -397,7 +400,8 @@ struct YmChannel {
     pub tone_enabled: bool,
     pub noise_enabled: bool,
     pub envelope_enabled: bool,
-    pub static_volume: u8
+    pub static_volume: u8,
+    pub effective_volume: usize,
 }
 
 impl YmChannel {
@@ -411,6 +415,7 @@ impl YmChannel {
             noise_enabled: false,
             envelope_enabled: false,
             static_volume: 0,
+            effective_volume: 0,
         }
     }
 
@@ -450,6 +455,26 @@ impl AudioChannelState for YmChannel {
 
     fn unmute(&mut self) {
         self.muted = false;
+    }
+
+    fn playing(&self) -> bool {
+        return 
+            !self.muted &&
+            self.tone_enabled &&
+            self.effective_volume > 1;
+    }
+
+    fn rate(&self) -> PlaybackRate {
+        let frequency = 1_789_773.0 / (32.0 * (self.tone.period_compare as f64));
+        return PlaybackRate::FundamentalFrequency {frequency: frequency};
+    }
+
+    fn volume(&self) -> Option<Volume> {
+        return Some(Volume::VolumeIndex{ index: self.effective_volume, max: 31 });
+    }
+
+    fn timbre(&self) -> Option<Timbre> {
+        return None;
     }
 }
 
@@ -491,22 +516,36 @@ impl YM2149F {
         return lut;
     }
 
+    pub fn effective_volume(&self, channel: &YmChannel) -> usize {
+        let mut volume_index = (channel.static_volume as usize * 2) + 1;
+        if channel.envelope_enabled {
+            volume_index = self.envelope.output();
+        }
+        if volume_index > 1 {
+            return volume_index;
+        }
+        return 0;
+    }
+
     pub fn clock(&mut self) {
         self.clock_divider_counter += 1;
         if self.clock_divider_counter == 16 {
+            self.envelope.clock();
             self.channel_a.tone.clock();
             self.channel_b.tone.clock();
             self.channel_c.tone.clock();
-            self.envelope.clock();
         }
         if self.clock_divider_counter == 32 {
+            self.envelope.clock();
             self.channel_a.tone.clock();
             self.channel_b.tone.clock();
             self.channel_c.tone.clock();
-            self.envelope.clock();
             self.noise.clock();
             self.clock_divider_counter = 0;
         }
+        self.channel_a.effective_volume = self.effective_volume(&self.channel_a);
+        self.channel_b.effective_volume = self.effective_volume(&self.channel_b);
+        self.channel_c.effective_volume = self.effective_volume(&self.channel_c);
     }
 
     pub fn channel_output(&self, channel: &YmChannel) -> usize {
@@ -518,13 +557,7 @@ impl YM2149F {
             signal_bit &= self.noise.output();
         }
         if signal_bit != 0 && !channel.muted {
-            let mut volume_index = (channel.static_volume as usize * 2) + 1;
-            if channel.envelope_enabled {
-                volume_index = self.envelope.output();
-            }
-            if volume_index > 1 {
-                return volume_index;
-            }
+            return self.effective_volume(channel);
         }
         return 0;
     }
