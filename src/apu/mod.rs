@@ -13,6 +13,9 @@ mod triangle;
 mod volume_envelope;
 
 pub use self::audio_channel::AudioChannelState;
+pub use self::audio_channel::PlaybackRate;
+pub use self::audio_channel::Volume;
+pub use self::audio_channel::Timbre;
 pub use self::dmc::DmcState;
 pub use self::noise::NoiseChannelState;
 pub use self::pulse::PulseChannelState;

@@ -171,7 +171,7 @@ impl AudioChannelState for PulseChannelState {
     }
 
     fn rate(&self) -> PlaybackRate {
-        let frequency = self.cpu_clock_rate as f64 / (16.0 * (self.period_current as f64 + 1.0));
+        let frequency = self.cpu_clock_rate as f64 / (16.0 * (self.period_initial as f64 + 1.0));
         return PlaybackRate::FundamentalFrequency {frequency: frequency};
     }
 
