@@ -402,6 +402,7 @@ struct YmChannel {
     pub envelope_enabled: bool,
     pub static_volume: u8,
     pub effective_volume: usize,
+    pub effective_amplitude: f64,
 }
 
 impl YmChannel {
@@ -416,6 +417,7 @@ impl YmChannel {
             envelope_enabled: false,
             static_volume: 0,
             effective_volume: 0,
+            effective_amplitude: 0.0,
         }
     }
 
@@ -479,6 +481,16 @@ impl AudioChannelState for YmChannel {
 
     fn timbre(&self) -> Option<Timbre> {
         return None;
+    }
+
+    fn amplitude(&self) -> f64 {
+        if self.playing() {
+            // Per: https://forums.nesdev.com/viewtopic.php?f=2&t=17745&sid=158b0a9e442a815411f7b453b093474a&start=15#p225103
+            // "...its pre-compression output for a single channel only really goes up to maybe 8 db louder than an APU square can go"
+            let db_boost = 10f64.powf(8.0 * 0.05);
+            return self.effective_amplitude * db_boost;
+        }
+        return 0.0;
     }
 }
 
@@ -550,6 +562,9 @@ impl YM2149F {
         self.channel_a.effective_volume = self.effective_volume(&self.channel_a);
         self.channel_b.effective_volume = self.effective_volume(&self.channel_b);
         self.channel_c.effective_volume = self.effective_volume(&self.channel_c);
+        self.channel_a.effective_amplitude = self.volume_lut[self.channel_a.effective_volume];
+        self.channel_b.effective_amplitude = self.volume_lut[self.channel_b.effective_volume];
+        self.channel_c.effective_amplitude = self.volume_lut[self.channel_c.effective_volume];
     }
 
     pub fn channel_output(&self, channel: &YmChannel) -> usize {
