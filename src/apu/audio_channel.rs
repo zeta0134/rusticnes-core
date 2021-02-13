@@ -38,4 +38,13 @@ pub trait AudioChannelState {
     fn rate(&self) -> PlaybackRate { return PlaybackRate::SampleRate{frequency: 0.0}; }
     fn volume(&self) -> Option<Volume> {return None}
     fn timbre(&self) -> Option<Timbre> {return None}
+    fn amplitude(&self) -> f64 {
+        /* pre-mixed volume, allows chips using non-linear mixing to tailor this value.
+           results should be based on 2A03 pulse, where 1.0 corresponds to 0xF */
+        if !self.playing() {return 0.0}
+        match self.volume() {
+            Some(Volume::VolumeIndex{index, max}) => {return index as f64 / (max + 1) as f64},
+            None => {return 1.0}
+        }
+    }
 }
