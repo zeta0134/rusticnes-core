@@ -151,4 +151,11 @@ impl AudioChannelState for TriangleChannelState {
     fn timbre(&self) -> Option<Timbre> {
         return None;
     }
+
+    fn amplitude(&self) -> f64 {
+        if self.playing() {
+            return 0.55;
+        }
+        return 0.0;
+    }
 }
