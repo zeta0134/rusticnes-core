@@ -79,7 +79,7 @@ impl AudioChannelState for NoiseChannelState {
     }
 
     fn chip(&self) -> String {
-        return self.name.clone();
+        return self.chip.clone();
     }
 
     fn sample_buffer(&self) -> &RingBuffer {
