@@ -4,6 +4,7 @@ use super::ring_buffer::RingBuffer;
 
 pub struct DmcState {
     pub name: String,
+    pub chip: String,
     pub debug_disable: bool,
     pub debug_buffer: Vec<i16>,
     pub output_buffer: RingBuffer,
@@ -30,9 +31,10 @@ pub struct DmcState {
 }
 
 impl DmcState {
-    pub fn new(channel_name: &str) -> DmcState {
+    pub fn new(channel_name: &str, chip_name: &str) -> DmcState {
         return DmcState {
             name: String::from(channel_name),
+            chip: String::from(chip_name),
             debug_disable: false,
             debug_buffer: vec!(0i16; 4096),
             output_buffer: RingBuffer::new(32768),
@@ -145,6 +147,10 @@ impl DmcState {
 impl AudioChannelState for DmcState {
     fn name(&self) -> String {
         return self.name.clone();
+    }
+
+    fn chip(&self) -> String {
+        return self.chip.clone();
     }
 
     fn sample_buffer(&self) -> &RingBuffer {

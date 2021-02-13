@@ -429,6 +429,10 @@ impl AudioChannelState for YmChannel {
         return self.name.clone();
     }
 
+    fn chip(&self) -> String {
+        return "YM2149F".to_string();
+    }
+
     fn sample_buffer(&self) -> &RingBuffer {
         return &self.output_buffer;
     }
@@ -491,9 +495,9 @@ struct YM2149F {
 impl YM2149F {
     pub fn new() -> YM2149F {
         return YM2149F {
-            channel_a: YmChannel::new("[YM2149F] A"),
-            channel_b: YmChannel::new("[YM2149F] B"),
-            channel_c: YmChannel::new("[YM2149F] C"),
+            channel_a: YmChannel::new("A"),
+            channel_b: YmChannel::new("B"),
+            channel_c: YmChannel::new("C"),
             noise: NoiseGenerator::new(),
             envelope: EnvelopeGenerator::new(),
             clock_divider_counter: 0,

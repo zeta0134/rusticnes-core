@@ -8,6 +8,7 @@ use super::ring_buffer::RingBuffer;
 
 pub struct PulseChannelState {
     pub name: String,
+    pub chip: String,
     pub debug_disable: bool,
     pub debug_buffer: Vec<i16>,
     pub output_buffer: RingBuffer,
@@ -33,9 +34,10 @@ pub struct PulseChannelState {
 }
 
 impl PulseChannelState {
-    pub fn new(channel_name: &str, cpu_clock_rate: u64, sweep_ones_compliment: bool) -> PulseChannelState {
+    pub fn new(channel_name: &str, chip_name: &str, cpu_clock_rate: u64, sweep_ones_compliment: bool) -> PulseChannelState {
         return PulseChannelState {
             name: String::from(channel_name),
+            chip: String::from(chip_name),
             debug_disable: false,
             debug_buffer: vec!(0i16; 4096), // old! remove!
             output_buffer: RingBuffer::new(32768),
@@ -132,6 +134,10 @@ impl PulseChannelState {
 impl AudioChannelState for PulseChannelState {
     fn name(&self) -> String {
         return self.name.clone();
+    }
+
+    fn chip(&self) -> String {
+        return self.chip.clone();
     }
 
     fn sample_buffer(&self) -> &RingBuffer {

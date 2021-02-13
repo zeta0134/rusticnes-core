@@ -25,6 +25,7 @@ pub enum Timbre {
 
 pub trait AudioChannelState {
     fn name(&self) -> String;
+    fn chip(&self) -> String;
     fn sample_buffer(&self) -> &RingBuffer;
     fn min_sample(&self) -> i16 {return i16::MIN;}
     fn max_sample(&self) -> i16 {return i16::MAX;}

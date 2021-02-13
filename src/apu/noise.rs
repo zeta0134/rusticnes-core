@@ -5,6 +5,7 @@ use super::ring_buffer::RingBuffer;
 
 pub struct NoiseChannelState {
     pub name: String,
+    pub chip: String,
     pub debug_disable: bool,
     pub debug_buffer: Vec<i16>,
     pub output_buffer: RingBuffer,
@@ -23,9 +24,10 @@ pub struct NoiseChannelState {
 }
 
 impl NoiseChannelState {
-    pub fn new(channel_name: &str) -> NoiseChannelState {
+    pub fn new(channel_name: &str, chip_name: &str, ) -> NoiseChannelState {
         return NoiseChannelState {
             name: String::from(channel_name),
+            chip: String::from(chip_name),
             debug_disable: false,
             debug_buffer: vec!(0i16; 4096),
             output_buffer: RingBuffer::new(32768),
@@ -73,6 +75,10 @@ impl NoiseChannelState {
 
 impl AudioChannelState for NoiseChannelState {
     fn name(&self) -> String {
+        return self.name.clone();
+    }
+
+    fn chip(&self) -> String {
         return self.name.clone();
     }
 

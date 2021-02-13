@@ -100,11 +100,11 @@ impl ApuState {
             frame_reset_delay: 0,
             frame_interrupt: false,
             disable_interrupt: false,
-            pulse_1: PulseChannelState::new("[2A03] Pulse 1", 1_789_773, true),
-            pulse_2: PulseChannelState::new("[2A03] Pulse 2", 1_789_773, false),
-            triangle: TriangleChannelState::new("[2A03] Triangle", 1_789_773),
-            noise: NoiseChannelState::new("[2A03] Noise"),
-            dmc: DmcState::new("[2A03] DMC"),
+            pulse_1: PulseChannelState::new("Pulse 1", "2A03", 1_789_773, true),
+            pulse_2: PulseChannelState::new("Pulse 2", "2A03", 1_789_773, false),
+            triangle: TriangleChannelState::new("Triangle", "2A03", 1_789_773),
+            noise: NoiseChannelState::new("Noise", "2A03"),
+            dmc: DmcState::new("DMC", "2A03"),
             staging_buffer: RingBuffer::new(4096),
             output_buffer: vec!(0i16; 4096),
             buffer_full: false,
@@ -596,6 +596,10 @@ impl ApuState {
 impl AudioChannelState for ApuState {
     fn name(&self) -> String {
         return "Final Mix".to_string();
+    }
+
+    fn chip(&self) -> String {
+        return "APU".to_string();
     }
 
     fn sample_buffer(&self) -> &RingBuffer {

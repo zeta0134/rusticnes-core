@@ -43,7 +43,11 @@ impl Mmc5PcmChannel {
 
 impl AudioChannelState for Mmc5PcmChannel {
     fn name(&self) -> String {
-        return "[MMC5] PCM".to_string();
+        return "PCM".to_string();
+    }
+
+    fn chip(&self) -> String {
+        return "MMC5".to_string();
     }
 
     fn sample_buffer(&self) -> &RingBuffer {
@@ -180,8 +184,8 @@ impl Mmc5 {
             ppu_fetches_this_scanline: 0,
             multiplicand_a: 0xFF,
             multiplicand_b: 0xFF,
-            pulse_1: PulseChannelState::new("[MMC5] Pulse 1", 1_789_773, false),
-            pulse_2: PulseChannelState::new("[MMC5] Pulse 2", 1_789_773, false),
+            pulse_1: PulseChannelState::new("Pulse 1", "MMC5", 1_789_773, false),
+            pulse_2: PulseChannelState::new("Pulse 2", "MMC5", 1_789_773, false),
             audio_sequencer_counter: 0,
             pcm_channel: Mmc5PcmChannel::new(),
         }
