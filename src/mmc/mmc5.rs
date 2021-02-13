@@ -587,7 +587,7 @@ impl Mmc5 {
 
         match address {
             0x5010 => {self.pcm_channel.irq_pending = false;}
-            0x5204 => {self.pcm_channel.irq_pending = false;}
+            0x5204 => {self.irq_pending = false;}
             _ => {}
         }
     }
@@ -657,8 +657,9 @@ impl Mapper for Mmc5 {
     }
     
     fn read_cpu(&mut self, address: u16) -> Option<u8> {
+        let data = self._read_cpu(address);
         self.snoop_cpu_read(address);
-        return self._read_cpu(address);
+        return data;
     }
 
     fn debug_read_cpu(&self, address: u16) -> Option<u8> {
