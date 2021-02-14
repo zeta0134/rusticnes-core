@@ -1,6 +1,9 @@
 use super::length_counter::LengthCounterState;
 use super::volume_envelope::VolumeEnvelopeState;
 use super::audio_channel::AudioChannelState;
+use super::audio_channel::PlaybackRate;
+use super::audio_channel::Volume;
+use super::audio_channel::Timbre;
 use super::ring_buffer::RingBuffer;
 
 pub struct NoiseChannelState {
@@ -108,5 +111,42 @@ impl AudioChannelState for NoiseChannelState {
 
     fn unmute(&mut self) {
         self.debug_disable = false;
+    }
+
+    fn playing(&self) -> bool {
+        return 
+            (self.length_counter.length > 0) &&
+            (self.envelope.current_volume() > 0);
+    }
+
+    fn rate(&self) -> PlaybackRate {
+        let lsfr_index = match self.period_initial {
+            4    => {0xF},
+            8    => {0xE},
+            16   => {0xD},
+            32   => {0xC},
+            64   => {0xB},
+            96   => {0xA},
+            128  => {0x9},
+            160  => {0x8},
+            202  => {0x7},
+            254  => {0x6},
+            380  => {0x5},
+            508  => {0x4},
+            762  => {0x3},
+            1016 => {0x2},
+            2034 => {0x1},
+            4068 => {0x0},
+            _ => {0x0} // also unreachable
+        };
+        return PlaybackRate::LfsrRate {index: lsfr_index, max: 0xF};
+    }
+
+    fn volume(&self) -> Option<Volume> {
+        return Some(Volume::VolumeIndex{ index: self.envelope.current_volume() as usize, max: 15 });
+    }
+
+    fn timbre(&self) -> Option<Timbre> {
+        return Some(Timbre::LsfrMode{index: self.mode as usize, max: 1});
     }
 }
