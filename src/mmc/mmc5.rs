@@ -77,6 +77,25 @@ impl AudioChannelState for Mmc5PcmChannel {
     fn unmute(&mut self) {
         self.muted = false;
     }
+
+
+    fn playing(&self) -> bool {
+        return true;
+    }
+
+    fn amplitude(&self) -> f64 {
+        let buffer = self.output_buffer.buffer();
+        let mut index = (self.output_buffer.index() - 256) % buffer.len();
+        let mut max = buffer[index];
+        let mut min = buffer[index];
+        for _i in 0 .. 256 {
+            if buffer[index] > max {max = buffer[index];}
+            if buffer[index] < min {min = buffer[index];}
+            index += 1;
+            index = index % buffer.len();
+        }
+        return (max - min) as f64 / 64.0;
+    }
 }
 
 pub struct Mmc5 {
