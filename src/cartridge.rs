@@ -4,6 +4,7 @@ use mmc::bnrom::BnRom;
 use mmc::cnrom::CnRom;
 use mmc::fme7::Fme7;
 use mmc::gxrom::GxRom;
+use mmc::ines31::INes31;
 use mmc::nrom::Nrom;
 use mmc::pxrom::PxRom;
 use mmc::mmc1::Mmc1;
@@ -138,6 +139,7 @@ pub fn load_from_cartridge(nes_header: NesHeader, cartridge: &[u8]) -> Result<Bo
         5 => Box::new(Mmc5::new(header, chr_rom, prg_rom)),
         7 => Box::new(AxRom::new(header, chr_rom, prg_rom)),
         9 => Box::new(PxRom::new(header, chr_rom, prg_rom)),
+        31 => Box::new(INes31::new(header, chr_rom, prg_rom)),
         34 => Box::new(BnRom::new(header, chr_rom, prg_rom)),
         66 => Box::new(GxRom::new(header, chr_rom, prg_rom)),
         69 => Box::new(Fme7::new(header, chr_rom, prg_rom)),
