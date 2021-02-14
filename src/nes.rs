@@ -138,7 +138,7 @@ impl NesState {
         }
     }
 
-    pub fn sram(&mut self) -> Vec<u8> {
+    pub fn sram(&self) -> Vec<u8> {
         return self.mapper.get_sram();
     }
 
