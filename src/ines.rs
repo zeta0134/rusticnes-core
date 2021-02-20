@@ -199,6 +199,17 @@ impl INesCartridge {
         let mut chr: Vec<u8> = Vec::with_capacity(header.chr_size());
         file_reader.read_exact(&mut chr)?;
 
-        return Err(INesError::Unimplemented);
+        // If there is any remaining data at this point, it becomes misc_rom and,
+        // currently, has no other special handling
+        let mut misc: Vec<u8> = Vec::new();
+        file_reader.read_to_end(&mut misc)?;
+
+        return Ok(INesCartridge {
+            header: header,
+            trainer: trainer,
+            prg: prg,
+            chr: chr,
+            misc_rom: misc
+        });
     }
 }
