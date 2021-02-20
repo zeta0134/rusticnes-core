@@ -4,8 +4,43 @@
 // iNES 2.0 is always preferred when detected.
 
 use std::io::Read;
+use std::error::Error;
+use std::fmt;
+
 
 use mmc::mapper::Mirroring;
+
+#[derive(Debug)]
+pub enum INesError {
+    InvalidHeader,
+    Unimplemented,
+    ReadError{reason: String}
+}
+
+impl Error for INesError {}
+
+impl fmt::Display for INesError  {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            INesError::InvalidHeader => {
+                write!(f, "Invalid iNES Header")
+            },
+            INesError::Unimplemented => {
+                write!(f, "Unimplemented (Lazy programmers!!1)")
+            }
+            INesError::ReadError{reason} => {
+                write!(f, "Error reading cartridge: {}", reason)
+            },
+
+        }
+    }
+}
+
+impl From<std::io::Error> for INesError {
+    fn from(error: std::io::Error) -> Self {
+        return INesError::ReadError{reason: error.to_string()};
+    }
+}
 
 #[derive(Copy, Clone)]
 pub struct INesHeader {
@@ -42,6 +77,30 @@ impl INesHeader {
         return 0;
     }
 
+    fn _prg_size_ines1(&self) -> usize {
+        return self.raw_bytes[4] as usize * 16 * 1024;
+    }
+
+    pub fn prg_size(&self) -> usize {
+        return match self.version() {
+            1 => self._prg_size_ines1(),
+            _ => 0
+        }
+    }
+
+    fn _chr_size_ines1(&self) -> usize {
+        return self.raw_bytes[5] as usize * 8 * 1024;
+    }
+
+    pub fn chr_size(&self) -> usize {
+        return match self.version() {
+            1 => self._chr_size_ines1(),
+            _ => 0
+        }
+    }
+
+
+
     // https://wiki.nesdev.com/w/index.php/INES#Flags_6
 
     pub fn mirroring(&self) -> Mirroring {
@@ -76,30 +135,27 @@ pub struct INesCartridge {
 }
 
 impl INesCartridge {
-    pub fn from_bytes(file_data: &[u8]) -> Result<INesCartridge, String> {
+    pub fn from_bytes(file_data: &[u8]) -> Result<INesCartridge, INesError> {
         let mut file_reader = file_data;
         
         let mut header_bytes = [0u8; 16];
-        file_reader.read_exact(&mut header_bytes).map_err(|e| e.to_string())?;
+        file_reader.read_exact(&mut header_bytes)?;
 
         let header = INesHeader::from(&header_bytes);
         if !header.magic_header_valid() {
-            return Err("iNES signature invalid".to_string());
+            return Err(INesError::InvalidHeader);
         }
 
-        let mut trainer: Vec<u8> = Vec::new();
-        if header.has_trainer() {
-            trainer.resize(512, 0);
-            file_reader.read_exact(&mut trainer).map_err(|e| e.to_string())?;
-        }
+        let trainer_size = if header.has_trainer() {512} else {0};
+        let mut trainer: Vec<u8> = Vec::with_capacity(trainer_size);
+        file_reader.read_exact(&mut trainer)?;
 
+        let mut prg: Vec<u8> = Vec::with_capacity(header.prg_size());
+        file_reader.read_exact(&mut prg)?;
 
+        let mut chr: Vec<u8> = Vec::with_capacity(header.chr_size());
+        file_reader.read_exact(&mut chr)?;
 
-
-
-
-        // */
-
-        return Err("Unimplemented".to_string());
+        return Err(INesError::Unimplemented);
     }
 }
