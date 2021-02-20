@@ -142,8 +142,6 @@ impl INesHeader {
         }
     }
 
-
-
     // https://wiki.nesdev.com/w/index.php/INES#Flags_6
 
     pub fn mirroring(&self) -> Mirroring {
@@ -163,6 +161,41 @@ impl INesHeader {
     pub fn has_trainer(&self) -> bool {
         return self.raw_bytes[6] & 0b0000_0100 != 0;
     }
+
+    fn _mapper_ines1(&self) -> u16 {
+        let lower_nybble = (self.raw_bytes[6] & 0b1111_0000) >> 4;
+        let upper_nybble = self.raw_bytes[7] & 0b1111_0000;
+        // DiskDude! check: are the padding bytes here all zero?
+        // Documented here: https://wiki.nesdev.com/w/index.php/INES#Flags_10
+        if self.raw_bytes[12] | self.raw_bytes[13] | self.raw_bytes[14] | self.raw_bytes[15] == 0 {
+            // Spec compliant path
+            let mapper_number = lower_nybble + upper_nybble;
+            return mapper_number as u16;
+        } else {
+            // DiskDude! path
+            // We probably have a very old ROM and a dumper's
+            // signature in the padding bytes from 7-15. Since byte 7 was a
+            // later addition to the spec, in this instance we should not
+            // trust its contents.
+            let mapper_number = lower_nybble;
+            return mapper_number as u16;
+        }
+    }
+
+    fn _mapper_ines2(&self) -> u16 {
+        let lower_nybble = ((self.raw_bytes[6] & 0b1111_0000) >> 4) as u16;
+        let middle_nybble = (self.raw_bytes[7] & 0b1111_0000) as u16;
+        let upper_nybble = ((self.raw_bytes[8] & 0b0000_1111) as u16) << 8;
+        return upper_nybble | middle_nybble | lower_nybble;
+    }
+
+    pub fn mapper_number(&self) -> u16 {
+        match self.version() {
+            1 => self._mapper_ines1(),
+            2 => self._mapper_ines2(),
+            _ => 0
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -170,10 +203,10 @@ pub struct INesCartridge {
     // Internal strategy is to store each major chunk of the file as
     // raw data bytes, and then reinterpret these on the fly based
     // on the header bytes when accessed.
-    header: INesHeader,
-    trainer: Vec<u8>,
-    prg: Vec<u8>,
-    chr: Vec<u8>,
+    pub header: INesHeader,
+    pub trainer: Vec<u8>,
+    pub prg: Vec<u8>,
+    pub chr: Vec<u8>,
     misc_rom: Vec<u8>,
 }
 
