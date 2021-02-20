@@ -107,7 +107,12 @@ impl INesHeader {
     }
 
     fn _chr_size_ines1(&self) -> usize {
-        return self.raw_bytes[5] as usize * 8 * 1024;
+        let chr_size = self.raw_bytes[5] as usize * 8 * 1024;
+        if chr_size == 0 {
+            // This file specifies 8k of CHR RAM
+            return 8 * 1024;
+        }
+        return chr_size;
     }
 
     fn _chr_size_ines2(&self) -> usize {
