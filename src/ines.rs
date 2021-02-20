@@ -22,16 +22,9 @@ impl Error for INesError {}
 impl fmt::Display for INesError  {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            INesError::InvalidHeader => {
-                write!(f, "Invalid iNES Header")
-            },
-            INesError::Unimplemented => {
-                write!(f, "Unimplemented (Lazy programmers!!1)")
-            }
-            INesError::ReadError{reason} => {
-                write!(f, "Error reading cartridge: {}", reason)
-            },
-
+            INesError::InvalidHeader => {write!(f, "Invalid iNES Header")},
+            INesError::Unimplemented => {write!(f, "Unimplemented (Lazy programmers!!1)")},
+            INesError::ReadError{reason} => {write!(f, "Error reading cartridge: {}", reason)}
         }
     }
 }
@@ -81,9 +74,34 @@ impl INesHeader {
         return self.raw_bytes[4] as usize * 16 * 1024;
     }
 
+    fn _prg_size_ines2(&self) -> usize {
+        // https://wiki.nesdev.com/w/index.php/NES_2.0#PRG-ROM_Area
+        let lsb = self.raw_bytes[4];
+        let msb = self.raw_bytes[9] & 0b0000_1111;
+        if msb == 0xF {
+            // exponent-multiplier mode
+            //  ++++----------- Header byte 9 D0..D3
+            //  |||| ++++-++++- Header byte 4
+            //  D~BA98 7654 3210
+            //  --------------
+            //  1111 EEEE EEMM
+            //  |||| ||++- Multiplier, actual value is MM*2+1 (1,3,5,7)
+            //  ++++-++--- Exponent (2^E), 0-63
+
+            let multiplier = ((lsb & 0b0000_0011) * 2 + 1) as usize;
+            let exponent = ((lsb & 0b1111_1100) >> 2) as u32;
+            let base: usize = 2;
+            return base.pow(exponent) * multiplier;
+        } else {
+            // simple mode
+            return ((msb as usize) << 8) + (lsb as usize);
+        }
+    }
+
     pub fn prg_size(&self) -> usize {
         return match self.version() {
             1 => self._prg_size_ines1(),
+            2 => self._prg_size_ines2(),
             _ => 0
         }
     }
