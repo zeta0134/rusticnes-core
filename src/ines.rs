@@ -178,9 +178,7 @@ pub struct INesCartridge {
 }
 
 impl INesCartridge {
-    pub fn from_bytes(file_data: &[u8]) -> Result<INesCartridge, INesError> {
-        let mut file_reader = file_data;
-        
+    pub fn from_reader(file_reader: &mut dyn Read) -> Result<INesCartridge, INesError> {
         let mut header_bytes = [0u8; 16];
         file_reader.read_exact(&mut header_bytes)?;
 
