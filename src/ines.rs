@@ -35,6 +35,14 @@ impl From<std::io::Error> for INesError {
     }
 }
 
+pub enum MemoryType {
+    Rom,
+    Ram,
+    Sram,
+    Mixed,
+    Missing
+}
+
 #[derive(Copy, Clone)]
 pub struct INesHeader {
     raw_bytes: [u8; 16]
@@ -106,16 +114,12 @@ impl INesHeader {
         }
     }
 
-    fn _chr_size_ines1(&self) -> usize {
+    fn _chr_rom_size_ines1(&self) -> usize {
         let chr_size = self.raw_bytes[5] as usize * 8 * 1024;
-        if chr_size == 0 {
-            // This file specifies 8k of CHR RAM
-            return 8 * 1024;
-        }
         return chr_size;
     }
 
-    fn _chr_size_ines2(&self) -> usize {
+    fn _chr_rom_size_ines2(&self) -> usize {
         // https://wiki.nesdev.com/w/index.php/NES_2.0#PRG-ROM_Area
         let lsb = self.raw_bytes[5];
         let msb = (self.raw_bytes[9] & 0b1111_0000) >> 4;
@@ -139,12 +143,67 @@ impl INesHeader {
         }
     }
 
-    pub fn chr_size(&self) -> usize {
+    pub fn chr_rom_size(&self) -> usize {
         return match self.version() {
-            1 => self._chr_size_ines1(),
-            2 => self._chr_size_ines2(),
+            1 => self._chr_rom_size_ines1(),
+            2 => self._chr_rom_size_ines2(),
             _ => 0
         }
+    }
+
+    fn _chr_ram_size_ines1(&self) -> usize {
+        if self.raw_bytes[5] == 0 {
+            return 8 * 1024;
+        }
+        return 0;
+    }
+
+    fn _chr_ram_size_ines2(&self) -> usize {
+        let shift_count = self.raw_bytes[11] & 0b0000_1111;
+        if shift_count == 0 {
+            return 0;
+        }
+        return 64 << (shift_count as usize);
+    }
+
+    pub fn chr_ram_size(&self) -> usize {
+        return match self.version() {
+            1 => self._chr_ram_size_ines1(),
+            2 => self._chr_ram_size_ines2(),
+            _ => 0
+        }   
+    }
+
+    pub fn chr_sram_size(&self) -> usize {
+        // Note: iNes2.0 calls this NVRAM, we're going with SRAM to match
+        // RusticNES's conventions, and also user expectation
+        if self.version() != 2 {
+            return 0;
+        }
+        let shift_count = (self.raw_bytes[11] & 0b1111_0000) >> 4;
+        if shift_count == 0 {
+            return 0;
+        }
+        return 64 << (shift_count as usize);
+    }
+
+    pub fn chr_type(&self) -> MemoryType {
+        let has_rom = self.chr_rom_size() == 0;
+        let has_ram = self.chr_ram_size() == 0;
+        let has_sram = self.chr_sram_size() == 0;
+        if !has_rom && !has_ram && !has_sram {
+            return MemoryType::Missing;
+        }
+        if has_rom && !has_ram && !has_sram {
+            return MemoryType::Rom;
+        }
+        if !has_rom && has_ram && !has_sram {
+            return MemoryType::Ram;
+        }
+        if !has_rom && !has_ram && has_sram {
+            return MemoryType::Sram;
+        }
+        return MemoryType::Mixed;
     }
 
     // https://wiki.nesdev.com/w/index.php/INES#Flags_6
@@ -232,7 +291,7 @@ impl INesCartridge {
         let mut prg: Vec<u8> = Vec::with_capacity(header.prg_size());
         file_reader.read_exact(&mut prg)?;
 
-        let mut chr: Vec<u8> = Vec::with_capacity(header.chr_size());
+        let mut chr: Vec<u8> = Vec::with_capacity(header.chr_rom_size());
         file_reader.read_exact(&mut chr)?;
 
         // If there is any remaining data at this point, it becomes misc_rom and,
