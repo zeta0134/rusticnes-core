@@ -1,7 +1,9 @@
 // A very simple Mapper with no esoteric features or bank switching.
 // Reference capabilities: https://wiki.nesdev.com/w/index.php/NROM
 
-use cartridge::NesHeader;
+use ines::INesCartridge;
+use ines::MemoryType;
+
 use mmc::mapper::*;
 use mmc::mirroring;
 
@@ -15,20 +17,29 @@ pub struct Nrom {
 }
 
 impl Nrom {
-    pub fn new(header: NesHeader, chr: &[u8], prg: &[u8]) -> Nrom {
-        let chr_rom = match header.has_chr_ram {
-            true => vec![0u8; 8 * 1024],
-            false => chr.to_vec()
+    pub fn from_ines(ines: INesCartridge) -> Result<Nrom, String> {
+        let prg_rom = ines.prg.clone();
+        let prg_ram = match ines.header.prg_ram_type() {
+            MemoryType::Ram => {vec![0u8; ines.header.prg_ram_size()]},
+            MemoryType::Sram => {vec![0u8; ines.header.prg_sram_size()]},
+            _ => {return Err("NROM: Unsupported mixed PRG RAM shenanigans!!".to_string());}
         };
+        let chr_rom = match ines.header.chr_type() {
+            MemoryType::Rom => {ines.chr.clone()},
+            MemoryType::Ram => {vec![0u8; ines.header.chr_ram_size()]},
+            MemoryType::Sram => {vec![0u8; ines.header.chr_sram_size()]},
+            _ => {return Err("NROM: Unsupported mixed CHR shenanigans!!".to_string());}
+        };
+        let has_chr_ram = ines.header.chr_type() != MemoryType::Rom;
 
-        return Nrom {
-            prg_rom: prg.to_vec(),
-            prg_ram: vec![0u8; 8 * 1024],
+        return Ok(Nrom {
+            prg_rom: prg_rom,
+            prg_ram: prg_ram,
             chr_rom: chr_rom,
-            mirroring: header.mirroring,
-            has_chr_ram: header.has_chr_ram,
+            mirroring: ines.header.mirroring(),
+            has_chr_ram: has_chr_ram,
             vram: vec![0u8; 0x1000],
-        }
+        });
     }
 }
 
