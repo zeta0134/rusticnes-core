@@ -4,6 +4,7 @@ pub mod cartridge;
 pub mod cycle_cpu;
 pub mod ines;
 pub mod memory;
+pub mod memoryblock;
 pub mod mmc;
 pub mod nes;
 pub mod opcodes;
