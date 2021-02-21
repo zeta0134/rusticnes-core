@@ -7,8 +7,9 @@ use std::io::Read;
 use std::error::Error;
 use std::fmt;
 
-
 use mmc::mapper::Mirroring;
+use memoryblock::MemoryBlock;
+use memoryblock::MemoryType;
 
 #[derive(Debug)]
 pub enum INesError {
@@ -35,6 +36,7 @@ impl From<std::io::Error> for INesError {
     }
 }
 
+/*
 #[derive(PartialEq)]
 pub enum MemoryType {
     Rom,
@@ -42,7 +44,7 @@ pub enum MemoryType {
     Sram,
     Mixed,
     Missing
-}
+}*/
 
 #[derive(Copy, Clone)]
 pub struct INesHeader {
@@ -72,10 +74,6 @@ const INES2_CHR_RAM: usize = 11;
 //const INES2_SYSTEM_TYPE: usize = 13;
 //const INES2_MISC_ROM_COUNT: usize = 14;
 //const INES2_DEFAULT_EXPANSION: usize = 15;
-
-
-
-
 
 impl INesHeader {
     pub fn from(raw_bytes: &[u8]) -> INesHeader {
@@ -221,7 +219,7 @@ impl INesHeader {
         return 64 << (shift_count as usize);
     }
 
-    pub fn chr_type(&self) -> MemoryType {
+    /*pub fn chr_type(&self) -> MemoryType {
         let has_rom = self.chr_rom_size() != 0;
         let has_ram = self.chr_ram_size() != 0;
         let has_sram = self.chr_sram_size() != 0;
@@ -238,7 +236,7 @@ impl INesHeader {
             return MemoryType::Sram;
         }
         return MemoryType::Mixed;
-    }
+    }*/
 
     // https://wiki.nesdev.com/w/index.php/INES#Flags_6
 
@@ -312,7 +310,7 @@ impl INesHeader {
         }   
     }
 
-    pub fn prg_ram_type(&self) -> MemoryType {
+    /*pub fn prg_ram_type(&self) -> MemoryType {
         let has_ram = self.prg_ram_size() != 0;
         let has_sram = self.prg_sram_size() != 0;
         if !has_ram && !has_sram {
@@ -325,7 +323,7 @@ impl INesHeader {
             return MemoryType::Sram;
         }
         return MemoryType::Mixed;
-    }
+    }*/
 
     pub fn has_trainer(&self) -> bool {
         return self.raw_bytes[INES_FLAGS_6] & 0b0000_0100 != 0;
@@ -393,12 +391,13 @@ impl INesCartridge {
         let mut trainer: Vec<u8> = Vec::new();
         trainer.resize(trainer_size, 0);
         file_reader.read_exact(&mut trainer)?;
-        println!("trainer size: {}", trainer.len());
 
         let mut prg: Vec<u8> = Vec::new();
         prg.resize(header.prg_size(), 0);
         file_reader.read_exact(&mut prg)?;
-        println!("prg size: {}", prg.len());
+        if prg.len() == 0 {
+            return Err(INesError::ReadError{reason: format!("PRG ROM size is {}. This file is invalid, or at the very least quite unusual. Aborting.", prg.len())});
+        }
 
         let mut chr: Vec<u8> = Vec::new();
         chr.resize(header.chr_rom_size(), 0);
@@ -418,5 +417,52 @@ impl INesCartridge {
             chr: chr,
             misc_rom: misc
         });
+    }
+
+    pub fn prg_rom_block(&self) -> MemoryBlock {
+        return MemoryBlock::new(&self.prg, MemoryType::Rom);
+    }
+
+    pub fn prg_ram_blocks(&self) -> Vec<MemoryBlock> {
+        let mut blocks: Vec<MemoryBlock> = Vec::new();
+        if self.header.prg_ram_size() > 0 {
+            let mut prg_ram: Vec<u8> = Vec::new();
+            prg_ram.resize(self.header.prg_ram_size(), 0);
+            blocks.push(MemoryBlock::new(&prg_ram, MemoryType::Ram));
+        }
+        if self.header.prg_sram_size() > 0 {
+            let mut prg_sram: Vec<u8> = Vec::new();
+            prg_sram.resize(self.header.prg_sram_size(), 0);
+            blocks.push(MemoryBlock::new(&prg_sram, MemoryType::NvRam));
+        }
+        if blocks.len() == 0 {
+            // Always include at least one entry in this list; in this case, a
+            // single empty block.
+            blocks.push(MemoryBlock::new(&Vec::new(), MemoryType::Rom));
+        }
+        return blocks;
+    }
+
+    pub fn chr_blocks(&self) -> Vec<MemoryBlock> {
+        let mut blocks: Vec<MemoryBlock> = Vec::new();
+        if self.chr.len() > 0 {
+            blocks.push(MemoryBlock::new(&self.chr, MemoryType::Rom));
+        }
+        if self.header.chr_ram_size() > 0 {
+            let mut chr_ram: Vec<u8> = Vec::new();
+            chr_ram.resize(self.header.chr_ram_size(), 0);
+            blocks.push(MemoryBlock::new(&chr_ram, MemoryType::Ram));
+        }
+        if self.header.chr_sram_size() > 0 {
+            let mut chr_sram: Vec<u8> = Vec::new();
+            chr_sram.resize(self.header.chr_sram_size(), 0);
+            blocks.push(MemoryBlock::new(&chr_sram, MemoryType::NvRam));
+        }
+        if blocks.len() == 0 {
+            // Always include at least one entry in this list; in this case, a
+            // single empty block.
+            blocks.push(MemoryBlock::new(&Vec::new(), MemoryType::Rom));
+        }
+        return blocks;
     }
 }
