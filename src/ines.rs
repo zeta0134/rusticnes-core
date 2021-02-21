@@ -49,6 +49,34 @@ pub struct INesHeader {
     raw_bytes: [u8; 16]
 }
 
+// header byte constants
+const INES_MAGIC_N: usize = 0;
+const INES_MAGIC_E: usize = 1;
+const INES_MAGIC_S: usize = 2;
+const INES_MAGIC_EOF: usize = 3;
+const INES_PRG_ROM_LSB: usize = 4;
+const INES_CHR_ROM_LSB: usize = 5;
+const INES_FLAGS_6: usize = 6;
+const INES_FLAGS_7: usize = 7;
+
+// here the constants diverge depending on type
+const INES1_PRG_RAM_SIZE: usize = 8;
+//const INES1_TV_SYSTEM: usize = 9;
+//const INES1_FLAGS_10: usize = 10;
+
+const INES2_MAPPER_SUB_MSB: usize = 8;
+const INES2_PRG_CHR_MSB: usize = 9;
+const INES2_PRG_RAM: usize = 10;
+const INES2_CHR_RAM: usize = 11;
+//const INES2_CPU_PPU_TIMING: usize = 12;
+//const INES2_SYSTEM_TYPE: usize = 13;
+//const INES2_MISC_ROM_COUNT: usize = 14;
+//const INES2_DEFAULT_EXPANSION: usize = 15;
+
+
+
+
+
 impl INesHeader {
     pub fn from(raw_bytes: &[u8]) -> INesHeader {
         let mut header = INesHeader {
@@ -61,10 +89,10 @@ impl INesHeader {
     pub fn magic_header_valid(&self) -> bool {
         // Constant $4E $45 $53 $1A ("NES" followed by MS-DOS end-of-file)
         return 
-            self.raw_bytes[0] as char == 'N' &&
-            self.raw_bytes[1] as char == 'E' &&
-            self.raw_bytes[2] as char == 'S' &&
-            self.raw_bytes[3] == 0x1A;
+            self.raw_bytes[INES_MAGIC_N] as char == 'N' &&
+            self.raw_bytes[INES_MAGIC_E] as char == 'E' &&
+            self.raw_bytes[INES_MAGIC_S] as char == 'S' &&
+            self.raw_bytes[INES_MAGIC_EOF] == 0x1A;
     }
 
     fn ines1_extended_attributes_valid(&self) -> bool {
@@ -75,7 +103,7 @@ impl INesHeader {
     pub fn version(&self) -> u8 {
         // A file is a NES 2.0 ROM image file if it begins with "NES<EOF>" (same as iNES) and, 
         // additionally, the byte at offset 7 has bit 2 clear and bit 3 set:
-        if self.raw_bytes[7] == 0x08 {
+        if self.raw_bytes[INES_FLAGS_7] == 0x08 {
             return 2;
         }
         if self.magic_header_valid() {
@@ -85,13 +113,13 @@ impl INesHeader {
     }
 
     fn _prg_size_ines1(&self) -> usize {
-        return self.raw_bytes[4] as usize * 16 * 1024;
+        return self.raw_bytes[INES_PRG_ROM_LSB] as usize * 16 * 1024;
     }
 
     fn _prg_size_ines2(&self) -> usize {
         // https://wiki.nesdev.com/w/index.php/NES_2.0#PRG-ROM_Area
-        let lsb = self.raw_bytes[4];
-        let msb = self.raw_bytes[9] & 0b0000_1111;
+        let lsb = self.raw_bytes[INES_PRG_ROM_LSB];
+        let msb = self.raw_bytes[INES2_PRG_CHR_MSB] & 0b0000_1111;
         if msb == 0xF {
             // exponent-multiplier mode
             //  ++++----------- Header byte 9 D0..D3
@@ -121,14 +149,14 @@ impl INesHeader {
     }
 
     fn _chr_rom_size_ines1(&self) -> usize {
-        let chr_size = self.raw_bytes[5] as usize * 8 * 1024;
+        let chr_size = self.raw_bytes[INES_CHR_ROM_LSB] as usize * 8 * 1024;
         return chr_size;
     }
 
     fn _chr_rom_size_ines2(&self) -> usize {
         // https://wiki.nesdev.com/w/index.php/NES_2.0#PRG-ROM_Area
-        let lsb = self.raw_bytes[5];
-        let msb = (self.raw_bytes[9] & 0b1111_0000) >> 4;
+        let lsb = self.raw_bytes[INES_CHR_ROM_LSB];
+        let msb = (self.raw_bytes[INES2_PRG_CHR_MSB] & 0b1111_0000) >> 4;
         if msb == 0xF {
             // exponent-multiplier mode
             //  ++++----------- Header byte 9 D0..D3
@@ -158,14 +186,14 @@ impl INesHeader {
     }
 
     fn _chr_ram_size_ines1(&self) -> usize {
-        if self.raw_bytes[5] == 0 {
+        if self.raw_bytes[INES_CHR_ROM_LSB] == 0 {
             return 8 * 1024;
         }
         return 0;
     }
 
     fn _chr_ram_size_ines2(&self) -> usize {
-        let shift_count = self.raw_bytes[11] & 0b0000_1111;
+        let shift_count = self.raw_bytes[INES2_CHR_RAM] & 0b0000_1111;
         if shift_count == 0 {
             return 0;
         }
@@ -186,7 +214,7 @@ impl INesHeader {
         if self.version() != 2 {
             return 0;
         }
-        let shift_count = (self.raw_bytes[11] & 0b1111_0000) >> 4;
+        let shift_count = (self.raw_bytes[INES2_CHR_RAM] & 0b1111_0000) >> 4;
         if shift_count == 0 {
             return 0;
         }
@@ -215,33 +243,33 @@ impl INesHeader {
     // https://wiki.nesdev.com/w/index.php/INES#Flags_6
 
     pub fn mirroring(&self) -> Mirroring {
-        if self.raw_bytes[6] & 0b0000_1000 != 0 {
+        if self.raw_bytes[INES_FLAGS_6] & 0b0000_1000 != 0 {
             return Mirroring::FourScreen;
         }
-        if self.raw_bytes[6] & 0b0000_0001 != 0 {
+        if self.raw_bytes[INES_FLAGS_6] & 0b0000_0001 != 0 {
             return Mirroring::Vertical;
         }
         return Mirroring::Horizontal;
     }
 
     pub fn has_sram(&self) -> bool {
-        return self.raw_bytes[6] & 0b0000_0010 != 0;
+        return self.raw_bytes[INES_FLAGS_6] & 0b0000_0010 != 0;
     }
 
     fn _prg_ram_size_ines1(&self) -> usize  {
-        let has_sram = self.raw_bytes[6] & 0b0000_0010 != 0;
+        let has_sram = self.raw_bytes[INES_FLAGS_6] & 0b0000_0010 != 0;
         if has_sram {
             return 0;
         }
-        if self.ines1_extended_attributes_valid() && self.raw_bytes[8] != 0 {
-            return (self.raw_bytes[8] as usize) * 1024;
+        if self.ines1_extended_attributes_valid() && self.raw_bytes[INES1_PRG_RAM_SIZE] != 0 {
+            return (self.raw_bytes[INES1_PRG_RAM_SIZE] as usize) * 1024;
         } else {
             return 8 * 1024;
         }
     }
 
     fn _prg_ram_size_ines2(&self) -> usize  {
-        let shift_count = self.raw_bytes[10] & 0b0000_1111;
+        let shift_count = self.raw_bytes[INES2_PRG_RAM] & 0b0000_1111;
         if shift_count == 0 {
             return 0;
         }
@@ -257,19 +285,19 @@ impl INesHeader {
     }
 
     fn _prg_sram_size_ines1(&self) -> usize  {
-        let has_sram = self.raw_bytes[6] & 0b0000_0010 != 0;
+        let has_sram = self.raw_bytes[INES_FLAGS_6] & 0b0000_0010 != 0;
         if !has_sram {
             return 0;
         }
-        if self.ines1_extended_attributes_valid() && self.raw_bytes[8] != 0 {
-            return (self.raw_bytes[8] as usize) * 1024;
+        if self.ines1_extended_attributes_valid() && self.raw_bytes[INES1_PRG_RAM_SIZE] != 0 {
+            return (self.raw_bytes[INES1_PRG_RAM_SIZE] as usize) * 1024;
         } else {
             return 8 * 1024;
         }
     }
 
     fn _prg_sram_size_ines2(&self) -> usize {
-        let shift_count = (self.raw_bytes[10] & 0b1111_0000) >> 4;
+        let shift_count = (self.raw_bytes[INES2_PRG_RAM] & 0b1111_0000) >> 4;
         if shift_count == 0 {
             return 0;
         }
@@ -300,12 +328,12 @@ impl INesHeader {
     }
 
     pub fn has_trainer(&self) -> bool {
-        return self.raw_bytes[6] & 0b0000_0100 != 0;
+        return self.raw_bytes[INES_FLAGS_6] & 0b0000_0100 != 0;
     }
 
     fn _mapper_ines1(&self) -> u16 {
-        let lower_nybble = (self.raw_bytes[6] & 0b1111_0000) >> 4;
-        let upper_nybble = self.raw_bytes[7] & 0b1111_0000;
+        let lower_nybble = (self.raw_bytes[INES_FLAGS_6] & 0b1111_0000) >> 4;
+        let upper_nybble = self.raw_bytes[INES_FLAGS_7] & 0b1111_0000;
         // DiskDude! check: are the padding bytes here all zero?
         // Documented here: https://wiki.nesdev.com/w/index.php/INES#Flags_10
         if self.ines1_extended_attributes_valid() {
@@ -324,9 +352,9 @@ impl INesHeader {
     }
 
     fn _mapper_ines2(&self) -> u16 {
-        let lower_nybble = ((self.raw_bytes[6] & 0b1111_0000) >> 4) as u16;
-        let middle_nybble = (self.raw_bytes[7] & 0b1111_0000) as u16;
-        let upper_nybble = ((self.raw_bytes[8] & 0b0000_1111) as u16) << 8;
+        let lower_nybble = ((self.raw_bytes[INES_FLAGS_6] & 0b1111_0000) >> 4) as u16;
+        let middle_nybble = (self.raw_bytes[INES_FLAGS_7] & 0b1111_0000) as u16;
+        let upper_nybble = ((self.raw_bytes[INES2_MAPPER_SUB_MSB] & 0b0000_1111) as u16) << 8;
         return upper_nybble | middle_nybble | lower_nybble;
     }
 
