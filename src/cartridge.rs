@@ -1,20 +1,22 @@
 use mmc::mapper::*;
-use mmc::axrom::AxRom;
-use mmc::bnrom::BnRom;
-use mmc::cnrom::CnRom;
-use mmc::fme7::Fme7;
-use mmc::gxrom::GxRom;
-use mmc::ines31::INes31;
+//use mmc::axrom::AxRom;
+//use mmc::bnrom::BnRom;
+//use mmc::cnrom::CnRom;
+//use mmc::fme7::Fme7;
+//use mmc::gxrom::GxRom;
+//use mmc::ines31::INes31;
 use mmc::nrom::Nrom;
-use mmc::pxrom::PxRom;
-use mmc::mmc1::Mmc1;
-use mmc::mmc3::Mmc3;
-use mmc::mmc5::Mmc5;
-use mmc::uxrom::UxRom;
+//use mmc::pxrom::PxRom;
+//use mmc::mmc1::Mmc1;
+//use mmc::mmc3::Mmc3;
+//use mmc::mmc5::Mmc5;
+//use mmc::uxrom::UxRom;
+
+use ines::INesCartridge;
 
 // iNES 1.0 Header. Flags and decoding documented here. 2.0 is not yet supported.
 // https://wiki.nesdev.com/w/index.php/INES
-#[derive(Copy, Clone)]
+/*#[derive(Copy, Clone)]
 pub struct NesHeader {
   pub magic: [u8; 4],
   pub prg_rom_size: usize,
@@ -30,9 +32,9 @@ pub struct NesHeader {
 
   // There are many other flags in the iNES header, but they're unsupported,
   // so they're ommitted here.
-}
+}*/
 
-impl Default for NesHeader {
+/*impl Default for NesHeader {
     fn default() -> NesHeader {
         NesHeader {
             magic: [0u8; 4],
@@ -47,9 +49,9 @@ impl Default for NesHeader {
             mirroring: Mirroring::Vertical,
         }
     }
-}
+}*/
 
-impl NesHeader {
+/*impl NesHeader {
     pub fn print_info(&self) {
         // TODO: Detect if the magic header doesn't match and either bail, or print a warning.
         println!("Magic Header: {0}{1}{2} 0x{3:X}", self.magic[0] as char, self.magic[1] as char, self.magic[2] as char, self.magic[3]);
@@ -67,9 +69,9 @@ impl NesHeader {
           self.magic[2] as char == 'S' &&
           self.magic[3] == 0x1A;
     }
-}
+}*/
 
-pub fn extract_header(cartridge: &[u8]) -> NesHeader {
+/*pub fn extract_header(cartridge: &[u8]) -> NesHeader {
     let prg_size = cartridge[4] as usize * 16 * 1024;
     let chr_size = cartridge[5] as usize * 8 * 1024;
     let mapper_low = (cartridge[6] & 0b1111_0000) >> 4;
@@ -103,9 +105,9 @@ pub fn extract_header(cartridge: &[u8]) -> NesHeader {
     nes_header.trainer  = cartridge[6] & 0b0000_0100 != 0;
 
     return nes_header;
-}
+}*/
 
-pub fn load_from_cartridge(nes_header: NesHeader, cartridge: &[u8]) -> Result<Box<dyn Mapper>, String> {
+/*pub fn load_from_cartridge(nes_header: NesHeader, cartridge: &[u8]) -> Result<Box<dyn Mapper>, String> {
     let mut offset = 16;
     let mut header = nes_header;
 
@@ -149,4 +151,37 @@ pub fn load_from_cartridge(nes_header: NesHeader, cartridge: &[u8]) -> Result<Bo
     };
 
     return Ok(mapper);
+}*/
+
+fn mapper_from_ines(ines: INesCartridge) -> Result<Box<dyn Mapper>, String> {
+    let mapper: Box<dyn Mapper> = match ines.header.mapper_number() {
+        0 => Box::new(Nrom::from_ines(ines)?),
+        /*1 => Box::new(Mmc1::new(header, chr_rom, prg_rom)),
+        2 => Box::new(UxRom::new(header, chr_rom, prg_rom)),
+        3 => Box::new(CnRom::new(header, chr_rom, prg_rom)),
+        4 => Box::new(Mmc3::new(header, chr_rom, prg_rom)),
+        5 => Box::new(Mmc5::new(header, chr_rom, prg_rom)),
+        7 => Box::new(AxRom::new(header, chr_rom, prg_rom)),
+        9 => Box::new(PxRom::new(header, chr_rom, prg_rom)),
+        31 => Box::new(INes31::new(header, chr_rom, prg_rom)),
+        34 => Box::new(BnRom::new(header, chr_rom, prg_rom)),
+        66 => Box::new(GxRom::new(header, chr_rom, prg_rom)),
+        69 => Box::new(Fme7::new(header, chr_rom, prg_rom)),*/
+        _ => {
+            return Err(format!("Unsupported iNES mapper: {}", ines.header.mapper_number()));
+        }
+    };
+
+    return Ok(mapper);
+}
+
+pub fn mapper_from_file(file_data: &[u8]) -> Result<Box<dyn Mapper>, String> {
+    let mut file_reader = file_data;
+    let mut errors = String::new();
+    match INesCartridge::from_reader(&mut file_reader) {
+        Ok(ines) => {return mapper_from_ines(ines);},
+        Err(e) => {errors += format!("ines: {}\n", e).as_str()}
+    }
+
+    return Err(format!("Unable to open file as any known type, giving up.\n{}", errors));
 }
