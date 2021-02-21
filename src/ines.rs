@@ -35,6 +35,7 @@ impl From<std::io::Error> for INesError {
     }
 }
 
+#[derive(PartialEq)]
 pub enum MemoryType {
     Rom,
     Ram,
@@ -64,6 +65,11 @@ impl INesHeader {
             self.raw_bytes[1] as char == 'E' &&
             self.raw_bytes[2] as char == 'S' &&
             self.raw_bytes[3] == 0x1A;
+    }
+
+    fn ines1_extended_attributes_valid(&self) -> bool {
+        // Or in other words, "DiskDude!" is missing:
+        return self.raw_bytes[12] | self.raw_bytes[13] | self.raw_bytes[14] | self.raw_bytes[15] == 0;
     }
 
     pub fn version(&self) -> u8 {
@@ -171,7 +177,7 @@ impl INesHeader {
             1 => self._chr_ram_size_ines1(),
             2 => self._chr_ram_size_ines2(),
             _ => 0
-        }   
+        }
     }
 
     pub fn chr_sram_size(&self) -> usize {
@@ -188,9 +194,9 @@ impl INesHeader {
     }
 
     pub fn chr_type(&self) -> MemoryType {
-        let has_rom = self.chr_rom_size() == 0;
-        let has_ram = self.chr_ram_size() == 0;
-        let has_sram = self.chr_sram_size() == 0;
+        let has_rom = self.chr_rom_size() != 0;
+        let has_ram = self.chr_ram_size() != 0;
+        let has_sram = self.chr_sram_size() != 0;
         if !has_rom && !has_ram && !has_sram {
             return MemoryType::Missing;
         }
@@ -218,8 +224,79 @@ impl INesHeader {
         return Mirroring::Horizontal;
     }
 
-    pub fn persistent_sram(&self) -> bool {
+    pub fn has_sram(&self) -> bool {
         return self.raw_bytes[6] & 0b0000_0010 != 0;
+    }
+
+    fn _prg_ram_size_ines1(&self) -> usize  {
+        let has_sram = self.raw_bytes[6] & 0b0000_0010 != 0;
+        if has_sram {
+            return 0;
+        }
+        if self.ines1_extended_attributes_valid() && self.raw_bytes[8] != 0 {
+            return (self.raw_bytes[8] as usize) * 1024;
+        } else {
+            return 8 * 1024;
+        }
+    }
+
+    fn _prg_ram_size_ines2(&self) -> usize  {
+        let shift_count = self.raw_bytes[10] & 0b0000_1111;
+        if shift_count == 0 {
+            return 0;
+        }
+        return 64 << (shift_count as usize);
+    }
+
+    pub fn prg_ram_size(&self) -> usize  {
+        return match self.version() {
+            1 => self._prg_ram_size_ines1(),
+            2 => self._prg_ram_size_ines2(),
+            _ => 0
+        }
+    }
+
+    fn _prg_sram_size_ines1(&self) -> usize  {
+        let has_sram = self.raw_bytes[6] & 0b0000_0010 != 0;
+        if !has_sram {
+            return 0;
+        }
+        if self.ines1_extended_attributes_valid() && self.raw_bytes[8] != 0 {
+            return (self.raw_bytes[8] as usize) * 1024;
+        } else {
+            return 8 * 1024;
+        }
+    }
+
+    fn _prg_sram_size_ines2(&self) -> usize {
+        let shift_count = (self.raw_bytes[10] & 0b1111_0000) >> 4;
+        if shift_count == 0 {
+            return 0;
+        }
+        return 64 << (shift_count as usize);
+    }
+
+    pub fn prg_sram_size(&self) -> usize  {
+        return match self.version() {
+            1 => self._prg_sram_size_ines1(),
+            2 => self._prg_sram_size_ines2(),
+            _ => 0
+        }   
+    }
+
+    pub fn prg_ram_type(&self) -> MemoryType {
+        let has_ram = self.prg_ram_size() != 0;
+        let has_sram = self.prg_sram_size() != 0;
+        if !has_ram && !has_sram {
+            return MemoryType::Missing;
+        }
+        if has_ram && !has_sram {
+            return MemoryType::Ram;
+        }
+        if !has_ram && has_sram {
+            return MemoryType::Sram;
+        }
+        return MemoryType::Mixed;
     }
 
     pub fn has_trainer(&self) -> bool {
@@ -231,7 +308,7 @@ impl INesHeader {
         let upper_nybble = self.raw_bytes[7] & 0b1111_0000;
         // DiskDude! check: are the padding bytes here all zero?
         // Documented here: https://wiki.nesdev.com/w/index.php/INES#Flags_10
-        if self.raw_bytes[12] | self.raw_bytes[13] | self.raw_bytes[14] | self.raw_bytes[15] == 0 {
+        if self.ines1_extended_attributes_valid() {
             // Spec compliant path
             let mapper_number = lower_nybble + upper_nybble;
             return mapper_number as u16;
@@ -285,19 +362,26 @@ impl INesCartridge {
         }
 
         let trainer_size = if header.has_trainer() {512} else {0};
-        let mut trainer: Vec<u8> = Vec::with_capacity(trainer_size);
+        let mut trainer: Vec<u8> = Vec::new();
+        trainer.resize(trainer_size, 0);
         file_reader.read_exact(&mut trainer)?;
+        println!("trainer size: {}", trainer.len());
 
-        let mut prg: Vec<u8> = Vec::with_capacity(header.prg_size());
+        let mut prg: Vec<u8> = Vec::new();
+        prg.resize(header.prg_size(), 0);
         file_reader.read_exact(&mut prg)?;
+        println!("prg size: {}", prg.len());
 
-        let mut chr: Vec<u8> = Vec::with_capacity(header.chr_rom_size());
+        let mut chr: Vec<u8> = Vec::new();
+        chr.resize(header.chr_rom_size(), 0);
         file_reader.read_exact(&mut chr)?;
+        println!("chr rom size: {}", chr.len());
 
         // If there is any remaining data at this point, it becomes misc_rom and,
         // currently, has no other special handling
         let mut misc: Vec<u8> = Vec::new();
         file_reader.read_to_end(&mut misc)?;
+        println!("misc_size: {}", misc.len());
 
         return Ok(INesCartridge {
             header: header,
