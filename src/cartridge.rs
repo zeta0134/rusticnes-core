@@ -1,7 +1,7 @@
 use mmc::mapper::*;
 use mmc::axrom::AxRom;
 use mmc::bnrom::BnRom;
-//use mmc::cnrom::CnRom;
+use mmc::cnrom::CnRom;
 //use mmc::fme7::Fme7;
 //use mmc::gxrom::GxRom;
 //use mmc::ines31::INes31;
@@ -154,11 +154,13 @@ pub struct NesHeader {
 }*/
 
 fn mapper_from_ines(ines: INesCartridge) -> Result<Box<dyn Mapper>, String> {
-    let mapper: Box<dyn Mapper> = match ines.header.mapper_number() {
+    let mapper_number = ines.header.mapper_number();
+
+    let mapper: Box<dyn Mapper> = match mapper_number {
         0 => Box::new(Nrom::from_ines(ines)?),
         //1 => Box::new(Mmc1::new(header, chr_rom, prg_rom)),
         //2 => Box::new(UxRom::new(header, chr_rom, prg_rom)),
-        //3 => Box::new(CnRom::new(header, chr_rom, prg_rom)),
+        3 => Box::new(CnRom::from_ines(ines)?),
         //4 => Box::new(Mmc3::new(header, chr_rom, prg_rom)),
         //5 => Box::new(Mmc5::new(header, chr_rom, prg_rom)),
         7 => Box::new(AxRom::from_ines(ines)?),
@@ -171,6 +173,8 @@ fn mapper_from_ines(ines: INesCartridge) -> Result<Box<dyn Mapper>, String> {
             return Err(format!("Unsupported iNES mapper: {}", ines.header.mapper_number()));
         }
     };
+
+    println!("Successfully loaded mapper: {}", mapper_number);
 
     return Ok(mapper);
 }

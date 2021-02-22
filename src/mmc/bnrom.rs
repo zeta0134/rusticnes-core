@@ -22,9 +22,6 @@ impl BnRom {
         let prg_rom_block = ines.prg_rom_block();
         let chr_block = ines.chr_block()?;
 
-        println!("prg_rom_size: {}", prg_rom_block.len());
-        println!("chr_size: {}", chr_block.len());
-
         return Ok(BnRom {
             prg_rom: prg_rom_block.clone(),
             chr: chr_block.clone(),
@@ -62,13 +59,13 @@ impl Mapper for BnRom {
 
     fn debug_read_ppu(&self, address: u16) -> Option<u8> {
         match address {
-            0x0000 ..= 0x1FFF => return self.chr.wrapping_read(address as usize),
-            0x2000 ..= 0x3FFF => return match self.mirroring {
+            0x0000 ..= 0x1FFF => self.chr.wrapping_read(address as usize),
+            0x2000 ..= 0x3FFF => match self.mirroring {
                 Mirroring::Horizontal => Some(self.vram[mirroring::horizontal_mirroring(address) as usize]),
                 Mirroring::Vertical   => Some(self.vram[mirroring::vertical_mirroring(address) as usize]),
                 _ => None
             },
-            _ => return None
+            _ => None
         }
     }
 
