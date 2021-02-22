@@ -1,5 +1,5 @@
 use mmc::mapper::*;
-//use mmc::axrom::AxRom;
+use mmc::axrom::AxRom;
 //use mmc::bnrom::BnRom;
 //use mmc::cnrom::CnRom;
 //use mmc::fme7::Fme7;
@@ -156,17 +156,17 @@ pub struct NesHeader {
 fn mapper_from_ines(ines: INesCartridge) -> Result<Box<dyn Mapper>, String> {
     let mapper: Box<dyn Mapper> = match ines.header.mapper_number() {
         0 => Box::new(Nrom::from_ines(ines)?),
-        /*1 => Box::new(Mmc1::new(header, chr_rom, prg_rom)),
-        2 => Box::new(UxRom::new(header, chr_rom, prg_rom)),
-        3 => Box::new(CnRom::new(header, chr_rom, prg_rom)),
-        4 => Box::new(Mmc3::new(header, chr_rom, prg_rom)),
-        5 => Box::new(Mmc5::new(header, chr_rom, prg_rom)),
-        7 => Box::new(AxRom::new(header, chr_rom, prg_rom)),
-        9 => Box::new(PxRom::new(header, chr_rom, prg_rom)),
-        31 => Box::new(INes31::new(header, chr_rom, prg_rom)),
-        34 => Box::new(BnRom::new(header, chr_rom, prg_rom)),
-        66 => Box::new(GxRom::new(header, chr_rom, prg_rom)),
-        69 => Box::new(Fme7::new(header, chr_rom, prg_rom)),*/
+        //1 => Box::new(Mmc1::new(header, chr_rom, prg_rom)),
+        //2 => Box::new(UxRom::new(header, chr_rom, prg_rom)),
+        //3 => Box::new(CnRom::new(header, chr_rom, prg_rom)),
+        //4 => Box::new(Mmc3::new(header, chr_rom, prg_rom)),
+        //5 => Box::new(Mmc5::new(header, chr_rom, prg_rom)),
+        7 => Box::new(AxRom::from_ines(ines)?),
+        //9 => Box::new(PxRom::new(header, chr_rom, prg_rom)),
+        //31 => Box::new(INes31::new(header, chr_rom, prg_rom)),
+        //34 => Box::new(BnRom::new(header, chr_rom, prg_rom)),
+        //66 => Box::new(GxRom::new(header, chr_rom, prg_rom)),
+        //69 => Box::new(Fme7::new(header, chr_rom, prg_rom)),
         _ => {
             return Err(format!("Unsupported iNES mapper: {}", ines.header.mapper_number()));
         }
