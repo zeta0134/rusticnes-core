@@ -465,4 +465,20 @@ impl INesCartridge {
         }
         return blocks;
     }
+
+    pub fn prg_ram_block(&self) -> Result<MemoryBlock, String> {
+        let blocks = self.prg_ram_blocks();
+        if blocks.len() != 1 {
+            return Err(format!("Unsupported mixed PRG RAM types for mapper number {}", self.header.mapper_number()));
+        }
+        return Ok(blocks[0].clone());
+    }
+
+    pub fn chr_block(&self) -> Result<MemoryBlock, String> {
+        let blocks = self.chr_blocks();
+        if blocks.len() != 1 {
+            return Err(format!("Unsupported mixed CHR types for mapper number {}", self.header.mapper_number()));
+        }
+        return Ok(blocks[0].clone());
+    }
 }

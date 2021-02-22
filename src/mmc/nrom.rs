@@ -19,20 +19,13 @@ pub struct Nrom {
 impl Nrom {
     pub fn from_ines(ines: INesCartridge) -> Result<Nrom, String> {
         let prg_rom_block = ines.prg_rom_block();
-        let prg_ram_blocks = ines.prg_ram_blocks();
-        let chr_blocks = ines.chr_blocks();
-
-        if prg_ram_blocks.len() > 1 {
-            return Err("NROM: Unsupported mixed PRG RAM shenanigans!!".to_string());
-        }
-        if chr_blocks.len() > 1 {
-            return Err("NROM: Unsupported mixed CHR shenanigans!!".to_string());  
-        }
+        let prg_ram_block = ines.prg_ram_block()?;
+        let chr_block = ines.chr_block()?;
 
         return Ok(Nrom {
             prg_rom: prg_rom_block.clone(),
-            prg_ram: prg_ram_blocks[0].clone(),
-            chr: chr_blocks[0].clone(),
+            prg_ram: prg_ram_block.clone(),
+            chr: chr_block.clone(),
             mirroring: ines.header.mirroring(),
             vram: vec![0u8; 0x1000],
         });
