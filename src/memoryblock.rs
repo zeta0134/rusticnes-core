@@ -80,5 +80,9 @@ impl MemoryBlock {
     pub fn as_vec(&self) -> &Vec<u8> {
         return &self.bytes;
     }
+
+    pub fn as_mut_vec(&mut self) -> &mut Vec<u8> {
+        return &mut self.bytes;
+    }
 }
 
