@@ -1,7 +1,9 @@
 // Sunsoft FME-7, 5A, and 5B (notably lacking expansion audio for now)
 // Reference implementation: https://wiki.nesdev.com/w/index.php/Sunsoft_FME-7
 
-use cartridge::NesHeader;
+use ines::INesCartridge;
+use memoryblock::MemoryBlock;
+
 use mmc::mapper::*;
 use mmc::mirroring;
 
@@ -12,9 +14,9 @@ use apu::Timbre;
 use apu::RingBuffer;
 
 pub struct Fme7 {
-    pub prg_rom: Vec<u8>,
-    pub prg_ram: Vec<u8>,
-    pub chr_rom: Vec<u8>,
+    pub prg_rom: MemoryBlock,
+    pub prg_ram: MemoryBlock,
+    pub chr_rom: MemoryBlock,
     pub command: u8,
     pub chr_banks: Vec<usize>,
     pub prg_banks: Vec<usize>,
@@ -31,11 +33,15 @@ pub struct Fme7 {
 }
 
 impl Fme7 {
-    pub fn new(header: NesHeader, chr: &[u8], prg: &[u8]) -> Fme7 {
-        return Fme7 {
-            prg_rom: prg.to_vec(),
-            chr_rom: chr.to_vec(),
-            prg_ram: vec![0u8; header.prg_ram_size],
+    pub fn from_ines(ines: INesCartridge) -> Result<Fme7, String> {
+        let prg_rom_block = ines.prg_rom_block();
+        let prg_ram_block = ines.prg_ram_block()?;
+        let chr_block = ines.chr_block()?;
+
+        return Ok(Fme7 {
+            prg_rom: prg_rom_block.clone(),
+            chr_rom: chr_block.clone(),
+            prg_ram: prg_ram_block.clone(),
             command: 0,
             chr_banks: vec![0usize; 8],
             prg_banks: vec![0usize; 4],
@@ -49,7 +55,7 @@ impl Fme7 {
             irq_pending: false,
             audio_command_select: 0,
             expansion_audio_chip: YM2149F::new(),
-        }
+        });
     }
 
     pub fn clock_irq(&mut self) {
@@ -68,25 +74,23 @@ impl Mapper for Fme7 {
     }
     
     fn debug_read_cpu(&self, address: u16) -> Option<u8> {
-        let prg_rom_len = self.prg_rom.len();
-        let prg_ram_len = self.prg_ram.len();
         match address {
             0x6000 ..= 0x7FFF => {
                 if self.prg_ram_selected {
                     if self.prg_ram_enabled {
-                        return Some(self.prg_ram[((self.prg_banks[0] * 0x2000) + (address as usize - 0x6000)) % prg_ram_len]);
+                        self.prg_ram.banked_read(0x2000, self.prg_banks[0], (address - 0x6000) as usize)
                     } else {
-                        return None
+                        None
                     }
                 } else {
-                    return Some(self.prg_rom[((self.prg_banks[0] * 0x2000) + (address as usize - 0x6000)) % prg_rom_len]);
+                    self.prg_rom.banked_read(0x2000, self.prg_banks[0], (address - 0x6000) as usize)
                 }
             },
-            0x8000 ..= 0x9FFF => return Some(self.prg_rom[((self.prg_banks[1] * 0x2000) + (address as usize - 0x8000)) % prg_rom_len]),
-            0xA000 ..= 0xBFFF => return Some(self.prg_rom[((self.prg_banks[2] * 0x2000) + (address as usize - 0xA000)) % prg_rom_len]),
-            0xC000 ..= 0xDFFF => return Some(self.prg_rom[((self.prg_banks[3] * 0x2000) + (address as usize - 0xC000)) % prg_rom_len]),
-            0xE000 ..= 0xFFFF => return Some(self.prg_rom[(prg_rom_len - 0x2000) + (address as usize - 0xE000)]),
-            _ => return None
+            0x8000 ..= 0x9FFF => self.prg_rom.banked_read(0x2000, self.prg_banks[1], (address - 0x8000) as usize),
+            0xA000 ..= 0xBFFF => self.prg_rom.banked_read(0x2000, self.prg_banks[2], (address - 0xA000) as usize),
+            0xC000 ..= 0xDFFF => self.prg_rom.banked_read(0x2000, self.prg_banks[3], (address - 0xC000) as usize),
+            0xE000 ..= 0xFFFF => self.prg_rom.banked_read(0x2000, 0xFF, (address - 0xE000) as usize),
+            _ => None
         }
     }
 
@@ -96,24 +100,23 @@ impl Mapper for Fme7 {
     }
 
     fn debug_read_ppu(&self, address: u16) -> Option<u8> {
-        let chr_rom_len = self.chr_rom.len();
         match address {
-            0x0000 ..= 0x03FF => return Some(self.chr_rom[((self.chr_banks[0] * 0x400) + (address as usize - 0x0000)) % chr_rom_len]),
-            0x0400 ..= 0x07FF => return Some(self.chr_rom[((self.chr_banks[1] * 0x400) + (address as usize - 0x0400)) % chr_rom_len]),
-            0x0800 ..= 0x0BFF => return Some(self.chr_rom[((self.chr_banks[2] * 0x400) + (address as usize - 0x0800)) % chr_rom_len]),
-            0x0C00 ..= 0x0FFF => return Some(self.chr_rom[((self.chr_banks[3] * 0x400) + (address as usize - 0x0C00)) % chr_rom_len]),
-            0x1000 ..= 0x13FF => return Some(self.chr_rom[((self.chr_banks[4] * 0x400) + (address as usize - 0x1000)) % chr_rom_len]),
-            0x1400 ..= 0x17FF => return Some(self.chr_rom[((self.chr_banks[5] * 0x400) + (address as usize - 0x1400)) % chr_rom_len]),
-            0x1800 ..= 0x1BFF => return Some(self.chr_rom[((self.chr_banks[6] * 0x400) + (address as usize - 0x1800)) % chr_rom_len]),
-            0x1C00 ..= 0x1FFF => return Some(self.chr_rom[((self.chr_banks[7] * 0x400) + (address as usize - 0x1C00)) % chr_rom_len]),
-            0x2000 ..= 0x3FFF => return match self.mirroring {
+            0x0000 ..= 0x03FF => self.chr_rom.banked_read(0x400, self.chr_banks[0], (address - 0x0000) as usize),
+            0x0400 ..= 0x07FF => self.chr_rom.banked_read(0x400, self.chr_banks[1], (address - 0x0400) as usize),
+            0x0800 ..= 0x0BFF => self.chr_rom.banked_read(0x400, self.chr_banks[2], (address - 0x0800) as usize),
+            0x0C00 ..= 0x0FFF => self.chr_rom.banked_read(0x400, self.chr_banks[3], (address - 0x0C00) as usize),
+            0x1000 ..= 0x13FF => self.chr_rom.banked_read(0x400, self.chr_banks[4], (address - 0x1000) as usize),
+            0x1400 ..= 0x17FF => self.chr_rom.banked_read(0x400, self.chr_banks[5], (address - 0x1400) as usize),
+            0x1800 ..= 0x1BFF => self.chr_rom.banked_read(0x400, self.chr_banks[6], (address - 0x1800) as usize),
+            0x1C00 ..= 0x1FFF => self.chr_rom.banked_read(0x400, self.chr_banks[7], (address - 0x1C00) as usize),
+            0x2000 ..= 0x3FFF => match self.mirroring {
                 Mirroring::Horizontal => Some(self.vram[mirroring::horizontal_mirroring(address) as usize]),
                 Mirroring::Vertical   => Some(self.vram[mirroring::vertical_mirroring(address) as usize]),
                 Mirroring::OneScreenLower => Some(self.vram[mirroring::one_screen_lower(address) as usize]),
                 Mirroring::OneScreenUpper => Some(self.vram[mirroring::one_screen_upper(address) as usize]),
                 _ => None
             },
-            _ => return None
+            _ => None
         }
     }
 
@@ -122,8 +125,7 @@ impl Mapper for Fme7 {
         match address {
             0x6000 ..= 0x7FFF => {
                 if self.prg_ram_selected && self.prg_ram_enabled {
-                    let prg_ram_len = self.prg_ram.len();
-                    self.prg_ram[((self.prg_banks[0] * 0x2000) + (address as usize - 0x6000)) % prg_ram_len] = data;
+                    self.prg_ram.banked_write(0x2000, self.prg_banks[0], (address - 0x6000) as usize, data);
                 }
             },
             0x8000 ..= 0x9FFF => {

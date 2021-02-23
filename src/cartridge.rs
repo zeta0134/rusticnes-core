@@ -2,7 +2,7 @@ use mmc::mapper::*;
 use mmc::axrom::AxRom;
 use mmc::bnrom::BnRom;
 use mmc::cnrom::CnRom;
-//use mmc::fme7::Fme7;
+use mmc::fme7::Fme7;
 //use mmc::gxrom::GxRom;
 //use mmc::ines31::INes31;
 use mmc::nrom::Nrom;
@@ -168,7 +168,7 @@ fn mapper_from_ines(ines: INesCartridge) -> Result<Box<dyn Mapper>, String> {
         //31 => Box::new(INes31::new(header, chr_rom, prg_rom)),
         34 => Box::new(BnRom::from_ines(ines)?),
         //66 => Box::new(GxRom::new(header, chr_rom, prg_rom)),
-        //69 => Box::new(Fme7::new(header, chr_rom, prg_rom)),
+        69 => Box::new(Fme7::from_ines(ines)?),
         _ => {
             return Err(format!("Unsupported iNES mapper: {}", ines.header.mapper_number()));
         }
