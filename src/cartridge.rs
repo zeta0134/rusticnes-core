@@ -5,11 +5,11 @@ use mmc::cnrom::CnRom;
 use mmc::fme7::Fme7;
 use mmc::gxrom::GxRom;
 use mmc::ines31::INes31;
-use mmc::nrom::Nrom;
-//use mmc::pxrom::PxRom;
-//use mmc::mmc1::Mmc1;
+use mmc::mmc1::Mmc1;
 //use mmc::mmc3::Mmc3;
 //use mmc::mmc5::Mmc5;
+use mmc::nrom::Nrom;
+//use mmc::pxrom::PxRom;
 //use mmc::uxrom::UxRom;
 
 use ines::INesCartridge;
@@ -158,7 +158,7 @@ fn mapper_from_ines(ines: INesCartridge) -> Result<Box<dyn Mapper>, String> {
 
     let mapper: Box<dyn Mapper> = match mapper_number {
         0 => Box::new(Nrom::from_ines(ines)?),
-        //1 => Box::new(Mmc1::new(header, chr_rom, prg_rom)),
+        1 => Box::new(Mmc1::from_ines(ines)?),
         //2 => Box::new(UxRom::new(header, chr_rom, prg_rom)),
         3 => Box::new(CnRom::from_ines(ines)?),
         //4 => Box::new(Mmc3::new(header, chr_rom, prg_rom)),
