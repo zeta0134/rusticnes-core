@@ -9,7 +9,7 @@ pub mod gxrom;
 pub mod ines31;
 pub mod mmc1;
 pub mod mmc3;
-//pub mod mmc5;
+pub mod mmc5;
 pub mod none;
 pub mod nrom;
 pub mod pxrom;

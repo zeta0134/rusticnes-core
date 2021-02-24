@@ -3,10 +3,10 @@
 // it here quite yet.
 // Reference capabilities: https://wiki.nesdev.com/w/index.php/MMC5
 
-use cartridge::NesHeader;
+use ines::INesCartridge;
+use memoryblock::MemoryBlock;
+
 use mmc::mapper::*;
-use std::cmp::min;
-use std::cmp::max;
 use apu::PulseChannelState;
 
 use apu::AudioChannelState;
@@ -99,9 +99,9 @@ impl AudioChannelState for Mmc5PcmChannel {
 }
 
 pub struct Mmc5 {
-    pub prg_rom: Vec<u8>,
-    pub prg_ram: Vec<u8>,
-    pub chr_rom: Vec<u8>,
+    pub prg_rom: MemoryBlock,
+    pub prg_ram: MemoryBlock,
+    pub chr: MemoryBlock,
     pub mirroring: Mirroring,
     pub ppuctrl_monitor: u8,
     pub ppumask_monitor: u8,
@@ -146,26 +146,17 @@ pub struct Mmc5 {
     pub pcm_channel: Mmc5PcmChannel,
 }
 
-fn banked_memory_index(data_store_length: usize, bank_size: usize, bank_number: usize, raw_address: usize) -> usize {
-    let total_banks = max(data_store_length / bank_size, 1);
-    let selected_bank = bank_number % total_banks;
-    let bank_start_offset = bank_size * selected_bank;
-    let offset_within_bank = raw_address % min(bank_size, data_store_length);
-    return bank_start_offset + offset_within_bank;
-}
-
 impl Mmc5 {
-    pub fn new(header: NesHeader, chr: &[u8], prg: &[u8]) -> Mmc5 {
-        let chr_rom = match header.has_chr_ram {
-            true => vec![0u8; 8 * 1024],
-            false => chr.to_vec()
-        };
+    pub fn from_ines(ines: INesCartridge) -> Result<Mmc5, String> {
+        let prg_rom_block = ines.prg_rom_block();
+        let prg_ram_block = ines.prg_ram_block()?;
+        let chr_block = ines.chr_block()?;
 
-        return Mmc5 {
-            prg_rom: prg.to_vec(),
-            prg_ram: vec![0u8; 64 * 1024],
-            chr_rom: chr_rom,
-            mirroring: header.mirroring,
+        return Ok(Mmc5 {
+            prg_rom: prg_rom_block.clone(),
+            prg_ram: prg_ram_block.clone(),
+            chr: chr_block.clone(),
+            mirroring: ines.header.mirroring(),
             ppuctrl_monitor: 0,
             ppumask_monitor: 0,
             prg_mode: 3,   // Koei games require MMC5 to boot into PRG mode 3
@@ -207,7 +198,7 @@ impl Mmc5 {
             pulse_2: PulseChannelState::new("Pulse 2", "MMC5", 1_789_773, false),
             audio_sequencer_counter: 0,
             pcm_channel: Mmc5PcmChannel::new(),
-        }
+        })
     }
 
     pub fn large_sprites_active(&self) -> bool {
@@ -284,8 +275,7 @@ impl Mmc5 {
             _ => {return 0}
         };
 
-        let datastore_offset = banked_memory_index(datastore.len(), bank_size, bank_number as usize, address as usize);
-        return datastore[datastore_offset];
+        return datastore.banked_read(bank_size, bank_number as usize, address as usize).unwrap_or(0)
     }
 
     pub fn read_prg_mode_1(&self, address: u16) -> u8 {
@@ -299,8 +289,7 @@ impl Mmc5 {
             _ => {return 0}
         };
 
-        let datastore_offset = banked_memory_index(datastore.len(), bank_size, bank_number as usize, address as usize);
-        return datastore[datastore_offset];
+        return datastore.banked_read(bank_size, bank_number as usize, address as usize).unwrap_or(0)
     }
 
     pub fn read_prg_mode_2(&self, address: u16) -> u8 {
@@ -318,8 +307,7 @@ impl Mmc5 {
             _ => {return 0}
         };
 
-        let datastore_offset = banked_memory_index(datastore.len(), bank_size, bank_number as usize, address as usize);
-        return datastore[datastore_offset];
+        return datastore.banked_read(bank_size, bank_number as usize, address as usize).unwrap_or(0)
     }
 
     pub fn read_prg_mode_3(&self, address: u16) -> u8 {
@@ -341,8 +329,7 @@ impl Mmc5 {
             _ => {return 0}
         };
 
-        let datastore_offset = banked_memory_index(datastore.len(), bank_size, bank_number as usize, address as usize);
-        return datastore[datastore_offset];
+        return datastore.banked_read(bank_size, bank_number as usize, address as usize).unwrap_or(0)
     }
 
     pub fn read_prg(&self, address: u16) -> u8 {
@@ -361,8 +348,7 @@ impl Mmc5 {
             _ => {return}
         };
 
-        let datastore_offset = banked_memory_index(self.prg_ram.len(), bank_size, bank_number as usize, address as usize);
-        self.prg_ram[datastore_offset] = data;
+        self.prg_ram.banked_write(bank_size, bank_number as usize, address as usize, data)
     }
 
     pub fn write_prg_mode_1(&mut self, address: u16, data: u8) {
@@ -375,8 +361,7 @@ impl Mmc5 {
             _ => {return}
         };
 
-        let datastore_offset = banked_memory_index(self.prg_ram.len(), bank_size, bank_number as usize, address as usize);
-        self.prg_ram[datastore_offset] = data;
+        self.prg_ram.banked_write(bank_size, bank_number as usize, address as usize, data)
     }
 
     pub fn write_prg_mode_2(&mut self, address: u16, data: u8) {
@@ -393,8 +378,7 @@ impl Mmc5 {
             _ => {return}
         };
 
-        let datastore_offset = banked_memory_index(self.prg_ram.len(), bank_size, bank_number as usize, address as usize);
-        self.prg_ram[datastore_offset] = data;
+        self.prg_ram.banked_write(bank_size, bank_number as usize, address as usize, data)
     }
 
     pub fn write_prg_mode_3(&mut self, address: u16, data: u8) {
@@ -415,8 +399,7 @@ impl Mmc5 {
             _ => {return}
         };
 
-        let datastore_offset = banked_memory_index(self.prg_ram.len(), bank_size, bank_number as usize, address as usize);
-        self.prg_ram[datastore_offset] = data;
+        self.prg_ram.banked_write(bank_size, bank_number as usize, address as usize, data)
     }
 
     pub fn write_prg(&mut self, address: u16, data: u8) {
@@ -449,12 +432,10 @@ impl Mmc5 {
 
         if large_sprites_enabled && (currently_reading_backgrounds || (ppu_inactive && wrote_ext_register_last)) {
             let chr_bank = self.chr_ext_banks[extended_bank_index as usize];
-            let chr_address = banked_memory_index(self.chr_rom.len(), chr_bank_size as usize, chr_bank, address as usize);
-            return self.chr_rom[chr_address];
+            return self.chr.banked_read(chr_bank_size as usize, chr_bank as usize, address as usize).unwrap_or(0);
         } else {
             let chr_bank = self.chr_banks[standard_bank_index as usize];
-            let chr_address = banked_memory_index(self.chr_rom.len(), chr_bank_size as usize, chr_bank, address as usize);
-            return self.chr_rom[chr_address];
+            return self.chr.banked_read(chr_bank_size as usize, chr_bank as usize, address as usize).unwrap_or(0);
         }
     }
 
@@ -463,8 +444,7 @@ impl Mmc5 {
         let nametable_index = self.last_bg_tile_fetch & 0x3FF;
         let extended_tile_attributes = self.extram[nametable_index as usize];
         let chr_bank = (self.chr_bank_high_bits << 6) | ((extended_tile_attributes as usize) & 0b0011_1111);
-        let chr_address = banked_memory_index(self.chr_rom.len(), chr_bank_size as usize, chr_bank, address as usize);
-        return self.chr_rom[chr_address];
+        return self.chr.banked_read(chr_bank_size as usize, chr_bank as usize, address as usize).unwrap_or(0);
     }
 
         pub fn read_extended_attribute(&self) -> u8 {
@@ -650,7 +630,7 @@ impl Mmc5 {
 impl Mapper for Mmc5 {
     fn print_debug_status(&self) {
         println!("======= MMC5 =======");
-        println!("PRG ROM: {}k, PRG RAM: {}k, CHR ROM: {}k", self.prg_rom.len() / 1024, self.prg_ram.len() / 1024, self.chr_rom.len() / 1024);
+        println!("PRG ROM: {}k, PRG RAM: {}k, CHR ROM: {}k", self.prg_rom.len() / 1024, self.prg_ram.len() / 1024, self.chr.len() / 1024);
         println!("PRG Mode: {} CHR Mode: {}, ExRAM Mode: {}", self.prg_mode, self.chr_mode, self.extended_ram_mode);
         println!("PRG Banks: A:{} B:{} C:{} D:{} RAM:{}", self.prg_bank_a, self.prg_bank_b, self.prg_bank_c, self.prg_bank_d, self.prg_ram_bank);
         println!("IRQ E:{} P:{} CMP:{} Detected Scanline: {}, PPU Fetches: {}", self.irq_enabled, self.irq_pending, self.irq_scanline_compare, self.current_scanline, self.ppu_fetches_this_scanline);
