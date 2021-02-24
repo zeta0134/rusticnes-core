@@ -36,16 +36,6 @@ impl From<std::io::Error> for INesError {
     }
 }
 
-/*
-#[derive(PartialEq)]
-pub enum MemoryType {
-    Rom,
-    Ram,
-    Sram,
-    Mixed,
-    Missing
-}*/
-
 #[derive(Copy, Clone)]
 pub struct INesHeader {
     raw_bytes: [u8; 16]
@@ -219,25 +209,6 @@ impl INesHeader {
         return 64 << (shift_count as usize);
     }
 
-    /*pub fn chr_type(&self) -> MemoryType {
-        let has_rom = self.chr_rom_size() != 0;
-        let has_ram = self.chr_ram_size() != 0;
-        let has_sram = self.chr_sram_size() != 0;
-        if !has_rom && !has_ram && !has_sram {
-            return MemoryType::Missing;
-        }
-        if has_rom && !has_ram && !has_sram {
-            return MemoryType::Rom;
-        }
-        if !has_rom && has_ram && !has_sram {
-            return MemoryType::Ram;
-        }
-        if !has_rom && !has_ram && has_sram {
-            return MemoryType::Sram;
-        }
-        return MemoryType::Mixed;
-    }*/
-
     // https://wiki.nesdev.com/w/index.php/INES#Flags_6
 
     pub fn mirroring(&self) -> Mirroring {
@@ -309,22 +280,7 @@ impl INesHeader {
             _ => 0
         }   
     }
-
-    /*pub fn prg_ram_type(&self) -> MemoryType {
-        let has_ram = self.prg_ram_size() != 0;
-        let has_sram = self.prg_sram_size() != 0;
-        if !has_ram && !has_sram {
-            return MemoryType::Missing;
-        }
-        if has_ram && !has_sram {
-            return MemoryType::Ram;
-        }
-        if !has_ram && has_sram {
-            return MemoryType::Sram;
-        }
-        return MemoryType::Mixed;
-    }*/
-
+    
     pub fn has_trainer(&self) -> bool {
         return self.raw_bytes[INES_FLAGS_6] & 0b0000_0100 != 0;
     }
