@@ -6,7 +6,7 @@ use mmc::fme7::Fme7;
 use mmc::gxrom::GxRom;
 use mmc::ines31::INes31;
 use mmc::mmc1::Mmc1;
-//use mmc::mmc3::Mmc3;
+use mmc::mmc3::Mmc3;
 //use mmc::mmc5::Mmc5;
 use mmc::nrom::Nrom;
 //use mmc::pxrom::PxRom;
@@ -161,7 +161,7 @@ fn mapper_from_ines(ines: INesCartridge) -> Result<Box<dyn Mapper>, String> {
         1 => Box::new(Mmc1::from_ines(ines)?),
         //2 => Box::new(UxRom::new(header, chr_rom, prg_rom)),
         3 => Box::new(CnRom::from_ines(ines)?),
-        //4 => Box::new(Mmc3::new(header, chr_rom, prg_rom)),
+        4 => Box::new(Mmc3::from_ines(ines)?),
         //5 => Box::new(Mmc5::new(header, chr_rom, prg_rom)),
         7 => Box::new(AxRom::from_ines(ines)?),
         //9 => Box::new(PxRom::new(header, chr_rom, prg_rom)),

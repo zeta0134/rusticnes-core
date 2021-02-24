@@ -1,14 +1,16 @@
 // Advanced mapper with bank-switched PRG ROM and CHR ROM, and a scanline counter feeding into IRQ
 // Reference capabilities: https://wiki.nesdev.com/w/index.php/MMC3
 
-use cartridge::NesHeader;
+use ines::INesCartridge;
+use memoryblock::MemoryBlock;
+
 use mmc::mapper::*;
 use mmc::mirroring;
 
 pub struct Mmc3 {
-    pub prg_rom: Vec<u8>,
-    pub prg_ram: Vec<u8>,
-    pub chr_rom: Vec<u8>,
+    pub prg_rom: MemoryBlock,
+    pub prg_ram: MemoryBlock,
+    pub chr: MemoryBlock,
     pub vram: Vec<u8>,
 
     pub chr2_bank_0: usize,
@@ -17,7 +19,6 @@ pub struct Mmc3 {
     pub chr1_bank_3: usize,
     pub chr1_bank_4: usize,
     pub chr1_bank_5: usize,
-    pub chr_ram: bool,
 
     pub prg_bank_6: usize,
     pub prg_bank_7: usize,
@@ -42,16 +43,15 @@ pub struct Mmc3 {
 }
 
 impl Mmc3 {
-    pub fn new(header: NesHeader, chr: &[u8], prg: &[u8]) -> Mmc3 {
-        let chr_rom = match header.has_chr_ram {
-            true => vec![0u8; 8 * 1024],
-            false => chr.to_vec()
-        };
+    pub fn from_ines(ines: INesCartridge) -> Result<Mmc3, String> {
+        let prg_rom_block = ines.prg_rom_block();
+        let prg_ram_block = ines.prg_ram_block()?;
+        let chr_block = ines.chr_block()?;
 
-        return Mmc3 {
-            prg_rom: prg.to_vec(),
-            prg_ram: vec![0u8; 0x2000],
-            chr_rom: chr_rom,
+        return Ok(Mmc3 {
+            prg_rom: prg_rom_block.clone(),
+            prg_ram: prg_ram_block.clone(),
+            chr: chr_block.clone(),
             vram: vec![0u8; 0x2000],
             // Note: On real MMC3-based hardware, many of these values are random on startup, so
             // the defaults presented below are arbitrary.
@@ -61,7 +61,6 @@ impl Mmc3 {
             chr1_bank_3: 0,
             chr1_bank_4: 0,
             chr1_bank_5: 0,
-            chr_ram: header.has_chr_ram,
 
             prg_bank_6: 0,
             prg_bank_7: 0,
@@ -80,8 +79,8 @@ impl Mmc3 {
             last_a12: 0,
             last_chr_read: 0,
 
-            mirroring: header.mirroring,
-        }
+            mirroring: ines.header.mirroring(),
+        })
     }
 
     fn snoop_ppu_read(&mut self, address: u16) {
@@ -110,36 +109,35 @@ impl Mmc3 {
         match address {
             // CHR
             0x0000 ..= 0x1FFF => {
-                let chr_rom_len = self.chr_rom.len();
                 if self.switch_chr_banks {
                     match address {
-                        0x0000 ..= 0x03FF => return Some(self.chr_rom[((self.chr1_bank_2 * 0x400) + (address as usize -  0x000)) % chr_rom_len]),
-                        0x0400 ..= 0x07FF => return Some(self.chr_rom[((self.chr1_bank_3 * 0x400) + (address as usize -  0x400)) % chr_rom_len]),
-                        0x0800 ..= 0x0BFF => return Some(self.chr_rom[((self.chr1_bank_4 * 0x400) + (address as usize -  0x800)) % chr_rom_len]),
-                        0x0C00 ..= 0x0FFF => return Some(self.chr_rom[((self.chr1_bank_5 * 0x400) + (address as usize -  0xC00)) % chr_rom_len]),
-                        0x1000 ..= 0x17FF => return Some(self.chr_rom[((self.chr2_bank_0 * 0x400) + (address as usize - 0x1000)) % chr_rom_len]),
-                        0x1800 ..= 0x1FFF => return Some(self.chr_rom[((self.chr2_bank_1 * 0x400) + (address as usize - 0x1800)) % chr_rom_len]),
-                        _ => return None,
+                        0x0000 ..= 0x03FF => self.chr.banked_read(0x400, self.chr1_bank_2, address as usize -  0x000),
+                        0x0400 ..= 0x07FF => self.chr.banked_read(0x400, self.chr1_bank_3, address as usize -  0x400),
+                        0x0800 ..= 0x0BFF => self.chr.banked_read(0x400, self.chr1_bank_4, address as usize -  0x800),
+                        0x0C00 ..= 0x0FFF => self.chr.banked_read(0x400, self.chr1_bank_5, address as usize -  0xC00),
+                        0x1000 ..= 0x17FF => self.chr.banked_read(0x800, self.chr2_bank_0 >> 1, address as usize - 0x1000),
+                        0x1800 ..= 0x1FFF => self.chr.banked_read(0x800, self.chr2_bank_1 >> 1, address as usize - 0x1800),
+                        _ => None,
                     }
                 } else {
                     match address {
-                        0x0000 ..= 0x07FF => return Some(self.chr_rom[((self.chr2_bank_0 * 0x400) + (address as usize -  0x000)) % chr_rom_len]),
-                        0x0800 ..= 0x0FFF => return Some(self.chr_rom[((self.chr2_bank_1 * 0x400) + (address as usize -  0x800)) % chr_rom_len]),
-                        0x1000 ..= 0x13FF => return Some(self.chr_rom[((self.chr1_bank_2 * 0x400) + (address as usize - 0x1000)) % chr_rom_len]),
-                        0x1400 ..= 0x17FF => return Some(self.chr_rom[((self.chr1_bank_3 * 0x400) + (address as usize - 0x1400)) % chr_rom_len]),
-                        0x1800 ..= 0x1BFF => return Some(self.chr_rom[((self.chr1_bank_4 * 0x400) + (address as usize - 0x1800)) % chr_rom_len]),
-                        0x1C00 ..= 0x1FFF => return Some(self.chr_rom[((self.chr1_bank_5 * 0x400) + (address as usize - 0x1C00)) % chr_rom_len]),
-                        _ => return None,
+                        0x0000 ..= 0x07FF => self.chr.banked_read(0x800, self.chr2_bank_0 >> 1, address as usize -  0x000),
+                        0x0800 ..= 0x0FFF => self.chr.banked_read(0x800, self.chr2_bank_1 >> 1, address as usize -  0x800),
+                        0x1000 ..= 0x13FF => self.chr.banked_read(0x400, self.chr1_bank_2, address as usize - 0x1000),
+                        0x1400 ..= 0x17FF => self.chr.banked_read(0x400, self.chr1_bank_3, address as usize - 0x1400),
+                        0x1800 ..= 0x1BFF => self.chr.banked_read(0x400, self.chr1_bank_4, address as usize - 0x1800),
+                        0x1C00 ..= 0x1FFF => self.chr.banked_read(0x400, self.chr1_bank_5, address as usize - 0x1C00),
+                        _ => None,
                     }
                 }
             },
-            0x2000 ..= 0x3FFF => return match self.mirroring {
+            0x2000 ..= 0x3FFF => match self.mirroring {
                 Mirroring::Horizontal => Some(self.vram[mirroring::horizontal_mirroring(address) as usize]),
                 Mirroring::Vertical   => Some(self.vram[mirroring::vertical_mirroring(address) as usize]),
                 Mirroring::FourScreen => Some(self.vram[mirroring::four_banks(address) as usize]),
                 _ => None
             },
-            _ => return None
+            _ => None
         }
     }
 }
@@ -165,30 +163,29 @@ impl Mapper for Mmc3 {
         match address {
             // PRG RAM
             0x6000 ..= 0x7FFF => {
-                return Some(self.prg_ram[(address - 0x6000) as usize]);
+                self.prg_ram.wrapping_read(address as usize - 0x6000)
             },
             // PRG ROM
             0x8000 ..= 0xFFFF => {
-                let prg_rom_len = self.prg_rom.len();
                 if self.switch_prg_banks {
                     match address {
-                        0x8000 ..= 0x9FFF => return Some(self.prg_rom[((self.prg_rom.len() - 0x4000) + (address as usize -  0x8000)) % prg_rom_len]),
-                        0xA000 ..= 0xBFFF => return Some(self.prg_rom[((self.prg_bank_7 * 0x2000)    + (address as usize -  0xA000)) % prg_rom_len]),
-                        0xC000 ..= 0xDFFF => return Some(self.prg_rom[((self.prg_bank_6 * 0x2000)    + (address as usize -  0xC000)) % prg_rom_len]),
-                        0xE000 ..= 0xFFFF => return Some(self.prg_rom[((self.prg_rom.len() - 0x2000) + (address as usize -  0xE000)) % prg_rom_len]),
-                        _ => return None,
+                        0x8000 ..= 0x9FFF => self.prg_rom.banked_read(0x2000, 0xFE,            address as usize -  0x8000),
+                        0xA000 ..= 0xBFFF => self.prg_rom.banked_read(0x2000, self.prg_bank_7, address as usize -  0xA000),
+                        0xC000 ..= 0xDFFF => self.prg_rom.banked_read(0x2000, self.prg_bank_6, address as usize -  0xC000),
+                        0xE000 ..= 0xFFFF => self.prg_rom.banked_read(0x2000, 0xFF,            address as usize -  0xE000),
+                        _ => None,
                     }
                 } else {
                     match address {
-                        0x8000 ..= 0x9FFF => return Some(self.prg_rom[((self.prg_bank_6 * 0x2000)    + (address as usize -  0x8000)) % prg_rom_len]),
-                        0xA000 ..= 0xBFFF => return Some(self.prg_rom[((self.prg_bank_7 * 0x2000)    + (address as usize -  0xA000)) % prg_rom_len]),
-                        0xC000 ..= 0xDFFF => return Some(self.prg_rom[((self.prg_rom.len() - 0x4000) + (address as usize -  0xC000)) % prg_rom_len]),
-                        0xE000 ..= 0xFFFF => return Some(self.prg_rom[((self.prg_rom.len() - 0x2000) + (address as usize -  0xE000)) % prg_rom_len]),
-                        _ => return None,
+                        0x8000 ..= 0x9FFF => self.prg_rom.banked_read(0x2000, self.prg_bank_6, address as usize -  0x8000),
+                        0xA000 ..= 0xBFFF => self.prg_rom.banked_read(0x2000, self.prg_bank_7, address as usize -  0xA000),
+                        0xC000 ..= 0xDFFF => self.prg_rom.banked_read(0x2000, 0xFE,            address as usize -  0xC000),
+                        0xE000 ..= 0xFFFF => self.prg_rom.banked_read(0x2000, 0xFF,            address as usize -  0xE000),
+                        _ => None,
                     }
                 }
             },
-            _ => return None
+            _ => None
         }
     }
 
@@ -198,7 +195,7 @@ impl Mapper for Mmc3 {
             0x6000 ..= 0x7FFF => {
                 // Note: Intentionally omitting PRG RAM protection feature, since this
                 // retains compatability with assumptions about iNES mapper 004
-                self.prg_ram[address as usize - 0x6000] = data;
+                self.prg_ram.wrapping_write(address as usize - 0x6000, data)
             },
             // Registers
             0x8000 ..= 0xFFFF => {
@@ -292,28 +289,25 @@ impl Mapper for Mmc3 {
                     }
                 }
                 self.last_a12 = current_a12;
-                if self.chr_ram {
-                    let chr_rom_len = self.chr_rom.len();
-                    if self.switch_chr_banks {
-                        match address {
-                            0x0000 ..= 0x03FF => self.chr_rom[((self.chr1_bank_2 * 0x400) + (address as usize -  0x000)) % chr_rom_len] = data,
-                            0x0400 ..= 0x07FF => self.chr_rom[((self.chr1_bank_3 * 0x400) + (address as usize -  0x400)) % chr_rom_len] = data,
-                            0x0800 ..= 0x0BFF => self.chr_rom[((self.chr1_bank_4 * 0x400) + (address as usize -  0x800)) % chr_rom_len] = data,
-                            0x0C00 ..= 0x0FFF => self.chr_rom[((self.chr1_bank_5 * 0x400) + (address as usize -  0xC00)) % chr_rom_len] = data,
-                            0x1000 ..= 0x17FF => self.chr_rom[((self.chr2_bank_0 * 0x400) + (address as usize - 0x1000)) % chr_rom_len] = data,
-                            0x1800 ..= 0x1FFF => self.chr_rom[((self.chr2_bank_1 * 0x400) + (address as usize - 0x1800)) % chr_rom_len] = data,
-                            _ => (),
-                        }
-                    } else {
-                        match address {
-                            0x0000 ..= 0x07FF => self.chr_rom[((self.chr2_bank_0 * 0x400) + (address as usize -  0x000)) % chr_rom_len] = data,
-                            0x0800 ..= 0x0FFF => self.chr_rom[((self.chr2_bank_1 * 0x400) + (address as usize -  0x800)) % chr_rom_len] = data,
-                            0x1000 ..= 0x13FF => self.chr_rom[((self.chr1_bank_2 * 0x400) + (address as usize - 0x1000)) % chr_rom_len] = data,
-                            0x1400 ..= 0x17FF => self.chr_rom[((self.chr1_bank_3 * 0x400) + (address as usize - 0x1400)) % chr_rom_len] = data,
-                            0x1800 ..= 0x1BFF => self.chr_rom[((self.chr1_bank_4 * 0x400) + (address as usize - 0x1800)) % chr_rom_len] = data,
-                            0x1C00 ..= 0x1FFF => self.chr_rom[((self.chr1_bank_5 * 0x400) + (address as usize - 0x1C00)) % chr_rom_len] = data,
-                            _ => (),
-                        }
+                if self.switch_chr_banks {
+                    match address {
+                        0x0000 ..= 0x03FF => self.chr.banked_write(0x400, self.chr1_bank_2, address as usize -  0x000, data),
+                        0x0400 ..= 0x07FF => self.chr.banked_write(0x400, self.chr1_bank_3, address as usize -  0x400, data),
+                        0x0800 ..= 0x0BFF => self.chr.banked_write(0x400, self.chr1_bank_4, address as usize -  0x800, data),
+                        0x0C00 ..= 0x0FFF => self.chr.banked_write(0x400, self.chr1_bank_5, address as usize -  0xC00, data),
+                        0x1000 ..= 0x17FF => self.chr.banked_write(0x800, self.chr2_bank_0 >> 1, address as usize - 0x1000, data),
+                        0x1800 ..= 0x1FFF => self.chr.banked_write(0x800, self.chr2_bank_1 >> 1, address as usize - 0x1800, data),
+                        _ => {},
+                    }
+                } else {
+                    match address {
+                        0x0000 ..= 0x07FF => self.chr.banked_write(0x800, self.chr2_bank_0 >> 1, address as usize -  0x000, data),
+                        0x0800 ..= 0x0FFF => self.chr.banked_write(0x800, self.chr2_bank_1 >> 1, address as usize -  0x800, data),
+                        0x1000 ..= 0x13FF => self.chr.banked_write(0x400, self.chr1_bank_2, address as usize - 0x1000, data),
+                        0x1400 ..= 0x17FF => self.chr.banked_write(0x400, self.chr1_bank_3, address as usize - 0x1400, data),
+                        0x1800 ..= 0x1BFF => self.chr.banked_write(0x400, self.chr1_bank_4, address as usize - 0x1800, data),
+                        0x1C00 ..= 0x1FFF => self.chr.banked_write(0x400, self.chr1_bank_5, address as usize - 0x1C00, data),
+                        _ => {},
                     }
                 }
             },
@@ -332,10 +326,10 @@ impl Mapper for Mmc3 {
     }
 
     fn get_sram(&self) -> Vec<u8> {
-        return self.prg_ram.to_vec();
+        return self.prg_ram.as_vec().clone();
     }
 
     fn load_sram(&mut self, sram_data: Vec<u8>) {
-        self.prg_ram = sram_data;
+        *self.prg_ram.as_mut_vec() = sram_data;
     }
 }
