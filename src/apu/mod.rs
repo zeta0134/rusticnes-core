@@ -473,13 +473,13 @@ impl ApuState {
 
         // Clock the triangle channel once per CPU cycle
         self.triangle.clock();
+        self.noise.clock();
 
         // Only clock Pulse channels on every other cycle
         // (Most documentation calls this once per APU cycle)
         if (self.current_cycle & 0b1) == 0 {
             self.pulse_1.clock();
             self.pulse_2.clock();
-            self.noise.clock();
             self.dmc.clock(mapper);
         }
         
