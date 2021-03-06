@@ -55,6 +55,10 @@ pub struct ApuState {
     pub last_dac_sample: f64,
     pub last_37hz_hp_sample: f64,
     pub last_lp_sample: f64,
+
+    pub hq_buffer_full: bool,
+    pub hq_staging_buffer: RingBuffer,
+    pub hq_output_buffer: Vec<i16>,
 }
 
 fn generate_pulse_table() -> Vec<f64> {
@@ -118,6 +122,9 @@ impl ApuState {
             last_dac_sample: 0.0,
             last_37hz_hp_sample: 0.0,
             last_lp_sample: 0.0,
+            hq_buffer_full: false,
+            hq_staging_buffer: RingBuffer::new(32768),
+            hq_output_buffer: vec!(0i16; 32768),
         }
     }
 
@@ -514,6 +521,13 @@ impl ApuState {
         let current_2a03_sample = (pulse_output - 0.5) + (tnd_output - 0.5);
         let current_dac_sample = mapper.mix_expansion_audio(current_2a03_sample);
 
+        // this is as raw as a sample gets, so write this out for hq debugging
+        self.hq_staging_buffer.push((current_dac_sample * 32767.0) as i16);
+        if self.hq_staging_buffer.index() == 0 {
+            self.hq_output_buffer.copy_from_slice(self.hq_staging_buffer.buffer());
+            self.hq_buffer_full = true;
+        }
+
         // Apply FamiCom's low pass, using the CPU clock rate as the sample rate
         let current_37hz_hp_sample = high_pass(self.cpu_clock_rate as f64, 37.0, self.last_37hz_hp_sample, current_dac_sample, self.last_dac_sample);
         self.last_dac_sample = current_dac_sample;
@@ -561,6 +575,26 @@ impl ApuState {
         let mut buffer = [0u8; 4096 * 2];
         for i in 0 .. 4096 {
             let sample = self.output_buffer[i];
+            buffer[i * 2]     = (((sample as u16) & 0xFF00) >> 8) as u8;
+            buffer[i * 2 + 1] = (((sample as u16) & 0x00FF)     ) as u8;
+        }
+
+        let _ = file.write_all(&buffer);
+    }
+
+    pub fn dump_hq_sample_buffer(&self) {
+        let mut file =
+            OpenOptions::new()
+            .write(true)
+            .create(true)
+            .append(true)
+            .open("hq_audiodump.raw")
+            .unwrap();
+
+        // turn our sample buffer into a simple file buffer for output
+        let mut buffer = [0u8; 32768 * 2];
+        for i in 0 .. 32768 {
+            let sample = self.hq_output_buffer[i];
             buffer[i * 2]     = (((sample as u16) & 0xFF00) >> 8) as u8;
             buffer[i * 2 + 1] = (((sample as u16) & 0x00FF)     ) as u8;
         }
