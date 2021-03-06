@@ -50,7 +50,7 @@ impl NoiseChannelState {
 
     pub fn clock(&mut self) {
         if self.period_current == 0 {
-            self.period_current = self.period_initial;
+            self.period_current = self.period_initial - 1;
 
             let mut feedback = self.shift_register & 0b1;
             if self.mode == 1 {
