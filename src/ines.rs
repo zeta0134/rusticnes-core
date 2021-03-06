@@ -231,7 +231,7 @@ impl INesHeader {
             return 0;
         }
         if self.ines1_extended_attributes_valid() && self.raw_bytes[INES1_PRG_RAM_SIZE] != 0 {
-            return (self.raw_bytes[INES1_PRG_RAM_SIZE] as usize) * 1024;
+            return (self.raw_bytes[INES1_PRG_RAM_SIZE] as usize) * 8 * 1024;
         } else {
             return 8 * 1024;
         }
@@ -259,7 +259,7 @@ impl INesHeader {
             return 0;
         }
         if self.ines1_extended_attributes_valid() && self.raw_bytes[INES1_PRG_RAM_SIZE] != 0 {
-            return (self.raw_bytes[INES1_PRG_RAM_SIZE] as usize) * 1024;
+            return (self.raw_bytes[INES1_PRG_RAM_SIZE] as usize) * 8 * 1024;
         } else {
             return 8 * 1024;
         }
