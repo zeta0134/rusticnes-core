@@ -5,6 +5,7 @@ use std::io::prelude::*;
 
 mod audio_channel;
 mod dmc;
+mod filters;
 mod length_counter;
 mod noise;
 mod pulse;
