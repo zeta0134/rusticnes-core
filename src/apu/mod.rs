@@ -113,6 +113,12 @@ impl ApuState {
         }
     }
 
+    pub fn set_sample_rate(&mut self, sample_rate: u64) {
+        self.sample_rate = sample_rate;
+        self.hp_37hz = filters::HighPassIIR::new(self.cpu_clock_rate as f64, 37.0);
+        self.lp_22_khz = filters::LowPassFIR::new(self.cpu_clock_rate as f64, (sample_rate as f64) / 2.0, 160);
+    }
+
     pub fn channels(&self) -> Vec<& dyn AudioChannelState> {
         let mut channels: Vec<& dyn AudioChannelState> = Vec::new();
         channels.push(&self.pulse_1);
