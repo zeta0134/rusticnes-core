@@ -5,7 +5,7 @@ use std::io::prelude::*;
 
 mod audio_channel;
 mod dmc;
-mod filters;
+pub mod filters;
 mod length_counter;
 mod noise;
 mod pulse;
@@ -61,7 +61,7 @@ pub struct ApuState {
     // filter chain (todo: make this a tad more flexible)
     // also todo: make sure these are recreated when changing sample rate
     pub hp_37hz: filters::HighPassIIR,
-    pub lp_22_khz: filters::LowPassIIR,
+    pub lp_22_khz: filters::LowPassFIR,
 }
 
 fn generate_pulse_table() -> Vec<f64> {
@@ -109,7 +109,7 @@ impl ApuState {
             hq_staging_buffer: RingBuffer::new(32768),
             hq_output_buffer: vec!(0i16; 32768),
             hp_37hz: filters::HighPassIIR::new(1786860.0, 37.0),
-            lp_22_khz: filters::LowPassIIR::new(1786860.0, 22100.0),
+            lp_22_khz: filters::LowPassFIR::new(1786860.0, 22100.0, 160),
         }
     }
 
