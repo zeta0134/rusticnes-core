@@ -104,6 +104,100 @@ impl Vrc6PulseChannel {
     }
 }
 
+pub struct Vrc6SawtoothChannel {
+    pub enabled: bool,
+    pub accumulator_rate: u8,
+    pub accumulator_step: u8,
+    pub accumulator: u8,
+    pub period_initial: u16,
+    pub period_current: u16,
+    pub halt: bool,
+    pub scale_256: bool,
+    pub scale_16: bool,
+}
+
+impl Vrc6SawtoothChannel {
+    pub fn new() -> Vrc6SawtoothChannel {
+        return Vrc6SawtoothChannel {
+            enabled: false,
+            accumulator_rate: 0,
+            accumulator_step: 0,
+            accumulator: 0,
+            period_initial: 0,
+            period_current: 0,
+            halt: true,
+            scale_256: false,
+            scale_16: false,
+        };
+    }
+
+    pub fn _clock_accumulator(&mut self) {
+        self.accumulator_step += 1;
+        if self.accumulator_step >= 14 {
+            self.accumulator_step = 0;
+            self.accumulator = 0;
+        } else {
+            // Only take action on EVEN steps:
+            if (self.accumulator_step & 0b1) == 0 {
+                self.accumulator = self.accumulator.wrapping_add(self.accumulator_rate);
+            }
+        }
+    }
+
+    pub fn _reload_period_counter(&mut self) {
+        if self.scale_256 {
+            self.period_current = self.period_initial >> 8;
+        } else if self.scale_16 {
+            self.period_current = self.period_initial >> 4;
+        } else {
+            self.period_current = self.period_initial;
+        }
+    }
+
+    pub fn clock(&mut self) {
+        if self.halt || !self.enabled {
+            return;
+        }
+        if self.period_current == 0 {
+            self._clock_accumulator();
+            self._reload_period_counter();
+        } else {
+            self.period_current -= 1;
+        }
+    }
+
+    pub fn output(&self) -> u8 {
+        return self.accumulator >> 3;
+    }
+
+
+
+    pub fn write_register(&mut self, index: u8, data: u8) {
+        match index {
+            0 => {
+                self.accumulator_rate = data & 0b0011_1111;
+            },
+            1 => {
+                self.period_initial = (self.period_initial & 0xFF00) + (data as u16);
+            },
+            2 => {
+                self.enabled = (data & 0b1000_0000) != 0;
+                self.period_initial = (self.period_initial & 0x00FF) + (((data & 0x0F) as u16) << 8);
+                if !self.enabled {
+                    // reset phase entirely
+                    self.accumulator = 0;
+                }
+            },
+            3 => {
+                self.halt      = (data & 0b0000_0001) != 0;
+                self.scale_16  = (data & 0b0000_0010) != 0;
+                self.scale_256 = (data & 0b0000_0100) != 0;
+            },
+            _ => {}
+        }
+    }
+}
+
 pub struct Vrc6 {
     pub prg_rom: MemoryBlock,
     pub prg_ram: MemoryBlock,
@@ -296,6 +390,19 @@ impl Mapper for Vrc6 {
                 self._clock_irq_counter();
             }
         }
+        self.pulse1.clock();
+        self.pulse2.clock();
+        // TODO: clock the sawtooth channel
+    }
+
+    fn mix_expansion_audio(&self, nes_sample: f64) -> f64 {
+        let pulse_1_output = (self.pulse1.output() as f64 / 15.0) - 0.5;
+        let pulse_2_output = (self.pulse2.output() as f64 / 15.0) - 0.5;
+        // TODO: sawtooth output!
+
+        return 
+            (pulse_1_output + pulse_2_output) * 0.12 + 
+            nes_sample;
     }
 
     fn irq_flag(&self) -> bool {
