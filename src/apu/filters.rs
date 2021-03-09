@@ -49,7 +49,7 @@ pub struct LowPassIIR {
 impl LowPassIIR {
     pub fn new(sample_rate: f64, cutoff_frequency: f64) -> LowPassIIR {
         let delta_t = 1.0 / sample_rate;
-        let time_constant = 1.0 / cutoff_frequency;
+        let time_constant = 1.0 / (2.0 * PI * cutoff_frequency);
         let alpha = delta_t / (time_constant + delta_t);
         return LowPassIIR {
             alpha: alpha,
