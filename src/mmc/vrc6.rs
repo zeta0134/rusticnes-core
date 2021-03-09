@@ -8,6 +8,7 @@ use mmc::mapper::*;
 use mmc::mirroring;
 
 pub struct Vrc6PulseChannel {
+    pub enabled: bool,
     pub duty_compare: u8,
     pub duty_counter: u8,
     pub volume: u8,
@@ -21,6 +22,7 @@ pub struct Vrc6PulseChannel {
 impl Vrc6PulseChannel {
     pub fn new() -> Vrc6PulseChannel {
         return Vrc6PulseChannel {
+            enabled: false,
             duty_compare: 16,
             duty_counter: 0,
             volume: 0,
@@ -51,7 +53,7 @@ impl Vrc6PulseChannel {
     }
 
     pub fn clock(&mut self) {
-        if self.halt {
+        if self.halt || !self.enabled {
             return;
         }
         if self.period_current == 0 {
@@ -63,10 +65,42 @@ impl Vrc6PulseChannel {
     }
 
     pub fn output(&self) -> u8 {
-        if self.duty_compare >= self.duty_counter {
+        if self.enabled && self.duty_compare >= self.duty_counter {
             return self.volume;
         }
         return 0;
+    }
+
+    pub fn write_register(&mut self, index: u8, data: u8) {
+        match index {
+            0 => {
+                let direct_volume_mode = (data & 0b1000_0000) != 0;
+                if direct_volume_mode {
+                    self.duty_compare = 16;
+                } else {
+                    self.duty_compare = (data & 0b0111_0000) >> 4;
+                }
+                self.volume = data & 0b0000_1111;
+            },
+            1 => {
+                self.period_initial = (self.period_initial & 0xFF00) + (data as u16);
+            },
+            2 => {
+                self.enabled = (data & 0b1000_0000) != 0;
+                self.period_initial = (self.period_initial & 0x00FF) + (((data & 0x0F) as u16) << 8);
+                if !self.enabled {
+                    // reset phase entirely
+                    self.duty_counter = 15;
+                    self.period_current = self.period_initial;
+                }
+            },
+            3 => {
+                self.halt      = (data & 0b0000_0001) != 0;
+                self.scale_16  = (data & 0b0000_0010) != 0;
+                self.scale_256 = (data & 0b0000_0100) != 0;
+            },
+            _ => {}
+        }
     }
 }
 
@@ -92,6 +126,9 @@ pub struct Vrc6 {
     pub irq_enable_after_acknowledgement: bool,
     pub irq_pending: bool,
     pub irq_counter: u8,
+
+    pub pulse1: Vrc6PulseChannel,
+    pub pulse2: Vrc6PulseChannel,
 }
 
 impl Vrc6 {
@@ -122,6 +159,9 @@ impl Vrc6 {
             irq_enable_after_acknowledgement: false,
             irq_pending: false,
             irq_counter: 0,
+
+            pulse1: Vrc6PulseChannel::new(),
+            pulse2: Vrc6PulseChannel::new(),
         });
     }
 
@@ -287,6 +327,19 @@ impl Mapper for Vrc6 {
             0x8000 ..= 0x8003 => {
                 self.prg_bank_16 = data as usize & 0x0F;
             },
+            0x9000 => {self.pulse1.write_register(0, data);},
+            0x9001 => {self.pulse1.write_register(1, data);},
+            0x9002 => {self.pulse1.write_register(2, data);},
+            0x9003 => {
+                self.pulse1.write_register(3, data);
+                self.pulse2.write_register(3, data);
+                // TODO: set frequency for sawtooth here
+            },
+            0xA000 => {self.pulse2.write_register(0, data);},
+            0xA001 => {self.pulse2.write_register(1, data);},
+            0xA002 => {self.pulse2.write_register(2, data);},
+            // no 0xA003
+            // TODO: sawtooth registers here
             0xB003 => {
                 self.ppu_banking_mode = data & 0b0000_0011;
                 self.mirroring_mode = (data & 0b0000_1100) >> 2;
@@ -330,7 +383,6 @@ impl Mapper for Vrc6 {
                 self.irq_pending = false;
                 self.irq_enable = self.irq_enable_after_acknowledgement;
             }
-
             _ => {}
         }
     }
