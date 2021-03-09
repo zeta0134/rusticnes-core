@@ -114,13 +114,6 @@ impl LowPassFIR {
         let mut inputs = Vec::new();
         inputs.resize(window_size + 1, 0.0);
 
-        // debug!
-        println!("fc: {}", fc);
-        println!("Low pass kernel");
-        for i in 0 .. kernel.len() {
-            println!("{}", kernel[i]);
-        }
-
         return LowPassFIR {
             kernel: kernel,
             inputs: inputs,
