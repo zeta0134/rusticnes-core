@@ -7,7 +7,15 @@ use memoryblock::MemoryBlock;
 use mmc::mapper::*;
 use mmc::mirroring;
 
+use apu::AudioChannelState;
+use apu::PlaybackRate;
+use apu::Volume;
+use apu::Timbre;
+use apu::RingBuffer;
+
 pub struct Vrc6PulseChannel {
+    pub name: String,
+    pub debug_disable: bool,
     pub enabled: bool,
     pub duty_compare: u8,
     pub duty_counter: u8,
@@ -17,11 +25,14 @@ pub struct Vrc6PulseChannel {
     pub halt: bool,
     pub scale_256: bool,
     pub scale_16: bool,
+    pub output_buffer: RingBuffer,
 }
 
 impl Vrc6PulseChannel {
-    pub fn new() -> Vrc6PulseChannel {
+    pub fn new(channel_name: &str) -> Vrc6PulseChannel {
         return Vrc6PulseChannel {
+            name: String::from(channel_name),
+            debug_disable: false,
             enabled: false,
             duty_compare: 16,
             duty_counter: 0,
@@ -31,6 +42,7 @@ impl Vrc6PulseChannel {
             halt: true,
             scale_256: false,
             scale_16: false,
+            output_buffer: RingBuffer::new(32768),
         };
     }
 
@@ -101,6 +113,65 @@ impl Vrc6PulseChannel {
             },
             _ => {}
         }
+    }
+}
+
+impl AudioChannelState for Vrc6PulseChannel {
+    fn name(&self) -> String {
+        return self.name.clone();
+    }
+
+    fn chip(&self) -> String {
+        return "VRC6".to_string();
+    }
+
+    fn sample_buffer(&self) -> &RingBuffer {
+        return &self.output_buffer;
+    }
+
+    fn record_current_output(&mut self) {
+        self.output_buffer.push(self.output() as i16);
+    }
+
+    fn min_sample(&self) -> i16 {
+        return 0;
+    }
+
+    fn max_sample(&self) -> i16 {
+        return 15;
+    }
+
+    fn muted(&self) -> bool {
+        return self.debug_disable;
+    }
+
+    fn mute(&mut self) {
+        self.debug_disable = true;
+    }
+
+    fn unmute(&mut self) {
+        self.debug_disable = false;
+    }
+
+    fn playing(&self) -> bool {
+        return 
+            (self.enabled) &&
+            (!self.halt) &&
+            (self.duty_compare != 16) &&
+            (self.volume > 0);
+    }
+
+    fn rate(&self) -> PlaybackRate {
+        let frequency = 1_789_773.0 / (16.0 * (self.period_initial as f64 + 1.0));
+        return PlaybackRate::FundamentalFrequency {frequency: frequency};
+    }
+
+    fn volume(&self) -> Option<Volume> {
+        return Some(Volume::VolumeIndex{ index: self.volume as usize, max: 15 });
+    }
+
+    fn timbre(&self) -> Option<Timbre> {
+        return Some(Timbre::DutyIndex{ index: self.duty_compare as usize, max: 7 });
     }
 }
 
@@ -254,8 +325,8 @@ impl Vrc6 {
             irq_pending: false,
             irq_counter: 0,
 
-            pulse1: Vrc6PulseChannel::new(),
-            pulse2: Vrc6PulseChannel::new(),
+            pulse1: Vrc6PulseChannel::new("Pulse 1"),
+            pulse2: Vrc6PulseChannel::new("Pulse 2"),
             sawtooth: Vrc6SawtoothChannel::new(),
         });
     }
@@ -406,6 +477,8 @@ impl Mapper for Vrc6 {
             nes_sample;
     }
 
+
+
     fn irq_flag(&self) -> bool {
         return self.irq_pending;
     }
@@ -551,5 +624,27 @@ impl Mapper for Vrc6 {
             }
             _ => {}
         }
+    }
+
+    fn channels(&self) ->  Vec<& dyn AudioChannelState> {
+        let mut channels: Vec<& dyn AudioChannelState> = Vec::new();
+        channels.push(&self.pulse1);
+        channels.push(&self.pulse2);
+        //channels.push(&self.sawtooth);
+        return channels;
+    }
+
+    fn channels_mut(&mut self) ->  Vec<&mut dyn AudioChannelState> {
+        let mut channels: Vec<&mut dyn AudioChannelState> = Vec::new();
+        channels.push(&mut self.pulse1);
+        channels.push(&mut self.pulse2);
+        //channels.push(&mut self.pcm_channel);
+        return channels;
+    }
+
+    fn record_expansion_audio_output(&mut self) {
+        self.pulse1.record_current_output();
+        self.pulse2.record_current_output();
+        //self.sawtooth.record_current_output();
     }
 }
