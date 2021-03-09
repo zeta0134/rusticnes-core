@@ -31,6 +31,43 @@ impl Vrc6PulseChannel {
             scale_16: false,
         };
     }
+
+    pub fn _clock_duty_generator(&mut self) {
+        if self.duty_counter == 0 {
+            self.duty_counter = 15;
+        } else {
+            self.duty_counter -= 1;
+        }
+    }
+
+    pub fn _reload_period_counter(&mut self) {
+        if self.scale_256 {
+            self.period_current = self.period_initial >> 8;
+        } else if self.scale_16 {
+            self.period_current = self.period_initial >> 4;
+        } else {
+            self.period_current = self.period_initial;
+        }
+    }
+
+    pub fn clock(&mut self) {
+        if self.halt {
+            return;
+        }
+        if self.period_current == 0 {
+            self._clock_duty_generator();
+            self._reload_period_counter();
+        } else {
+            self.period_current -= 1;
+        }
+    }
+
+    pub fn output(&self) -> u8 {
+        if self.duty_compare >= self.duty_counter {
+            return self.volume;
+        }
+        return 0;
+    }
 }
 
 pub struct Vrc6 {
