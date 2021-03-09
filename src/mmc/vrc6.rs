@@ -170,8 +170,6 @@ impl Vrc6SawtoothChannel {
         return self.accumulator >> 3;
     }
 
-
-
     pub fn write_register(&mut self, index: u8, data: u8) {
         match index {
             0 => {
@@ -186,6 +184,7 @@ impl Vrc6SawtoothChannel {
                 if !self.enabled {
                     // reset phase entirely
                     self.accumulator = 0;
+                    self.accumulator_step = 0;
                 }
             },
             3 => {
@@ -223,6 +222,7 @@ pub struct Vrc6 {
 
     pub pulse1: Vrc6PulseChannel,
     pub pulse2: Vrc6PulseChannel,
+    pub sawtooth: Vrc6SawtoothChannel,
 }
 
 impl Vrc6 {
@@ -256,6 +256,7 @@ impl Vrc6 {
 
             pulse1: Vrc6PulseChannel::new(),
             pulse2: Vrc6PulseChannel::new(),
+            sawtooth: Vrc6SawtoothChannel::new(),
         });
     }
 
@@ -392,16 +393,16 @@ impl Mapper for Vrc6 {
         }
         self.pulse1.clock();
         self.pulse2.clock();
-        // TODO: clock the sawtooth channel
+        self.sawtooth.clock();
     }
 
     fn mix_expansion_audio(&self, nes_sample: f64) -> f64 {
-        let pulse_1_output = (self.pulse1.output() as f64 / 15.0) - 0.5;
-        let pulse_2_output = (self.pulse2.output() as f64 / 15.0) - 0.5;
-        // TODO: sawtooth output!
+        let pulse_1_output = self.pulse1.output() as f64;
+        let pulse_2_output = self.pulse2.output() as f64;
+        let sawtooth_output = self.sawtooth.output() as f64;
 
         return 
-            (pulse_1_output + pulse_2_output) * 0.12 + 
+            ((pulse_1_output + pulse_2_output + sawtooth_output) / 61.0) * 0.5 + 
             nes_sample;
     }
 
@@ -440,13 +441,15 @@ impl Mapper for Vrc6 {
             0x9003 => {
                 self.pulse1.write_register(3, data);
                 self.pulse2.write_register(3, data);
-                // TODO: set frequency for sawtooth here
+                self.sawtooth.write_register(3, data);
             },
             0xA000 => {self.pulse2.write_register(0, data);},
             0xA001 => {self.pulse2.write_register(1, data);},
             0xA002 => {self.pulse2.write_register(2, data);},
             // no 0xA003
-            // TODO: sawtooth registers here
+            0xB000 => {self.sawtooth.write_register(0, data);},
+            0xB001 => {self.sawtooth.write_register(1, data);},
+            0xB002 => {self.sawtooth.write_register(2, data);},
             0xB003 => {
                 self.ppu_banking_mode = data & 0b0000_0011;
                 self.mirroring_mode = (data & 0b0000_1100) >> 2;
