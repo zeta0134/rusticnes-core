@@ -21,6 +21,14 @@ pub struct Vrc6 {
     pub nametable_chrrom: bool,
     pub chr_a10_rules: bool,
     pub mirroring: Mirroring,
+
+    pub irq_scanline_prescaler: u16,
+    pub irq_latch: u8,
+    pub irq_scanline_mode: bool,
+    pub irq_enable: bool,
+    pub irq_enable_after_acknowledgement: bool,
+    pub irq_pending: bool,
+    pub irq_counter: u8,
 }
 
 impl Vrc6 {
@@ -43,6 +51,14 @@ impl Vrc6 {
             nametable_chrrom: false,
             chr_a10_rules: false,
             mirroring: ines.header.mirroring(),
+
+            irq_scanline_prescaler: 0,
+            irq_latch: 0,
+            irq_scanline_mode: false,
+            irq_enable: false,
+            irq_enable_after_acknowledgement: false,
+            irq_pending: false,
+            irq_counter: 0,
         });
     }
 
@@ -145,11 +161,42 @@ impl Vrc6 {
             }
         }
     }
+
+    fn _clock_irq_prescaler(&mut self) {
+        self.irq_scanline_prescaler += 3;
+        if self.irq_scanline_prescaler >= 341 {
+            self.irq_scanline_prescaler = 0;
+            self._clock_irq_counter();
+        }
+    }
+
+    fn _clock_irq_counter(&mut self) {
+        if self.irq_counter == 0xFF {
+            self.irq_counter = self.irq_latch;
+            self.irq_pending = true;
+        } else {
+            self.irq_counter += 1;
+        }
+    }
 }
 
 impl Mapper for Vrc6 {
     fn mirroring(&self) -> Mirroring {
         return self.mirroring;
+    }
+
+    fn clock_cpu(&mut self) {
+        if self.irq_enable {
+            if self.irq_scanline_mode {
+                self._clock_irq_prescaler();
+            } else {
+                self._clock_irq_counter();
+            }
+        }
+    }
+
+    fn irq_flag(&self) -> bool {
+        return self.irq_pending;
     }
 
     fn debug_read_cpu(&self, address: u16) -> Option<u8> {
@@ -199,6 +246,28 @@ impl Mapper for Vrc6 {
             0xE001 => { self.r[5] = data as usize; },
             0xE002 => { self.r[6] = data as usize; },
             0xE003 => { self.r[7] = data as usize; },
+            0xF000 => { self.irq_latch = data; },
+            0xF001 => {
+                self.irq_scanline_mode = ((data & 0b0000_0100) >> 2) == 0;
+                self.irq_enable = (data & 0b0000_0010) != 0;
+                self.irq_enable_after_acknowledgement = (data & 0b0000_0001) != 0;
+
+                // acknowledge the pending IRQ if there is one
+                self.irq_pending = false;
+
+                // If the enable bit is set, setup for the next IRQ immediately, otherwise
+                // do nothing (we may already have one in flight)
+                if self.irq_enable {
+                    self.irq_counter = self.irq_latch;
+                    self.irq_scanline_prescaler = 0;
+                }
+
+            },
+            0xF002 => {
+                self.irq_pending = false;
+                self.irq_enable = self.irq_enable_after_acknowledgement;
+            }
+
             _ => {}
         }
     }
