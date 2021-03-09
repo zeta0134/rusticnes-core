@@ -7,6 +7,32 @@ use memoryblock::MemoryBlock;
 use mmc::mapper::*;
 use mmc::mirroring;
 
+pub struct Vrc6PulseChannel {
+    pub duty_compare: u8,
+    pub duty_counter: u8,
+    pub volume: u8,
+    pub period_initial: u16,
+    pub period_current: u16,
+    pub halt: bool,
+    pub scale_256: bool,
+    pub scale_16: bool,
+}
+
+impl Vrc6PulseChannel {
+    pub fn new() -> Vrc6PulseChannel {
+        return Vrc6PulseChannel {
+            duty_compare: 16,
+            duty_counter: 0,
+            volume: 0,
+            period_initial: 0,
+            period_current: 0,
+            halt: true,
+            scale_256: false,
+            scale_16: false,
+        };
+    }
+}
+
 pub struct Vrc6 {
     pub prg_rom: MemoryBlock,
     pub prg_ram: MemoryBlock,
