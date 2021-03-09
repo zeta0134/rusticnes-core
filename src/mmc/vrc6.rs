@@ -1,13 +1,16 @@
 // Vrc6, 
 // Reference capabilities: https://wiki.nesdev.com/w/index.php/VRC6
 
-use cartridge::NesHeader;
+use ines::INesCartridge;
+use memoryblock::MemoryBlock;
+
 use mmc::mapper::*;
+use mmc::mirroring;
 
 pub struct Vrc6 {
-    pub prg_rom: Vec<u8>,
-    pub prg_ram: Vec<u8>,
-    pub chr_rom: Vec<u8>,
+    pub prg_rom: MemoryBlock,
+    pub prg_ram: MemoryBlock,
+    pub chr: MemoryBlock,
     pub vram: Vec<u8>,
     pub prg_ram_enable: bool,
     pub prg_bank_16: usize,
@@ -21,11 +24,15 @@ pub struct Vrc6 {
 }
 
 impl Vrc6 {
-    pub fn new(header: NesHeader, chr: &[u8], prg: &[u8]) -> Vrc6 {
-        return Vrc6 {
-            prg_rom: prg.to_vec(),
-            prg_ram: vec![0u8; 8 * 1024],
-            chr_rom: chr.to_vec(),
+    pub fn from_ines(ines: INesCartridge) -> Result<Vrc6, String> {
+        let prg_rom_block = ines.prg_rom_block();
+        let prg_ram_block = ines.prg_ram_block()?;
+        let chr_block = ines.chr_block()?;
+
+        return Ok(Vrc6 {
+            prg_rom: prg_rom_block.clone(),
+            prg_ram: prg_ram_block.clone(),
+            chr: chr_block.clone(),
             vram: vec![0u8; 0x1000],
             prg_ram_enable: false,
             prg_bank_16: 0,
@@ -35,80 +42,107 @@ impl Vrc6 {
             mirroring_mode: 0,
             nametable_chrrom: false,
             chr_a10_rules: false,
-            mirroring: header.mirroring,
-        }
+            mirroring: ines.header.mirroring(),
+        });
     }
 
-    fn _chr_mode_0(&self, address: u16) -> u8 {
-        // All 8k banks
-        let chr_rom_len = self.chr_rom.len();
+    fn _chr_mode_0(&self, address: u16) -> Option<u8> {
+        // All 1k banks
         match address {
-            0x0000 ..= 0x03FF => return self.chr_rom[((self.r[0] * 0x400) + (address as usize -  0x0000)) % chr_rom_len],
-            0x0400 ..= 0x07FF => return self.chr_rom[((self.r[1] * 0x400) + (address as usize -  0x0400)) % chr_rom_len],
-            0x0800 ..= 0x0BFF => return self.chr_rom[((self.r[2] * 0x400) + (address as usize -  0x0800)) % chr_rom_len],
-            0x0C00 ..= 0x0FFF => return self.chr_rom[((self.r[3] * 0x400) + (address as usize -  0x0C00)) % chr_rom_len],
-            0x1000 ..= 0x13FF => return self.chr_rom[((self.r[4] * 0x400) + (address as usize -  0x1000)) % chr_rom_len],
-            0x1400 ..= 0x17FF => return self.chr_rom[((self.r[5] * 0x400) + (address as usize -  0x1400)) % chr_rom_len],
-            0x1800 ..= 0x1BFF => return self.chr_rom[((self.r[6] * 0x400) + (address as usize -  0x1800)) % chr_rom_len],
-            0x1C00 ..= 0x1FFF => return self.chr_rom[((self.r[7] * 0x400) + (address as usize -  0x1C00)) % chr_rom_len],
-            _ => return 0 // never reached
+            0x0000 ..= 0x03FF => self.chr.banked_read(0x400, self.r[0], address as usize -  0x0000),
+            0x0400 ..= 0x07FF => self.chr.banked_read(0x400, self.r[1], address as usize -  0x0400),
+            0x0800 ..= 0x0BFF => self.chr.banked_read(0x400, self.r[2], address as usize -  0x0800),
+            0x0C00 ..= 0x0FFF => self.chr.banked_read(0x400, self.r[3], address as usize -  0x0C00),
+            0x1000 ..= 0x13FF => self.chr.banked_read(0x400, self.r[4], address as usize -  0x1000),
+            0x1400 ..= 0x17FF => self.chr.banked_read(0x400, self.r[5], address as usize -  0x1400),
+            0x1800 ..= 0x1BFF => self.chr.banked_read(0x400, self.r[6], address as usize -  0x1800),
+            0x1C00 ..= 0x1FFF => self.chr.banked_read(0x400, self.r[7], address as usize -  0x1C00),
+            _ => None // never reached
         }
     }
 
-    fn _chr_mode_1(&self, address: u16) -> u8 {
-        // All 16k banks, with differing A10 behavior
-        let chr_rom_len = self.chr_rom.len();
+    fn _chr_mode_1(&self, address: u16) -> Option<u8> {
+        // All 2k banks, with differing A10 behavior        
         if self.chr_a10_rules {
-            //16kb banks use PPU A10, ignore low bit of register
+            //2k banks use PPU A10, ignore low bit of register
             match address {
-                0x0000 ..= 0x07FF => return self.chr_rom[(((self.r[0] & 0xFE) * 0x400) + (address as usize -  0x0000)) % chr_rom_len],
-                0x0800 ..= 0x0FFF => return self.chr_rom[(((self.r[1] & 0xFE) * 0x400) + (address as usize -  0x0800)) % chr_rom_len],
-                0x1000 ..= 0x17FF => return self.chr_rom[(((self.r[2] & 0xFE) * 0x400) + (address as usize -  0x1000)) % chr_rom_len],
-                0x1800 ..= 0x1FFF => return self.chr_rom[(((self.r[3] & 0xFE) * 0x400) + (address as usize -  0x1800)) % chr_rom_len],
-                _ => return 0 // never reached
+                0x0000 ..= 0x07FF => self.chr.banked_read(0x800, (self.r[0] & 0xFE) >> 1, address as usize -  0x0000),
+                0x0800 ..= 0x0FFF => self.chr.banked_read(0x800, (self.r[1] & 0xFE) >> 1, address as usize -  0x0800),
+                0x1000 ..= 0x17FF => self.chr.banked_read(0x800, (self.r[2] & 0xFE) >> 1, address as usize -  0x1000),
+                0x1800 ..= 0x1FFF => self.chr.banked_read(0x800, (self.r[3] & 0xFE) >> 1, address as usize -  0x1800),
+
+                _ => None // never reached
             }
         } else {
-            // Low bit of register determines A10, effectively duplicating 1k banks, similar to 8k mode
+            // Low bit of register determines A10, effectively duplicating 1k banks, similar to 1k mode
             match address {
-                0x0000 ..= 0x03FF => return self.chr_rom[((self.r[0] * 0x400) + (address as usize -  0x0000)) % chr_rom_len],
-                0x0400 ..= 0x07FF => return self.chr_rom[((self.r[0] * 0x400) + (address as usize -  0x0400)) % chr_rom_len],
-                0x0800 ..= 0x0BFF => return self.chr_rom[((self.r[1] * 0x400) + (address as usize -  0x0800)) % chr_rom_len],
-                0x0C00 ..= 0x0FFF => return self.chr_rom[((self.r[1] * 0x400) + (address as usize -  0x0C00)) % chr_rom_len],
-                0x1000 ..= 0x13FF => return self.chr_rom[((self.r[2] * 0x400) + (address as usize -  0x1000)) % chr_rom_len],
-                0x1400 ..= 0x17FF => return self.chr_rom[((self.r[2] * 0x400) + (address as usize -  0x1400)) % chr_rom_len],
-                0x1800 ..= 0x1BFF => return self.chr_rom[((self.r[3] * 0x400) + (address as usize -  0x1800)) % chr_rom_len],
-                0x1C00 ..= 0x1FFF => return self.chr_rom[((self.r[3] * 0x400) + (address as usize -  0x1C00)) % chr_rom_len],
-                _ => return 0 // never reached
+                0x0000 ..= 0x03FF => self.chr.banked_read(0x400, self.r[0], address as usize -  0x0000),
+                0x0400 ..= 0x07FF => self.chr.banked_read(0x400, self.r[0], address as usize -  0x0400),
+                0x0800 ..= 0x0BFF => self.chr.banked_read(0x400, self.r[1], address as usize -  0x0800),
+                0x0C00 ..= 0x0FFF => self.chr.banked_read(0x400, self.r[1], address as usize -  0x0C00),
+                0x1000 ..= 0x13FF => self.chr.banked_read(0x400, self.r[2], address as usize -  0x1000),
+                0x1400 ..= 0x17FF => self.chr.banked_read(0x400, self.r[2], address as usize -  0x1400),
+                0x1800 ..= 0x1BFF => self.chr.banked_read(0x400, self.r[3], address as usize -  0x1800),
+                0x1C00 ..= 0x1FFF => self.chr.banked_read(0x400, self.r[3], address as usize -  0x1C00),
+                _ => None // never reached
             }
         }
     }
 
-    fn _chr_mode_23(&self, address: u16) -> u8 {
-        // Essentially a mix, mode 0 for the upper half, with 2 16k banks in the lower half that behave similarly to mode 1
+    fn _chr_mode_23(&self, address: u16) -> Option<u8> {
+        // Essentially a mix, mode 0 for the upper half, with 2x 2k banks in the lower half that behave similarly to mode 1
         // but pull from R4-R5 instead
-        let chr_rom_len = self.chr_rom.len();
         match address {
-            0x0000 ..= 0x0FFF => return self._chr_mode_0(address),
+            0x0000 ..= 0x0FFF => self._chr_mode_0(address),
             0x1000 ..= 0x1FFF => {
                 if self.chr_a10_rules {
-                    //16kb banks use PPU A10, ignore low bit of register
+                    //2k banks use PPU A10, ignore low bit of register
                     match address {
-                        0x1000 ..= 0x17FF => return self.chr_rom[(((self.r[4] & 0xFE) * 0x400) + (address as usize -  0x1000)) % chr_rom_len],
-                        0x1800 ..= 0x1FFF => return self.chr_rom[(((self.r[5] & 0xFE) * 0x400) + (address as usize -  0x1800)) % chr_rom_len],
-                        _ => return 0 // never reached
+                        0x1000 ..= 0x17FF => self.chr.banked_read(0x800, (self.r[4] & 0xFE) >> 1, address as usize -  0x1000),
+                        0x1800 ..= 0x1FFF => self.chr.banked_read(0x800, (self.r[5] & 0xFE) >> 1, address as usize -  0x1800),
+                        _ => None // never reached
                     }
                 } else {
-                    // Low bit of register determines A10, effectively duplicating 1k banks, similar to 8k mode
+                    // Low bit of register determines A10, effectively duplicating 1k banks, similar to 1k mode
                     match address {
-                        0x1000 ..= 0x13FF => return self.chr_rom[((self.r[4] * 0x400) + (address as usize -  0x1000)) % chr_rom_len],
-                        0x1400 ..= 0x17FF => return self.chr_rom[((self.r[4] * 0x400) + (address as usize -  0x1400)) % chr_rom_len],
-                        0x1800 ..= 0x1BFF => return self.chr_rom[((self.r[5] * 0x400) + (address as usize -  0x1800)) % chr_rom_len],
-                        0x1C00 ..= 0x1FFF => return self.chr_rom[((self.r[5] * 0x400) + (address as usize -  0x1C00)) % chr_rom_len],
-                        _ => return 0 // never reached
+                        0x1000 ..= 0x13FF => self.chr.banked_read(0x400, self.r[4], address as usize -  0x1000),
+                        0x1400 ..= 0x17FF => self.chr.banked_read(0x400, self.r[4], address as usize -  0x1400),
+                        0x1800 ..= 0x1BFF => self.chr.banked_read(0x400, self.r[5], address as usize -  0x1800),
+                        0x1C00 ..= 0x1FFF => self.chr.banked_read(0x400, self.r[5], address as usize -  0x1C00),
+                        _ => None // never reached
                     }
                 }
             }
-            _ => return 0 // never reached
+            _ => None // never reached
+        }
+    }
+
+    fn _mirroring_mode_0_read(&self, address: u16) -> Option<u8> {
+        if self.nametable_chrrom {
+            println!("Umimplemented CHR ROM nametables!");
+            None
+        } else {
+            match self.mirroring_mode {
+                0 => Some(self.vram[mirroring::vertical_mirroring(address) as usize]),
+                1 => Some(self.vram[mirroring::horizontal_mirroring(address) as usize]),
+                2 => Some(self.vram[mirroring::one_screen_lower(address) as usize]),
+                3 => Some(self.vram[mirroring::one_screen_upper(address) as usize]),
+                _ => None
+            }
+        }
+    }
+
+    fn _mirroring_mode_0_write(&mut self, address: u16, data: u8) {
+        if self.nametable_chrrom {
+            println!("Attempt to write to CHR ROM nametables!");
+        } else {
+            match self.mirroring_mode {
+                0 => self.vram[mirroring::vertical_mirroring(address) as usize] = data,
+                1 => self.vram[mirroring::horizontal_mirroring(address) as usize] = data,
+                2 => self.vram[mirroring::one_screen_lower(address) as usize] = data,
+                3 => self.vram[mirroring::one_screen_upper(address) as usize] = data,
+                _ => {}
+            }
         }
     }
 }
@@ -118,22 +152,13 @@ impl Mapper for Vrc6 {
         return self.mirroring;
     }
 
-    fn read_cpu(&mut self, address: u16) -> Option<u8> {
-        let prg_rom_len = self.prg_rom.len();
+    fn debug_read_cpu(&self, address: u16) -> Option<u8> {
         match address {
-            0x6000 ..= 0x7FFF => {
-                return Some(self.prg_ram[(address - 0x6000) as usize]);
-            },
-            0x8000 ..= 0xBFFF => {
-                return Some(self.prg_rom[((self.prg_bank_16 * 0x4000) + (address as usize - 0x8000)) % prg_rom_len]);
-            },
-            0xC000 ..= 0xDFFF => {
-                return Some(self.prg_rom[((self.prg_bank_8 * 0x2000) + (address as usize - 0xC000)) % prg_rom_len]);
-            },
-            0xE000 ..= 0xFFFF => {
-                return Some(self.prg_rom[(prg_rom_len - 0x2000) + (address as usize -  0xE000)]);
-            },
-            _ => return None
+            0x6000 ..= 0x7FFF => self.prg_ram.wrapping_read(address as usize - 0x6000),
+            0x8000 ..= 0xBFFF => self.prg_rom.banked_read(0x4000, self.prg_bank_16, address as usize -  0x8000),
+            0xC000 ..= 0xDFFF => self.prg_rom.banked_read(0x2000, self.prg_bank_8, address as usize -  0xC000),
+            0xE000 ..= 0xFFFF => self.prg_rom.banked_read(0x2000, 0xFF, address as usize -  0xE000),
+            _ => None
         }
     }
 
@@ -141,7 +166,8 @@ impl Mapper for Vrc6 {
         match address {
             0x6000 ..= 0x7FFF => {
                 if self.prg_ram_enable {
-                    self.prg_ram[(address - 0x6000) as usize] = data;
+                    //self.prg_ram[(address - 0x6000) as usize] = data;
+                    self.prg_ram.wrapping_write(address as usize - 0x6000, data)
                 }
             },
             _ => {}
@@ -158,8 +184,8 @@ impl Mapper for Vrc6 {
                 self.chr_a10_rules = (data & 0b0010_0000) != 0;
                 self.prg_ram_enable = (data & 0b1000_0000) != 0;
 
-                println!("PPU Banking Mode: {}, CHR A10: {}", self.ppu_banking_mode, self.chr_a10_rules);
-                println!("Mirroring Mode: {}, Nametable CHR ROM: {}", self.mirroring_mode, self.nametable_chrrom);
+                //println!("PPU Banking Mode: {}, CHR A10: {}", self.ppu_banking_mode, self.chr_a10_rules);
+                //println!("Mirroring Mode: {}, Nametable CHR ROM: {}", self.mirroring_mode, self.nametable_chrrom);
 
             },
             0xC000 ..= 0xC003 => {
@@ -177,24 +203,58 @@ impl Mapper for Vrc6 {
         }
     }
 
-    fn read_ppu(&mut self, address: u16) -> Option<u8> {
+    fn debug_read_ppu(&self, address: u16) -> Option<u8> {
         match address {
             0x0000 ..= 0x1FFF => {
                 // CHR Bank Selection
                 match self.ppu_banking_mode {
-                    0 => return Some(self._chr_mode_0(address)),
-                    1 => return Some(self._chr_mode_1(address)),
-                    2 => return Some(self._chr_mode_23(address)),
-                    3 => return Some(self._chr_mode_23(address)),
-                    _ => return None
+                    0 => self._chr_mode_0(address),
+                    1 => self._chr_mode_1(address),
+                    2 => self._chr_mode_23(address),
+                    3 => self._chr_mode_23(address),
+                    _ => None
+                }
+            },
+            0x2000 ..= 0x3FFF => {
+                if self.chr_a10_rules {
+                    match self.ppu_banking_mode {
+                        0 => self._mirroring_mode_0_read(address),
+                        //1 => self._mirroring_mode_1(address),
+                        //2 => self._mirroring_mode_2(address),
+                        //3 => self._mirroring_mode_3(address),
+                        _ => {
+                            println!("Unimplemented mirroring mode {}! Bailing.", self.ppu_banking_mode);
+                            None
+                        }
+                    }
+                } else {
+                    // Unimplemented A10 weirdness
+                    println!("Nametable CHROM in use! This is unimplemented, returning open bus.");
+                    None
                 }
             }
-            _ => return None
+            _ => None
         }
     }
 
     fn write_ppu(&mut self, address: u16, data: u8) {
         match address {
+            0x2000 ..= 0x3FFF => {
+                if self.chr_a10_rules {
+                    match self.ppu_banking_mode {
+                        0 => self._mirroring_mode_0_write(address, data),
+                        //1 => self._mirroring_mode_1(address),
+                        //2 => self._mirroring_mode_2(address),
+                        //3 => self._mirroring_mode_3(address),
+                        _ => {
+                            println!("Unimplemented mirroring mode {}! Bailing.", self.ppu_banking_mode);
+                        }
+                    }
+                } else {
+                    // Unimplemented A10 weirdness
+                    println!("Nametable CHROM in use! This is unimplemented, returning open bus.");
+                }
+            }
             _ => {}
         }
     }

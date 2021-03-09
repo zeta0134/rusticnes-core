@@ -1,14 +1,22 @@
 // Sunsoft FME-7, 5A, and 5B (notably lacking expansion audio for now)
 // Reference implementation: https://wiki.nesdev.com/w/index.php/Sunsoft_FME-7
 
-use cartridge::NesHeader;
+use ines::INesCartridge;
+use memoryblock::MemoryBlock;
+
 use mmc::mapper::*;
 use mmc::mirroring;
 
+use apu::AudioChannelState;
+use apu::PlaybackRate;
+use apu::Volume;
+use apu::Timbre;
+use apu::RingBuffer;
+
 pub struct Fme7 {
-    pub prg_rom: Vec<u8>,
-    pub prg_ram: Vec<u8>,
-    pub chr_rom: Vec<u8>,
+    pub prg_rom: MemoryBlock,
+    pub prg_ram: MemoryBlock,
+    pub chr_rom: MemoryBlock,
     pub command: u8,
     pub chr_banks: Vec<usize>,
     pub prg_banks: Vec<usize>,
@@ -25,11 +33,15 @@ pub struct Fme7 {
 }
 
 impl Fme7 {
-    pub fn new(header: NesHeader, chr: &[u8], prg: &[u8]) -> Fme7 {
-        return Fme7 {
-            prg_rom: prg.to_vec(),
-            chr_rom: chr.to_vec(),
-            prg_ram: vec![0u8; header.prg_ram_size],
+    pub fn from_ines(ines: INesCartridge) -> Result<Fme7, String> {
+        let prg_rom_block = ines.prg_rom_block();
+        let prg_ram_block = ines.prg_ram_block()?;
+        let chr_block = ines.chr_block()?;
+
+        return Ok(Fme7 {
+            prg_rom: prg_rom_block.clone(),
+            chr_rom: chr_block.clone(),
+            prg_ram: prg_ram_block.clone(),
             command: 0,
             chr_banks: vec![0usize; 8],
             prg_banks: vec![0usize; 4],
@@ -43,7 +55,7 @@ impl Fme7 {
             irq_pending: false,
             audio_command_select: 0,
             expansion_audio_chip: YM2149F::new(),
-        }
+        });
     }
 
     pub fn clock_irq(&mut self) {
@@ -61,26 +73,24 @@ impl Mapper for Fme7 {
         return Mirroring::Horizontal;
     }
     
-    fn read_cpu(&mut self, address: u16) -> Option<u8> {
-        let prg_rom_len = self.prg_rom.len();
-        let prg_ram_len = self.prg_ram.len();
+    fn debug_read_cpu(&self, address: u16) -> Option<u8> {
         match address {
             0x6000 ..= 0x7FFF => {
                 if self.prg_ram_selected {
                     if self.prg_ram_enabled {
-                        return Some(self.prg_ram[((self.prg_banks[0] * 0x2000) + (address as usize - 0x6000)) % prg_ram_len]);
+                        self.prg_ram.banked_read(0x2000, self.prg_banks[0], (address - 0x6000) as usize)
                     } else {
-                        return None
+                        None
                     }
                 } else {
-                    return Some(self.prg_rom[((self.prg_banks[0] * 0x2000) + (address as usize - 0x6000)) % prg_ram_len]);
+                    self.prg_rom.banked_read(0x2000, self.prg_banks[0], (address - 0x6000) as usize)
                 }
             },
-            0x8000 ..= 0x9FFF => return Some(self.prg_rom[((self.prg_banks[1] * 0x2000) + (address as usize - 0x8000)) % prg_rom_len]),
-            0xA000 ..= 0xBFFF => return Some(self.prg_rom[((self.prg_banks[2] * 0x2000) + (address as usize - 0xA000)) % prg_rom_len]),
-            0xC000 ..= 0xDFFF => return Some(self.prg_rom[((self.prg_banks[3] * 0x2000) + (address as usize - 0xC000)) % prg_rom_len]),
-            0xE000 ..= 0xFFFF => return Some(self.prg_rom[(prg_rom_len - 0x2000) + (address as usize - 0xE000)]),
-            _ => return None
+            0x8000 ..= 0x9FFF => self.prg_rom.banked_read(0x2000, self.prg_banks[1], (address - 0x8000) as usize),
+            0xA000 ..= 0xBFFF => self.prg_rom.banked_read(0x2000, self.prg_banks[2], (address - 0xA000) as usize),
+            0xC000 ..= 0xDFFF => self.prg_rom.banked_read(0x2000, self.prg_banks[3], (address - 0xC000) as usize),
+            0xE000 ..= 0xFFFF => self.prg_rom.banked_read(0x2000, 0xFF, (address - 0xE000) as usize),
+            _ => None
         }
     }
 
@@ -89,25 +99,24 @@ impl Mapper for Fme7 {
         self.expansion_audio_chip.clock();
     }
 
-    fn read_ppu(&mut self, address: u16) -> Option<u8> {
-        let chr_rom_len = self.chr_rom.len();
+    fn debug_read_ppu(&self, address: u16) -> Option<u8> {
         match address {
-            0x0000 ..= 0x03FF => return Some(self.chr_rom[((self.chr_banks[0] * 0x400) + (address as usize - 0x0000)) % chr_rom_len]),
-            0x0400 ..= 0x07FF => return Some(self.chr_rom[((self.chr_banks[1] * 0x400) + (address as usize - 0x0400)) % chr_rom_len]),
-            0x0800 ..= 0x0BFF => return Some(self.chr_rom[((self.chr_banks[2] * 0x400) + (address as usize - 0x0800)) % chr_rom_len]),
-            0x0C00 ..= 0x0FFF => return Some(self.chr_rom[((self.chr_banks[3] * 0x400) + (address as usize - 0x0C00)) % chr_rom_len]),
-            0x1000 ..= 0x13FF => return Some(self.chr_rom[((self.chr_banks[4] * 0x400) + (address as usize - 0x1000)) % chr_rom_len]),
-            0x1400 ..= 0x17FF => return Some(self.chr_rom[((self.chr_banks[5] * 0x400) + (address as usize - 0x1400)) % chr_rom_len]),
-            0x1800 ..= 0x1BFF => return Some(self.chr_rom[((self.chr_banks[6] * 0x400) + (address as usize - 0x1800)) % chr_rom_len]),
-            0x1C00 ..= 0x1FFF => return Some(self.chr_rom[((self.chr_banks[7] * 0x400) + (address as usize - 0x1C00)) % chr_rom_len]),
-            0x2000 ..= 0x3FFF => return match self.mirroring {
+            0x0000 ..= 0x03FF => self.chr_rom.banked_read(0x400, self.chr_banks[0], (address - 0x0000) as usize),
+            0x0400 ..= 0x07FF => self.chr_rom.banked_read(0x400, self.chr_banks[1], (address - 0x0400) as usize),
+            0x0800 ..= 0x0BFF => self.chr_rom.banked_read(0x400, self.chr_banks[2], (address - 0x0800) as usize),
+            0x0C00 ..= 0x0FFF => self.chr_rom.banked_read(0x400, self.chr_banks[3], (address - 0x0C00) as usize),
+            0x1000 ..= 0x13FF => self.chr_rom.banked_read(0x400, self.chr_banks[4], (address - 0x1000) as usize),
+            0x1400 ..= 0x17FF => self.chr_rom.banked_read(0x400, self.chr_banks[5], (address - 0x1400) as usize),
+            0x1800 ..= 0x1BFF => self.chr_rom.banked_read(0x400, self.chr_banks[6], (address - 0x1800) as usize),
+            0x1C00 ..= 0x1FFF => self.chr_rom.banked_read(0x400, self.chr_banks[7], (address - 0x1C00) as usize),
+            0x2000 ..= 0x3FFF => match self.mirroring {
                 Mirroring::Horizontal => Some(self.vram[mirroring::horizontal_mirroring(address) as usize]),
                 Mirroring::Vertical   => Some(self.vram[mirroring::vertical_mirroring(address) as usize]),
                 Mirroring::OneScreenLower => Some(self.vram[mirroring::one_screen_lower(address) as usize]),
                 Mirroring::OneScreenUpper => Some(self.vram[mirroring::one_screen_upper(address) as usize]),
                 _ => None
             },
-            _ => return None
+            _ => None
         }
     }
 
@@ -116,8 +125,7 @@ impl Mapper for Fme7 {
         match address {
             0x6000 ..= 0x7FFF => {
                 if self.prg_ram_selected && self.prg_ram_enabled {
-                    let prg_ram_len = self.prg_ram.len();
-                    self.prg_ram[((self.prg_banks[0] * 0x2000) + (address as usize - 0x6000)) % prg_ram_len] = data;
+                    self.prg_ram.banked_write(0x2000, self.prg_banks[0], (address - 0x6000) as usize, data);
                 }
             },
             0x8000 ..= 0x9FFF => {
@@ -127,7 +135,9 @@ impl Mapper for Fme7 {
             0xA000 ..= 0xBFFF => {
                 // Execute the stored command with the provided parameter byte
                 match self.command {
-                    0x0 ..= 0x7 => { self.chr_banks[self.command as usize] = data as usize},
+                    0x0 ..= 0x7 => { 
+                        self.chr_banks[self.command as usize] = data as usize
+                    },
                     0x8 =>  {
                         self.prg_ram_enabled = (data & 0b1000_0000) != 0;
                         self.prg_ram_selected = (data & 0b0100_0000) != 0;
@@ -189,7 +199,27 @@ impl Mapper for Fme7 {
     }
 
     fn mix_expansion_audio(&self, nes_sample: f64) -> f64 {
-        return (self.expansion_audio_chip.output() - 0.5) * 0.35 + nes_sample;
+        return (self.expansion_audio_chip.output() - 0.5) * 1.06 - nes_sample;
+    }
+
+    fn channels(&self) ->  Vec<& dyn AudioChannelState> {
+        let mut channels: Vec<& dyn AudioChannelState> = Vec::new();
+        channels.push(&self.expansion_audio_chip.channel_a);
+        channels.push(&self.expansion_audio_chip.channel_b);
+        channels.push(&self.expansion_audio_chip.channel_c);
+        return channels;
+    }
+
+    fn channels_mut(&mut self) ->  Vec<&mut dyn AudioChannelState> {
+        let mut channels: Vec<&mut dyn AudioChannelState> = Vec::new();
+        channels.push(&mut self.expansion_audio_chip.channel_a);
+        channels.push(&mut self.expansion_audio_chip.channel_b);
+        channels.push(&mut self.expansion_audio_chip.channel_c);
+        return channels;
+    }
+
+    fn record_expansion_audio_output(&mut self) {
+        self.expansion_audio_chip.record_output();
     }
 }
 
@@ -364,22 +394,105 @@ impl EnvelopeGenerator {
 }
 
 struct YmChannel {
+    pub name: String,
+    pub output_buffer: RingBuffer,
+    pub muted: bool,
+
     pub tone: ToneGenerator,
     pub tone_enabled: bool,
     pub noise_enabled: bool,
     pub envelope_enabled: bool,
-    pub static_volume: u8
+    pub static_volume: u8,
+    pub effective_volume: usize,
+    pub effective_amplitude: f64,
 }
 
 impl YmChannel {
-    pub fn new() -> YmChannel {
+    pub fn new(channel_name: &str) -> YmChannel {
         return YmChannel {
+            name: String::from(channel_name),
+            output_buffer: RingBuffer::new(32768),
+            muted: false,
             tone: ToneGenerator::new(),
             tone_enabled: false,
             noise_enabled: false,
             envelope_enabled: false,
             static_volume: 0,
+            effective_volume: 0,
+            effective_amplitude: 0.0,
         }
+    }
+
+    pub fn record_sample(&mut self, sample: i16) {
+        self.output_buffer.push(sample);
+    }
+}
+
+impl AudioChannelState for YmChannel {
+    fn name(&self) -> String {
+        return self.name.clone();
+    }
+
+    fn chip(&self) -> String {
+        return "YM2149F".to_string();
+    }
+
+    fn sample_buffer(&self) -> &RingBuffer {
+        return &self.output_buffer;
+    }
+
+    fn record_current_output(&mut self) {
+        // not used, we do this manually in YM2149F
+    }
+
+    fn min_sample(&self) -> i16 {
+        return 0;
+    }
+
+    fn max_sample(&self) -> i16 {
+        return 31;
+    }
+
+    fn muted(&self) -> bool {
+        return self.muted;
+    }
+
+    fn mute(&mut self) {
+        self.muted = true;
+    }
+
+    fn unmute(&mut self) {
+        self.muted = false;
+    }
+
+    fn playing(&self) -> bool {
+        return 
+            !self.muted &&
+            self.tone_enabled &&
+            self.effective_volume > 1;
+    }
+
+    fn rate(&self) -> PlaybackRate {
+        let frequency = 1_789_773.0 / (32.0 * (self.tone.period_compare as f64));
+        return PlaybackRate::FundamentalFrequency {frequency: frequency};
+    }
+
+    fn volume(&self) -> Option<Volume> {
+        return Some(Volume::VolumeIndex{ index: self.effective_volume, max: 31 });
+    }
+
+    fn timbre(&self) -> Option<Timbre> {
+        return None;
+    }
+
+    fn amplitude(&self) -> f64 {
+        if self.playing() {
+            // Per: https://forums.nesdev.com/viewtopic.php?f=2&t=17745&sid=158b0a9e442a815411f7b453b093474a&start=15#p225103
+            // "...its pre-compression output for a single channel only really goes up to maybe 8 db louder than an APU square can go"
+            let db_boost = 10f64.powf(8.0 * 0.05);
+            return self.effective_amplitude * db_boost;
+        }
+        return 0.0;
     }
 }
 
@@ -396,9 +509,9 @@ struct YM2149F {
 impl YM2149F {
     pub fn new() -> YM2149F {
         return YM2149F {
-            channel_a: YmChannel::new(),
-            channel_b: YmChannel::new(),
-            channel_c: YmChannel::new(),
+            channel_a: YmChannel::new("A"),
+            channel_b: YmChannel::new("B"),
+            channel_c: YmChannel::new("C"),
             noise: NoiseGenerator::new(),
             envelope: EnvelopeGenerator::new(),
             clock_divider_counter: 0,
@@ -421,25 +534,42 @@ impl YM2149F {
         return lut;
     }
 
+    pub fn effective_volume(&self, channel: &YmChannel) -> usize {
+        let mut volume_index = (channel.static_volume as usize * 2) + 1;
+        if channel.envelope_enabled {
+            volume_index = self.envelope.output();
+        }
+        if volume_index > 1 {
+            return volume_index;
+        }
+        return 0;
+    }
+
     pub fn clock(&mut self) {
         self.clock_divider_counter += 1;
         if self.clock_divider_counter == 16 {
+            self.envelope.clock();
             self.channel_a.tone.clock();
             self.channel_b.tone.clock();
             self.channel_c.tone.clock();
-            self.envelope.clock();
         }
         if self.clock_divider_counter == 32 {
+            self.envelope.clock();
             self.channel_a.tone.clock();
             self.channel_b.tone.clock();
             self.channel_c.tone.clock();
-            self.envelope.clock();
             self.noise.clock();
             self.clock_divider_counter = 0;
         }
+        self.channel_a.effective_volume = self.effective_volume(&self.channel_a);
+        self.channel_b.effective_volume = self.effective_volume(&self.channel_b);
+        self.channel_c.effective_volume = self.effective_volume(&self.channel_c);
+        self.channel_a.effective_amplitude = self.volume_lut[self.channel_a.effective_volume];
+        self.channel_b.effective_amplitude = self.volume_lut[self.channel_b.effective_volume];
+        self.channel_c.effective_amplitude = self.volume_lut[self.channel_c.effective_volume];
     }
 
-    pub fn channel_output(&self, channel: &YmChannel) -> f64 {
+    pub fn channel_output(&self, channel: &YmChannel) -> usize {
         let mut signal_bit = 1u8;
         if channel.tone_enabled {
             signal_bit &= channel.tone.output();
@@ -447,18 +577,23 @@ impl YM2149F {
         if channel.noise_enabled {
             signal_bit &= self.noise.output();
         }
-        let mut volume_index = (channel.static_volume as usize * 2) + 1;
-        if channel.envelope_enabled {
-            volume_index = self.envelope.output();
+        if signal_bit != 0 && !channel.muted {
+            return self.effective_volume(channel);
         }
-        return (signal_bit as f64) * self.volume_lut[volume_index];
+        return 0;
     }
 
     pub fn output(&self) -> f64 {
-        let channel_a = self.channel_output(&self.channel_a);
-        let channel_b = self.channel_output(&self.channel_b);
-        let channel_c = self.channel_output(&self.channel_c);
-        return channel_a + channel_b + channel_c;
+        let channel_a = self.volume_lut[self.channel_output(&self.channel_a)];
+        let channel_b = self.volume_lut[self.channel_output(&self.channel_b)];
+        let channel_c = self.volume_lut[self.channel_output(&self.channel_c)];
+        return (channel_a + channel_b + channel_c) / 3.0;
+    }
+
+    pub fn record_output(&mut self) {
+        self.channel_a.record_sample((self.channel_output(&self.channel_a)) as i16);
+        self.channel_b.record_sample((self.channel_output(&self.channel_b)) as i16);
+        self.channel_c.record_sample((self.channel_output(&self.channel_c)) as i16);
     }
 
     pub fn execute_command(&mut self, command: u8, data: u8) {

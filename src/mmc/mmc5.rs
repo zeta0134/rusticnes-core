@@ -3,11 +3,14 @@
 // it here quite yet.
 // Reference capabilities: https://wiki.nesdev.com/w/index.php/MMC5
 
-use cartridge::NesHeader;
+use ines::INesCartridge;
+use memoryblock::MemoryBlock;
+
 use mmc::mapper::*;
-use std::cmp::min;
-use std::cmp::max;
 use apu::PulseChannelState;
+
+use apu::AudioChannelState;
+use apu::RingBuffer;
 
 #[derive(Copy, Clone, PartialEq)]
 pub enum PpuMode {
@@ -16,10 +19,89 @@ pub enum PpuMode {
     PpuData
 }
 
+pub struct Mmc5PcmChannel {
+    pub level: u8,
+    pub read_mode: bool,
+    pub irq_enable: bool,
+    pub irq_pending: bool,
+    pub muted: bool,
+    pub output_buffer: RingBuffer,
+}
+
+impl Mmc5PcmChannel {
+    pub fn new() -> Mmc5PcmChannel {
+        return Mmc5PcmChannel {
+            level: 0,
+            read_mode: false,
+            irq_enable: false,
+            irq_pending: false,
+            muted: false,
+            output_buffer: RingBuffer::new(32768),
+        }
+    }
+}
+
+impl AudioChannelState for Mmc5PcmChannel {
+    fn name(&self) -> String {
+        return "PCM".to_string();
+    }
+
+    fn chip(&self) -> String {
+        return "MMC5".to_string();
+    }
+
+    fn sample_buffer(&self) -> &RingBuffer {
+        return &self.output_buffer;
+    }
+
+    fn record_current_output(&mut self) {
+        self.output_buffer.push(self.level as i16);
+    }
+
+    fn min_sample(&self) -> i16 {
+        return 0;
+    }
+
+    fn max_sample(&self) -> i16 {
+        return 255;
+    }
+
+    fn muted(&self) -> bool {
+        return self.muted;
+    }
+
+    fn mute(&mut self) {
+        self.muted = true;
+    }
+
+    fn unmute(&mut self) {
+        self.muted = false;
+    }
+
+
+    fn playing(&self) -> bool {
+        return true;
+    }
+
+    fn amplitude(&self) -> f64 {
+        let buffer = self.output_buffer.buffer();
+        let mut index = (self.output_buffer.index() - 256) % buffer.len();
+        let mut max = buffer[index];
+        let mut min = buffer[index];
+        for _i in 0 .. 256 {
+            if buffer[index] > max {max = buffer[index];}
+            if buffer[index] < min {min = buffer[index];}
+            index += 1;
+            index = index % buffer.len();
+        }
+        return (max - min) as f64 / 64.0;
+    }
+}
+
 pub struct Mmc5 {
-    pub prg_rom: Vec<u8>,
-    pub prg_ram: Vec<u8>,
-    pub chr_rom: Vec<u8>,
+    pub prg_rom: MemoryBlock,
+    pub prg_ram: MemoryBlock,
+    pub chr: MemoryBlock,
     pub mirroring: Mirroring,
     pub ppuctrl_monitor: u8,
     pub ppumask_monitor: u8,
@@ -60,33 +142,21 @@ pub struct Mmc5 {
     pub multiplicand_b: u8,
     pub pulse_1: PulseChannelState,
     pub pulse_2: PulseChannelState,
-    pub pcm_level: u8,
-    pub pcm_read_mode: bool,
-    pub pcm_irq_enable: bool,
-    pub pcm_irq_pending: bool,
     pub audio_sequencer_counter: u16,
-}
-
-fn banked_memory_index(data_store_length: usize, bank_size: usize, bank_number: usize, raw_address: usize) -> usize {
-    let total_banks = max(data_store_length / bank_size, 1);
-    let selected_bank = bank_number % total_banks;
-    let bank_start_offset = bank_size * selected_bank;
-    let offset_within_bank = raw_address % min(bank_size, data_store_length);
-    return bank_start_offset + offset_within_bank;
+    pub pcm_channel: Mmc5PcmChannel,
 }
 
 impl Mmc5 {
-    pub fn new(header: NesHeader, chr: &[u8], prg: &[u8]) -> Mmc5 {
-        let chr_rom = match header.has_chr_ram {
-            true => vec![0u8; 8 * 1024],
-            false => chr.to_vec()
-        };
+    pub fn from_ines(ines: INesCartridge) -> Result<Mmc5, String> {
+        let prg_rom_block = ines.prg_rom_block();
+        let prg_ram_block = ines.prg_ram_block()?;
+        let chr_block = ines.chr_block()?;
 
-        return Mmc5 {
-            prg_rom: prg.to_vec(),
-            prg_ram: vec![0u8; 64 * 1024],
-            chr_rom: chr_rom,
-            mirroring: header.mirroring,
+        return Ok(Mmc5 {
+            prg_rom: prg_rom_block.clone(),
+            prg_ram: prg_ram_block.clone(),
+            chr: chr_block.clone(),
+            mirroring: ines.header.mirroring(),
             ppuctrl_monitor: 0,
             ppumask_monitor: 0,
             prg_mode: 3,   // Koei games require MMC5 to boot into PRG mode 3
@@ -124,14 +194,11 @@ impl Mmc5 {
             ppu_fetches_this_scanline: 0,
             multiplicand_a: 0xFF,
             multiplicand_b: 0xFF,
-            pulse_1: PulseChannelState::new(false),
-            pulse_2: PulseChannelState::new(false),
-            pcm_level: 0,
-            pcm_read_mode: false,
-            pcm_irq_enable: false,
-            pcm_irq_pending: false,
+            pulse_1: PulseChannelState::new("Pulse 1", "MMC5", 1_789_773, false),
+            pulse_2: PulseChannelState::new("Pulse 2", "MMC5", 1_789_773, false),
             audio_sequencer_counter: 0,
-        }
+            pcm_channel: Mmc5PcmChannel::new(),
+        })
     }
 
     pub fn large_sprites_active(&self) -> bool {
@@ -208,8 +275,7 @@ impl Mmc5 {
             _ => {return 0}
         };
 
-        let datastore_offset = banked_memory_index(datastore.len(), bank_size, bank_number as usize, address as usize);
-        return datastore[datastore_offset];
+        return datastore.banked_read(bank_size, bank_number as usize, address as usize).unwrap_or(0)
     }
 
     pub fn read_prg_mode_1(&self, address: u16) -> u8 {
@@ -223,8 +289,7 @@ impl Mmc5 {
             _ => {return 0}
         };
 
-        let datastore_offset = banked_memory_index(datastore.len(), bank_size, bank_number as usize, address as usize);
-        return datastore[datastore_offset];
+        return datastore.banked_read(bank_size, bank_number as usize, address as usize).unwrap_or(0)
     }
 
     pub fn read_prg_mode_2(&self, address: u16) -> u8 {
@@ -242,8 +307,7 @@ impl Mmc5 {
             _ => {return 0}
         };
 
-        let datastore_offset = banked_memory_index(datastore.len(), bank_size, bank_number as usize, address as usize);
-        return datastore[datastore_offset];
+        return datastore.banked_read(bank_size, bank_number as usize, address as usize).unwrap_or(0)
     }
 
     pub fn read_prg_mode_3(&self, address: u16) -> u8 {
@@ -265,8 +329,7 @@ impl Mmc5 {
             _ => {return 0}
         };
 
-        let datastore_offset = banked_memory_index(datastore.len(), bank_size, bank_number as usize, address as usize);
-        return datastore[datastore_offset];
+        return datastore.banked_read(bank_size, bank_number as usize, address as usize).unwrap_or(0)
     }
 
     pub fn read_prg(&self, address: u16) -> u8 {
@@ -285,8 +348,7 @@ impl Mmc5 {
             _ => {return}
         };
 
-        let datastore_offset = banked_memory_index(self.prg_ram.len(), bank_size, bank_number as usize, address as usize);
-        self.prg_ram[datastore_offset] = data;
+        self.prg_ram.banked_write(bank_size, bank_number as usize, address as usize, data)
     }
 
     pub fn write_prg_mode_1(&mut self, address: u16, data: u8) {
@@ -299,8 +361,7 @@ impl Mmc5 {
             _ => {return}
         };
 
-        let datastore_offset = banked_memory_index(self.prg_ram.len(), bank_size, bank_number as usize, address as usize);
-        self.prg_ram[datastore_offset] = data;
+        self.prg_ram.banked_write(bank_size, bank_number as usize, address as usize, data)
     }
 
     pub fn write_prg_mode_2(&mut self, address: u16, data: u8) {
@@ -317,8 +378,7 @@ impl Mmc5 {
             _ => {return}
         };
 
-        let datastore_offset = banked_memory_index(self.prg_ram.len(), bank_size, bank_number as usize, address as usize);
-        self.prg_ram[datastore_offset] = data;
+        self.prg_ram.banked_write(bank_size, bank_number as usize, address as usize, data)
     }
 
     pub fn write_prg_mode_3(&mut self, address: u16, data: u8) {
@@ -339,8 +399,7 @@ impl Mmc5 {
             _ => {return}
         };
 
-        let datastore_offset = banked_memory_index(self.prg_ram.len(), bank_size, bank_number as usize, address as usize);
-        self.prg_ram[datastore_offset] = data;
+        self.prg_ram.banked_write(bank_size, bank_number as usize, address as usize, data)
     }
 
     pub fn write_prg(&mut self, address: u16, data: u8) {
@@ -373,12 +432,10 @@ impl Mmc5 {
 
         if large_sprites_enabled && (currently_reading_backgrounds || (ppu_inactive && wrote_ext_register_last)) {
             let chr_bank = self.chr_ext_banks[extended_bank_index as usize];
-            let chr_address = banked_memory_index(self.chr_rom.len(), chr_bank_size as usize, chr_bank, address as usize);
-            return self.chr_rom[chr_address];
+            return self.chr.banked_read(chr_bank_size as usize, chr_bank as usize, address as usize).unwrap_or(0);
         } else {
             let chr_bank = self.chr_banks[standard_bank_index as usize];
-            let chr_address = banked_memory_index(self.chr_rom.len(), chr_bank_size as usize, chr_bank, address as usize);
-            return self.chr_rom[chr_address];
+            return self.chr.banked_read(chr_bank_size as usize, chr_bank as usize, address as usize).unwrap_or(0);
         }
     }
 
@@ -387,8 +444,7 @@ impl Mmc5 {
         let nametable_index = self.last_bg_tile_fetch & 0x3FF;
         let extended_tile_attributes = self.extram[nametable_index as usize];
         let chr_bank = (self.chr_bank_high_bits << 6) | ((extended_tile_attributes as usize) & 0b0011_1111);
-        let chr_address = banked_memory_index(self.chr_rom.len(), chr_bank_size as usize, chr_bank, address as usize);
-        return self.chr_rom[chr_address];
+        return self.chr.banked_read(chr_bank_size as usize, chr_bank as usize, address as usize).unwrap_or(0);
     }
 
         pub fn read_extended_attribute(&self) -> u8 {
@@ -402,32 +458,25 @@ impl Mmc5 {
     }
 
     fn read_pcm_sample(&mut self, address: u16) {
-        if self.pcm_read_mode {
+        if self.pcm_channel.read_mode {
             match address {
                 0x8000 ..= 0xBFFF => {
-                    self.pcm_level = self.read_prg(address);
+                    self.pcm_channel.level = self.read_prg(address);
                 },
                 _ => {}
             }
         }
     }
 
-    fn _read_cpu(&mut self, address: u16, side_effects: bool) -> Option<u8> {
-        if side_effects {
-            self.snoop_cpu_read(address);
-            self.read_pcm_sample(address);
-        }
+    fn _read_cpu(&self, address: u16) -> Option<u8> {
         match address {
             0x5010 => {
                 let mut pcm_status = 0;
-                if self.pcm_read_mode {
+                if self.pcm_channel.read_mode {
                     pcm_status |= 0b0000_0001;
                 }
-                if self.pcm_irq_pending {
+                if self.pcm_channel.irq_pending {
                     pcm_status |= 0b1000_0000;   
-                }
-                if side_effects {
-                    self.pcm_irq_pending = false;
                 }
                 return Some(pcm_status)
             },
@@ -448,9 +497,6 @@ impl Mmc5 {
                 }
                 if self.in_frame {
                     status |= 0b0100_0000;
-                }
-                if side_effects {
-                    self.irq_pending = false;
                 }
                 return Some(status);
             }
@@ -535,6 +581,14 @@ impl Mmc5 {
             self.current_scanline = 0;
             self.ppu_read_mode = PpuMode::PpuData;
         }
+
+        self.read_pcm_sample(address);
+
+        match address {
+            0x5010 => {self.pcm_channel.irq_pending = false;}
+            0x5204 => {self.irq_pending = false;}
+            _ => {}
+        }
     }
 
     fn is_extended_attribute(&self) -> bool {
@@ -552,10 +606,7 @@ impl Mmc5 {
         return ppu_rendering_backgrounds & extended_attributes_enabled & reading_pattern_byte;
     }
 
-    fn _read_ppu(&mut self, address: u16, side_effects: bool) -> Option<u8> {
-        if side_effects {
-            self.snoop_ppu_read(address);
-        }
+    fn _read_ppu(&self, address: u16) -> Option<u8> {
         match address {
             0x0000 ..= 0x1FFF => {
                 if self.is_extended_pattern() {
@@ -579,7 +630,7 @@ impl Mmc5 {
 impl Mapper for Mmc5 {
     fn print_debug_status(&self) {
         println!("======= MMC5 =======");
-        println!("PRG ROM: {}k, PRG RAM: {}k, CHR ROM: {}k", self.prg_rom.len() / 1024, self.prg_ram.len() / 1024, self.chr_rom.len() / 1024);
+        println!("PRG ROM: {}k, PRG RAM: {}k, CHR ROM: {}k", self.prg_rom.len() / 1024, self.prg_ram.len() / 1024, self.chr.len() / 1024);
         println!("PRG Mode: {} CHR Mode: {}, ExRAM Mode: {}", self.prg_mode, self.chr_mode, self.extended_ram_mode);
         println!("PRG Banks: A:{} B:{} C:{} D:{} RAM:{}", self.prg_bank_a, self.prg_bank_b, self.prg_bank_c, self.prg_bank_d, self.prg_ram_bank);
         println!("IRQ E:{} P:{} CMP:{} Detected Scanline: {}, PPU Fetches: {}", self.irq_enabled, self.irq_pending, self.irq_scanline_compare, self.current_scanline, self.ppu_fetches_this_scanline);
@@ -605,11 +656,13 @@ impl Mapper for Mmc5 {
     }
     
     fn read_cpu(&mut self, address: u16) -> Option<u8> {
-        return self._read_cpu(address, true);
+        let data = self._read_cpu(address);
+        self.snoop_cpu_read(address);
+        return data;
     }
 
-    fn debug_read_cpu(&mut self, address: u16) -> Option<u8> {
-        return self._read_cpu(address, false);
+    fn debug_read_cpu(&self, address: u16) -> Option<u8> {
+        return self._read_cpu(address);
     }
 
     fn write_cpu(&mut self, address: u16, data: u8) {
@@ -676,12 +729,12 @@ impl Mapper for Mmc5 {
                 self.pulse_2.envelope.start_flag = true;
             },
             0x5010 => {
-                self.pcm_read_mode =  (data & 0b0000_0001) != 0;
-                self.pcm_irq_enable =  (data & 0b1000_0000) != 0;
+                self.pcm_channel.read_mode =  (data & 0b0000_0001) != 0;
+                self.pcm_channel.irq_enable =  (data & 0b1000_0000) != 0;
             },
             0x5011 => {
-                if !(self.pcm_read_mode) {
-                    self.pcm_level = data;
+                if !(self.pcm_channel.read_mode) {
+                    self.pcm_channel.level = data;
                 }
             }
             0x4015 => {
@@ -754,12 +807,13 @@ impl Mapper for Mmc5 {
         }
     }
 
-    fn debug_read_ppu(&mut self, address: u16) -> Option<u8> {
-        return self._read_ppu(address, false);
+    fn debug_read_ppu(&self, address: u16) -> Option<u8> {
+        return self._read_ppu(address);
     }
 
     fn read_ppu(&mut self, address: u16) -> Option<u8> {
-        return self._read_ppu(address, true);
+        self.snoop_ppu_read(address);
+        return self._read_ppu(address);
     }
 
     fn write_ppu(&mut self, address: u16, data: u8) {
@@ -789,12 +843,37 @@ impl Mapper for Mmc5 {
     fn mix_expansion_audio(&self, nes_sample: f64) -> f64 {
         let pulse_1_output = (self.pulse_1.output() as f64 / 15.0) - 0.5;
         let pulse_2_output = (self.pulse_2.output() as f64 / 15.0) - 0.5;
-        let pcm_output = (self.pcm_level as f64 / 256.0) - 0.5;
+        let mut pcm_output = (self.pcm_channel.level as f64 / 256.0) - 0.5;
+        if self.pcm_channel.muted {
+            pcm_output = 0.0;
+        }
 
         return 
             (pulse_1_output + pulse_2_output) * 0.12 + 
             pcm_output * 0.25 + 
             nes_sample;
+    }
+
+    fn channels(&self) ->  Vec<& dyn AudioChannelState> {
+        let mut channels: Vec<& dyn AudioChannelState> = Vec::new();
+        channels.push(&self.pulse_1);
+        channels.push(&self.pulse_2);
+        channels.push(&self.pcm_channel);
+        return channels;
+    }
+
+    fn channels_mut(&mut self) ->  Vec<&mut dyn AudioChannelState> {
+        let mut channels: Vec<&mut dyn AudioChannelState> = Vec::new();
+        channels.push(&mut self.pulse_1);
+        channels.push(&mut self.pulse_2);
+        channels.push(&mut self.pcm_channel);
+        return channels;
+    }
+
+    fn record_expansion_audio_output(&mut self) {
+        self.pulse_1.record_current_output();
+        self.pulse_2.record_current_output();
+        self.pcm_channel.record_current_output();
     }
 }
 

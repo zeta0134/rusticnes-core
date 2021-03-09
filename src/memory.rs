@@ -19,87 +19,74 @@ impl CpuMemory {
     }
 }
 
-pub fn passively_read_byte(nes: &mut NesState, address: u16) -> u8 {
-    return _read_byte(nes, address, false);
+pub fn debug_read_byte(nes: &NesState, address: u16) -> u8 {
+    // Handle a few special cases for debug reads
+    match address {
+        0x2000 ..= 0x3FFF => {
+            let ppu_reg = address & 0x7;
+            match ppu_reg {
+                7 => {
+                    let ppu_addr = nes.ppu.current_vram_address;
+                    // Note: does not simulate the data / palette fetch quirk.
+                    return nes.ppu.debug_read_byte(& *nes.mapper, ppu_addr);
+                },
+                _ => {}
+            }
+        },
+        0x4015 => {
+            return nes.apu.debug_read_register(address);
+        },
+        _ => {}
+    }
+
+    let mapped_byte = nes.mapper.debug_read_cpu(address).unwrap_or(nes.memory.open_bus);
+    return _read_byte(nes, address, mapped_byte);
 }
 
 pub fn read_byte(nes: &mut NesState, address: u16) -> u8 {
-    /*nes.memory.recent_reads.insert(0, address);
-    nes.memory.recent_reads.truncate(20);*/
-    let byte = _read_byte(nes, address, true);
-    nes.memory.open_bus = byte;
-    return byte;
-}
+    let mapped_byte = nes.mapper.read_cpu(address).unwrap_or(nes.memory.open_bus);
 
-fn _read_byte(nes: &mut NesState, address: u16, side_effects: bool) -> u8 {
-    let memory = &mut nes.memory;
-    let mapped_byte = match side_effects {
-        true => nes.mapper.read_cpu(address).unwrap_or(memory.open_bus),
-        false => nes.mapper.debug_read_cpu(address).unwrap_or(memory.open_bus),
-    };
+    // This is a live read, handle any side effects
     match address {
-        0x0000 ..= 0x1FFF => {
-            return memory.iram_raw[(address & 0x7FF) as usize];
-        },
         0x2000 ..= 0x3FFF => {
-            // PPU
             let ppu_reg = address & 0x7;
             match ppu_reg {
-                // PPUCTRL, PPUMASK, OAMADDR | PPUSCROLL | PPUADDR (Write Only)
-                0 | 1 | 3 | 5 | 6 => {
-                    return nes.ppu.latch;
-                },
                 // PPUSTATUS
                 2 => {
-                    if side_effects {
-                        nes.ppu.write_toggle = false;
-                        nes.ppu.latch = (nes.ppu.status & 0xE0) + (nes.ppu.latch & 0x1F);
-                        nes.ppu.status = nes.ppu.status & 0x7F; // Clear VBlank bit
-                        return nes.ppu.latch;
-                    } else {
-                        return (nes.ppu.status & 0xE0) + (nes.ppu.latch & 0x1F);
-                    }
+                    nes.ppu.write_toggle = false;
+                    nes.ppu.latch = (nes.ppu.status & 0xE0) + (nes.ppu.latch & 0x1F);
+                    nes.ppu.status = nes.ppu.status & 0x7F; // Clear VBlank bit
+                    return nes.ppu.latch;
                 },
                 // OAMDATA
                 4 => {
-                    if side_effects {
-                        nes.ppu.latch = nes.ppu.oam[nes.ppu.oam_addr as usize];
-                        return nes.ppu.latch;
-                    } else {
-                        return nes.ppu.oam[nes.ppu.oam_addr as usize];
-                    }
+                    nes.ppu.latch = nes.ppu.oam[nes.ppu.oam_addr as usize];
                 },
                 // PPUDATA
                 7 => {
                     let ppu_addr = nes.ppu.current_vram_address;
-                    if side_effects {
-                        nes.ppu.latch = nes.ppu.read_latched_byte(&mut *nes.mapper, ppu_addr);
-                        if nes.ppu.rendering_enabled() && 
-                        (nes.ppu.current_scanline == 261 ||
-                         nes.ppu.current_scanline <= 239) {
-                            // Glitchy increment, a fine y and a coarse x 
-                            nes.ppu.increment_coarse_x();
-                            nes.ppu.increment_fine_y();
-                        } else {
-                            // Normal incrementing behavior based on PPUCTRL
-                            if nes.ppu.control & 0x04 == 0 {
-                                nes.ppu.current_vram_address += 1;
-                            } else {
-                                nes.ppu.current_vram_address += 32;
-                            }
-                            nes.ppu.current_vram_address &= 0b0111_1111_1111_1111;
-                        }
-                        // Perform a dummy read immediately, to simulte the behavior of the PPU
-                        // address lines changing, so the mapper can react accordingly
-                        let address = nes.ppu.current_vram_address;
-                        let _ = nes.ppu.read_byte(&mut *nes.mapper, address);
-
-                        return nes.ppu.latch;
+                    nes.ppu.latch = nes.ppu.read_latched_byte(&mut *nes.mapper, ppu_addr);
+                    if nes.ppu.rendering_enabled() && 
+                    (nes.ppu.current_scanline == 261 ||
+                     nes.ppu.current_scanline <= 239) {
+                        // Glitchy increment, a fine y and a coarse x 
+                        nes.ppu.increment_coarse_x();
+                        nes.ppu.increment_fine_y();
                     } else {
-                        return nes.ppu.passively_read_byte(&mut *nes.mapper, ppu_addr);
+                        // Normal incrementing behavior based on PPUCTRL
+                        if nes.ppu.control & 0x04 == 0 {
+                            nes.ppu.current_vram_address += 1;
+                        } else {
+                            nes.ppu.current_vram_address += 32;
+                        }
+                        nes.ppu.current_vram_address &= 0b0111_1111_1111_1111;
                     }
+                    // Perform a dummy read immediately, to simulte the behavior of the PPU
+                    // address lines changing, so the mapper can react accordingly
+                    let address = nes.ppu.current_vram_address;
+                    let _ = nes.ppu.read_byte(&mut *nes.mapper, address);
                 },
-                _ => return 0
+                _ => {}
             }
         },
         0x4015 => {
@@ -125,11 +112,55 @@ fn _read_byte(nes: &mut NesState, address: u16, side_effects: bool) -> u8 {
             nes.p2_data = nes.p2_data >> 1;
             return result;
         },
+        _ => {}
+    }
+
+    let byte = _read_byte(nes, address, mapped_byte);
+    nes.memory.open_bus = byte;
+    return byte;
+}
+
+fn _read_byte(nes: &NesState, address: u16, mapped_byte: u8) -> u8 {
+    match address {
+        0x0000 ..= 0x1FFF => {
+            return nes.memory.iram_raw[(address & 0x7FF) as usize];
+        },
+        0x2000 ..= 0x3FFF => {
+            // PPU
+            let ppu_reg = address & 0x7;
+            match ppu_reg {
+                // PPUCTRL, PPUMASK, OAMADDR | PPUSCROLL | PPUADDR (Write Only)
+                0 | 1 | 3 | 5 | 6 => {
+                    return nes.ppu.latch;
+                },
+                // PPUSTATUS
+                2 => {
+                    return (nes.ppu.status & 0xE0) + (nes.ppu.latch & 0x1F);
+                },
+                // OAMDATA
+                4 => {
+                    return nes.ppu.oam[nes.ppu.oam_addr as usize];
+                },
+                // PPUDATA
+                7 => {
+                    return nes.ppu.latch;
+                },
+                _ => return 0
+            }
+        },
+        0x4016 => {
+            let result = 0x40 | (nes.p1_data & 0x1);
+            return result;
+        },
+        0x4017 => {
+            let result = 0x40 | (nes.p2_data & 0x1);
+            return result;
+        },
         0x4020 ..= 0xFFFF => {
             return mapped_byte;
         },
         _ => {
-            return memory.open_bus;
+            return nes.memory.open_bus;
         }
     }
 }

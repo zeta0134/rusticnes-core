@@ -1,3 +1,5 @@
+use apu::AudioChannelState;
+
 #[derive(Copy, Clone, PartialEq)]
 pub enum Mirroring {
     Horizontal,
@@ -18,12 +20,12 @@ pub fn mirroring_mode_name(mode: Mirroring) -> &'static str {
 }
 
 pub trait Mapper: Send {
-    fn read_cpu(&mut self, address: u16) -> Option<u8>;
+    fn read_cpu(&mut self, address: u16) -> Option<u8> {return self.debug_read_cpu(address);}
     fn write_cpu(&mut self, address: u16, data: u8);
-    fn read_ppu(&mut self, address: u16) -> Option<u8>;
+    fn read_ppu(&mut self, address: u16) -> Option<u8> {return self.debug_read_ppu(address);}
     fn write_ppu(&mut self, address: u16, data: u8);
-    fn debug_read_cpu(&mut self, address: u16) -> Option<u8> {return self.read_cpu(address);}
-    fn debug_read_ppu(&mut self, address: u16) -> Option<u8> {return self.read_ppu(address);}
+    fn debug_read_cpu(&self, address: u16) -> Option<u8>;
+    fn debug_read_ppu(&self, address: u16) -> Option<u8>;
     fn print_debug_status(&self) {}
     fn mirroring(&self) -> Mirroring;
     fn has_sram(&self) -> bool {return false;}
@@ -32,4 +34,7 @@ pub trait Mapper: Send {
     fn irq_flag(&self) -> bool {return false;}
     fn clock_cpu(&mut self) {}
     fn mix_expansion_audio(&self, nes_sample: f64) -> f64 {return nes_sample;}
+    fn channels(&self) ->  Vec<& dyn AudioChannelState> {return Vec::new();}
+    fn channels_mut(&mut self) ->  Vec<&mut dyn AudioChannelState> {return Vec::new();}
+    fn record_expansion_audio_output(&mut self) {}
 }
