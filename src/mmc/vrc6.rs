@@ -177,6 +177,7 @@ impl AudioChannelState for Vrc6PulseChannel {
 
 pub struct Vrc6SawtoothChannel {
     pub enabled: bool,
+    pub debug_disable: bool,
     pub accumulator_rate: u8,
     pub accumulator_step: u8,
     pub accumulator: u8,
@@ -185,12 +186,14 @@ pub struct Vrc6SawtoothChannel {
     pub halt: bool,
     pub scale_256: bool,
     pub scale_16: bool,
+    pub output_buffer: RingBuffer,
 }
 
 impl Vrc6SawtoothChannel {
     pub fn new() -> Vrc6SawtoothChannel {
         return Vrc6SawtoothChannel {
             enabled: false,
+            debug_disable: false,
             accumulator_rate: 0,
             accumulator_step: 0,
             accumulator: 0,
@@ -199,6 +202,7 @@ impl Vrc6SawtoothChannel {
             halt: true,
             scale_256: false,
             scale_16: false,
+            output_buffer: RingBuffer::new(32768),
         };
     }
 
@@ -265,6 +269,77 @@ impl Vrc6SawtoothChannel {
             },
             _ => {}
         }
+    }
+}
+
+impl AudioChannelState for Vrc6SawtoothChannel {
+    fn name(&self) -> String {
+        return "Sawtooth".to_string();
+    }
+
+    fn chip(&self) -> String {
+        return "VRC6".to_string();
+    }
+
+    fn sample_buffer(&self) -> &RingBuffer {
+        return &self.output_buffer;
+    }
+
+    fn record_current_output(&mut self) {
+        self.output_buffer.push(self.output() as i16);
+    }
+
+    fn min_sample(&self) -> i16 {
+        return 0;
+    }
+
+    fn max_sample(&self) -> i16 {
+        return 15;
+    }
+
+    fn muted(&self) -> bool {
+        return self.debug_disable;
+    }
+
+    fn mute(&mut self) {
+        self.debug_disable = true;
+    }
+
+    fn unmute(&mut self) {
+        self.debug_disable = false;
+    }
+
+    fn playing(&self) -> bool {
+        return 
+            (self.enabled) &&
+            (!self.halt) &&
+            (self.accumulator_rate > 0);
+    }
+
+    fn rate(&self) -> PlaybackRate {
+        let frequency = 1_789_773.0 / (14.0 * (self.period_initial as f64 + 1.0));
+        return PlaybackRate::FundamentalFrequency {frequency: frequency};
+    }
+
+    fn volume(&self) -> Option<Volume> {
+        if self.accumulator_rate <= 42 {
+            // Normal volume, report this directly
+            return Some(Volume::VolumeIndex{ index: self.accumulator_rate as usize, max: 42 });
+        } else {
+            // distorted volume, report this near the top end; these are always
+            // quite loud
+            let distorted_volume = self.accumulator_rate - 21;
+            return Some(Volume::VolumeIndex{ index: distorted_volume as usize, max: 42 });
+        }
+    }
+
+    fn timbre(&self) -> Option<Timbre> {
+        if self.accumulator_rate <= 42 {
+            return Some(Timbre::DutyIndex{ index: 0 as usize, max: 1 });
+        } else {
+            return Some(Timbre::DutyIndex{ index: 1 as usize, max: 1 });
+        }
+        
     }
 }
 
@@ -630,7 +705,7 @@ impl Mapper for Vrc6 {
         let mut channels: Vec<& dyn AudioChannelState> = Vec::new();
         channels.push(&self.pulse1);
         channels.push(&self.pulse2);
-        //channels.push(&self.sawtooth);
+        channels.push(&self.sawtooth);
         return channels;
     }
 
@@ -638,13 +713,13 @@ impl Mapper for Vrc6 {
         let mut channels: Vec<&mut dyn AudioChannelState> = Vec::new();
         channels.push(&mut self.pulse1);
         channels.push(&mut self.pulse2);
-        //channels.push(&mut self.pcm_channel);
+        channels.push(&mut self.sawtooth);
         return channels;
     }
 
     fn record_expansion_audio_output(&mut self) {
         self.pulse1.record_current_output();
         self.pulse2.record_current_output();
-        //self.sawtooth.record_current_output();
+        self.sawtooth.record_current_output();
     }
 }
