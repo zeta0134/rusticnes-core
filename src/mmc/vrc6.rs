@@ -359,7 +359,7 @@ pub struct Vrc6 {
     pub mirroring: Mirroring,
     pub mapper_number: u16,
 
-    pub irq_scanline_prescaler: u16,
+    pub irq_scanline_prescaler: i16,
     pub irq_latch: u8,
     pub irq_scanline_mode: bool,
     pub irq_enable: bool,
@@ -509,10 +509,10 @@ impl Vrc6 {
     }
 
     fn _clock_irq_prescaler(&mut self) {
-        self.irq_scanline_prescaler += 3;
-        if self.irq_scanline_prescaler >= 341 {
-            self.irq_scanline_prescaler = 0;
+        self.irq_scanline_prescaler -= 3;
+        if self.irq_scanline_prescaler <= 0 {
             self._clock_irq_counter();
+            self.irq_scanline_prescaler += 341;
         }
     }
 
@@ -558,8 +558,6 @@ impl Mapper for Vrc6 {
             (vrc6_combined_sample * vrc6_weight) + 
             nes_sample;
     }
-
-
 
     fn irq_flag(&self) -> bool {
         return self.irq_pending;
@@ -641,7 +639,7 @@ impl Mapper for Vrc6 {
                 // do nothing (we may already have one in flight)
                 if self.irq_enable {
                     self.irq_counter = self.irq_latch;
-                    self.irq_scanline_prescaler = 0;
+                    self.irq_scanline_prescaler = 341;                    
                 }
 
             },
