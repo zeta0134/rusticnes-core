@@ -30,6 +30,7 @@ fn mapper_from_ines(ines: INesCartridge) -> Result<Box<dyn Mapper>, String> {
         7 => Box::new(AxRom::from_ines(ines)?),
         9 => Box::new(PxRom::from_ines(ines)?),
         24 => Box::new(Vrc6::from_ines(ines)?),
+        26 => Box::new(Vrc6::from_ines(ines)?),
         31 => Box::new(INes31::from_ines(ines)?),
         34 => Box::new(BnRom::from_ines(ines)?),
         66 => Box::new(GxRom::from_ines(ines)?),

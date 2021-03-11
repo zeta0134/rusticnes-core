@@ -357,6 +357,7 @@ pub struct Vrc6 {
     pub nametable_chrrom: bool,
     pub chr_a10_rules: bool,
     pub mirroring: Mirroring,
+    pub mapper_number: u16,
 
     pub irq_scanline_prescaler: u16,
     pub irq_latch: u8,
@@ -391,6 +392,7 @@ impl Vrc6 {
             nametable_chrrom: false,
             chr_a10_rules: false,
             mirroring: ines.header.mirroring(),
+            mapper_number: ines.header.mapper_number(),
 
             irq_scanline_prescaler: 0,
             irq_latch: 0,
@@ -572,13 +574,18 @@ impl Mapper for Vrc6 {
         match address {
             0x6000 ..= 0x7FFF => {
                 if self.prg_ram_enable {
-                    //self.prg_ram[(address - 0x6000) as usize] = data;
                     self.prg_ram.wrapping_write(address as usize - 0x6000, data)
                 }
             },
             _ => {}
         }
-        let masked_address = address & 0b1111_0000_0000_0011;
+        let mut masked_address = address & 0b1111_0000_0000_0011;
+        if self.mapper_number == 26 {
+            // switch the roles of a1 and a0
+            let a1 = (masked_address & 0b10) >> 1;
+            let a0 = masked_address & 0b01;
+            masked_address = (masked_address & 0b1111_0000_0000_0000) + (a0 << 1) + a1;
+        }
         match masked_address {
             0x8000 ..= 0x8003 => {
                 self.prg_bank_16 = data as usize & 0x0F;
@@ -604,10 +611,6 @@ impl Mapper for Vrc6 {
                 self.nametable_chrrom = (data & 0b0001_0000) != 0;
                 self.chr_a10_rules = (data & 0b0010_0000) != 0;
                 self.prg_ram_enable = (data & 0b1000_0000) != 0;
-
-                //println!("PPU Banking Mode: {}, CHR A10: {}", self.ppu_banking_mode, self.chr_a10_rules);
-                //println!("Mirroring Mode: {}, Nametable CHR ROM: {}", self.mirroring_mode, self.nametable_chrrom);
-
             },
             0xC000 ..= 0xC003 => {
                 self.prg_bank_8 = data as usize & 0x1F;
