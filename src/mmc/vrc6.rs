@@ -358,6 +358,7 @@ pub struct Vrc6 {
     pub chr_a10_rules: bool,
     pub mirroring: Mirroring,
     pub mapper_number: u16,
+    pub b003_shadow: u8,
 
     pub irq_scanline_prescaler: i16,
     pub irq_latch: u8,
@@ -393,6 +394,7 @@ impl Vrc6 {
             chr_a10_rules: false,
             mirroring: ines.header.mirroring(),
             mapper_number: ines.header.mapper_number(),
+            b003_shadow: 0,
 
             irq_scanline_prescaler: 0,
             irq_latch: 0,
@@ -480,9 +482,47 @@ impl Vrc6 {
     }
 
     fn _mirroring_mode_0_read(&self, address: u16) -> Option<u8> {
+        let mirrored_address = address & 0x2FFF;
         if self.nametable_chrrom {
-            println!("Umimplemented CHR ROM nametables!");
-            None
+            match self.mirroring_mode {
+                0 => {
+                    match mirrored_address {
+                        0x2000 ..= 0x23FF => self.chr.banked_read(0x400, self.r[6] & 0xFE, address as usize -  0x2000),
+                        0x2400 ..= 0x27FF => self.chr.banked_read(0x400, self.r[6] | 0x01, address as usize -  0x2400), 
+                        0x2800 ..= 0x2BFF => self.chr.banked_read(0x400, self.r[7] & 0xFE, address as usize -  0x2800), 
+                        0x2C00 ..= 0x2FFF => self.chr.banked_read(0x400, self.r[7] | 0x01, address as usize -  0x2C00),
+                        _ => None // never reached
+                    }
+                },
+                1 => {
+                    match mirrored_address {
+                        0x2000 ..= 0x23FF => self.chr.banked_read(0x400, self.r[6] & 0xFE, address as usize -  0x2000),
+                        0x2400 ..= 0x27FF => self.chr.banked_read(0x400, self.r[7] & 0xFE, address as usize -  0x2400), 
+                        0x2800 ..= 0x2BFF => self.chr.banked_read(0x400, self.r[6] | 0x01, address as usize -  0x2800), 
+                        0x2C00 ..= 0x2FFF => self.chr.banked_read(0x400, self.r[7] | 0x01, address as usize -  0x2C00),
+                        _ => None // never reached
+                    }
+                },
+                2 => {
+                    match mirrored_address {
+                        0x2000 ..= 0x23FF => self.chr.banked_read(0x400, self.r[6] & 0xFE, address as usize -  0x2000),
+                        0x2400 ..= 0x27FF => self.chr.banked_read(0x400, self.r[6] & 0xFE, address as usize -  0x2400), 
+                        0x2800 ..= 0x2BFF => self.chr.banked_read(0x400, self.r[7] & 0xFE, address as usize -  0x2800), 
+                        0x2C00 ..= 0x2FFF => self.chr.banked_read(0x400, self.r[7] & 0xFE, address as usize -  0x2C00),
+                        _ => None // never reached
+                    }
+                },
+                3 => {
+                    match mirrored_address {
+                        0x2000 ..= 0x23FF => self.chr.banked_read(0x400, self.r[6] | 0x01, address as usize -  0x2000),
+                        0x2400 ..= 0x27FF => self.chr.banked_read(0x400, self.r[7] | 0x01, address as usize -  0x2400), 
+                        0x2800 ..= 0x2BFF => self.chr.banked_read(0x400, self.r[6] | 0x01, address as usize -  0x2800), 
+                        0x2C00 ..= 0x2FFF => self.chr.banked_read(0x400, self.r[7] | 0x01, address as usize -  0x2C00),
+                        _ => None // never reached
+                    }
+                },
+                _ => None
+            }
         } else {
             match self.mirroring_mode {
                 0 => Some(self.vram[mirroring::vertical_mirroring(address) as usize]),
@@ -506,6 +546,323 @@ impl Vrc6 {
                 _ => {}
             }
         }
+    }
+
+    fn _mirroring_mode_1_read(&self, address: u16) -> Option<u8> {
+        let mirrored_address = address & 0x2FFF;
+        let masked_address = (mirrored_address & 0b0011_1111_1111) as usize;
+        if self.nametable_chrrom {
+            match mirrored_address {
+                0x2000 ..= 0x23FF => self.chr.banked_read(0x400, self.r[4], address as usize -  0x2000),
+                0x2400 ..= 0x27FF => self.chr.banked_read(0x400, self.r[5], address as usize -  0x2400), 
+                0x2800 ..= 0x2BFF => self.chr.banked_read(0x400, self.r[6], address as usize -  0x2800), 
+                0x2C00 ..= 0x2FFF => self.chr.banked_read(0x400, self.r[7], address as usize -  0x2C00),
+                _ => None // never reached
+            }
+        } else {
+            let r4_lsb = (self.r[4] & 0x1) as usize;
+            let r5_lsb = (self.r[5] & 0x1) as usize;
+            let r6_lsb = (self.r[6] & 0x1) as usize;
+            let r7_lsb = (self.r[7] & 0x1) as usize;
+            match mirrored_address {
+                0x2000 ..= 0x23FF => Some(self.vram[masked_address + (r4_lsb << 10)]),
+                0x2400 ..= 0x27FF => Some(self.vram[masked_address + (r5_lsb << 10)]),
+                0x2800 ..= 0x2BFF => Some(self.vram[masked_address + (r6_lsb << 10)]),
+                0x2C00 ..= 0x2FFF => Some(self.vram[masked_address + (r7_lsb << 10)]),
+                _ => None // never reached
+            }
+        }
+    }
+
+    fn _mirroring_mode_1_write(&mut self, address: u16, data: u8) {
+        if self.nametable_chrrom {
+            println!("Attempt to write to CHR ROM nametables!");
+        } else {
+            let mirrored_address = address & 0x2FFF;
+            let masked_address = (mirrored_address & 0b0011_1111_1111) as usize;
+
+            let r4_lsb = (self.r[4] & 0x1) as usize;
+            let r5_lsb = (self.r[5] & 0x1) as usize;
+            let r6_lsb = (self.r[6] & 0x1) as usize;
+            let r7_lsb = (self.r[7] & 0x1) as usize;
+
+            match mirrored_address {
+                0x2000 ..= 0x23FF => self.vram[masked_address + (r4_lsb << 10)] = data,
+                0x2400 ..= 0x27FF => self.vram[masked_address + (r5_lsb << 10)] = data,
+                0x2800 ..= 0x2BFF => self.vram[masked_address + (r6_lsb << 10)] = data,
+                0x2C00 ..= 0x2FFF => self.vram[masked_address + (r7_lsb << 10)] = data,
+                _ => {} // never reached
+            }
+        }
+    }
+
+    fn _mirroring_mode_2_read(&self, address: u16) -> Option<u8> {
+        let mirrored_address = address & 0x2FFF;
+        let masked_address = (mirrored_address & 0b0011_1111_1111) as usize;
+        if self.nametable_chrrom {
+            match self.mirroring_mode {
+                0 | 2=> {
+                    match mirrored_address {
+                        0x2000 ..= 0x23FF => self.chr.banked_read(0x400, self.r[6], address as usize -  0x2000),
+                        0x2400 ..= 0x27FF => self.chr.banked_read(0x400, self.r[7], address as usize -  0x2400), 
+                        0x2800 ..= 0x2BFF => self.chr.banked_read(0x400, self.r[6], address as usize -  0x2800), 
+                        0x2C00 ..= 0x2FFF => self.chr.banked_read(0x400, self.r[7], address as usize -  0x2C00),
+                        _ => None // never reached
+                    }
+                },
+                1 | 3=> {
+                    match mirrored_address {
+                        0x2000 ..= 0x23FF => self.chr.banked_read(0x400, self.r[6], address as usize -  0x2000),
+                        0x2400 ..= 0x27FF => self.chr.banked_read(0x400, self.r[6], address as usize -  0x2400), 
+                        0x2800 ..= 0x2BFF => self.chr.banked_read(0x400, self.r[7], address as usize -  0x2800), 
+                        0x2C00 ..= 0x2FFF => self.chr.banked_read(0x400, self.r[7], address as usize -  0x2C00),
+                        _ => None // never reached
+                    }
+                },
+                _ => None
+            }
+        } else {
+            let r6_lsb = (self.r[6] & 0x1) as usize;
+            let r7_lsb = (self.r[7] & 0x1) as usize;
+
+            match self.mirroring_mode {
+                0 | 2 => {
+                    match mirrored_address {
+                        0x2000 ..= 0x23FF => Some(self.vram[masked_address + (r6_lsb << 10)]),
+                        0x2400 ..= 0x27FF => Some(self.vram[masked_address + (r7_lsb << 10)]),
+                        0x2800 ..= 0x2BFF => Some(self.vram[masked_address + (r6_lsb << 10)]),
+                        0x2C00 ..= 0x2FFF => Some(self.vram[masked_address + (r7_lsb << 10)]),
+                        _ => None // never reached
+                    }
+                },
+                1 | 3 => {
+                    match mirrored_address {
+                        0x2000 ..= 0x23FF => Some(self.vram[masked_address + (r6_lsb << 10)]),
+                        0x2400 ..= 0x27FF => Some(self.vram[masked_address + (r6_lsb << 10)]),
+                        0x2800 ..= 0x2BFF => Some(self.vram[masked_address + (r7_lsb << 10)]),
+                        0x2C00 ..= 0x2FFF => Some(self.vram[masked_address + (r7_lsb << 10)]),
+                        _ => None // never reached
+                    }
+                },
+                _ => None
+            }
+        }
+    }
+
+    fn _mirroring_mode_2_write(&mut self, address: u16, data: u8) {
+        let mirrored_address = address & 0x2FFF;
+        let masked_address = (mirrored_address & 0b0011_1111_1111) as usize;
+        if self.nametable_chrrom {
+            match self.mirroring_mode {
+                0 | 2=> {
+                    match mirrored_address {
+                        0x2000 ..= 0x23FF => self.chr.banked_write(0x400, self.r[6], address as usize -  0x2000, data),
+                        0x2400 ..= 0x27FF => self.chr.banked_write(0x400, self.r[7], address as usize -  0x2400, data), 
+                        0x2800 ..= 0x2BFF => self.chr.banked_write(0x400, self.r[6], address as usize -  0x2800, data), 
+                        0x2C00 ..= 0x2FFF => self.chr.banked_write(0x400, self.r[7], address as usize -  0x2C00, data),
+                        _ => {} // never reached
+                    }
+                },
+                1 | 3=> {
+                    match mirrored_address {
+                        0x2000 ..= 0x23FF => self.chr.banked_write(0x400, self.r[6], address as usize -  0x2000, data),
+                        0x2400 ..= 0x27FF => self.chr.banked_write(0x400, self.r[6], address as usize -  0x2400, data), 
+                        0x2800 ..= 0x2BFF => self.chr.banked_write(0x400, self.r[7], address as usize -  0x2800, data), 
+                        0x2C00 ..= 0x2FFF => self.chr.banked_write(0x400, self.r[7], address as usize -  0x2C00, data),
+                        _ => {} // never reached
+                    }
+                },
+                _ => {}
+            }
+        } else {
+            let r6_lsb = (self.r[6] & 0x1) as usize;
+            let r7_lsb = (self.r[7] & 0x1) as usize;
+
+            match self.mirroring_mode {
+                0 | 2 => {
+                    match mirrored_address {
+                        0x2000 ..= 0x23FF => self.vram[masked_address + (r6_lsb << 10)] = data,
+                        0x2400 ..= 0x27FF => self.vram[masked_address + (r7_lsb << 10)] = data,
+                        0x2800 ..= 0x2BFF => self.vram[masked_address + (r6_lsb << 10)] = data,
+                        0x2C00 ..= 0x2FFF => self.vram[masked_address + (r7_lsb << 10)] = data,
+                        _ => {} // never reached
+                    }
+                },
+                1 | 3 => {
+                    match mirrored_address {
+                        0x2000 ..= 0x23FF => self.vram[masked_address + (r6_lsb << 10)] = data,
+                        0x2400 ..= 0x27FF => self.vram[masked_address + (r6_lsb << 10)] = data,
+                        0x2800 ..= 0x2BFF => self.vram[masked_address + (r7_lsb << 10)] = data,
+                        0x2C00 ..= 0x2FFF => self.vram[masked_address + (r7_lsb << 10)] = data,
+                        _ => {} // never reached
+                    }
+                },
+                _ => {}
+            }
+        }
+    }
+
+    fn _mirroring_mode_3_read(&self, address: u16) -> Option<u8> {
+        //println!("mode 3 read with address: {}", address);
+        let mirrored_address = address & 0x2FFF;
+        if self.nametable_chrrom {
+            match self.mirroring_mode {
+                0 => {
+                    match mirrored_address {
+                        0x2000 ..= 0x23FF => self.chr.banked_read(0x400, self.r[6] & 0xFE, address as usize -  0x2000),
+                        0x2400 ..= 0x27FF => self.chr.banked_read(0x400, self.r[7] & 0xFE, address as usize -  0x2400), 
+                        0x2800 ..= 0x2BFF => self.chr.banked_read(0x400, self.r[6] | 0x01, address as usize -  0x2800), 
+                        0x2C00 ..= 0x2FFF => self.chr.banked_read(0x400, self.r[7] | 0x01, address as usize -  0x2C00),
+                        _ => None // never reached
+                    }
+                },
+                1 => {
+                    match mirrored_address {
+                        0x2000 ..= 0x23FF => self.chr.banked_read(0x400, self.r[6] & 0xFE, address as usize -  0x2000),
+                        0x2400 ..= 0x27FF => self.chr.banked_read(0x400, self.r[6] | 0x01, address as usize -  0x2400), 
+                        0x2800 ..= 0x2BFF => self.chr.banked_read(0x400, self.r[7] & 0xFE, address as usize -  0x2800), 
+                        0x2C00 ..= 0x2FFF => self.chr.banked_read(0x400, self.r[7] | 0x01, address as usize -  0x2C00),
+                        _ => None // never reached
+                    }
+                },
+                2 => {
+                    match mirrored_address {
+                        0x2000 ..= 0x23FF => self.chr.banked_read(0x400, self.r[6] | 0x01, address as usize -  0x2000),
+                        0x2400 ..= 0x27FF => self.chr.banked_read(0x400, self.r[7] | 0x01, address as usize -  0x2400), 
+                        0x2800 ..= 0x2BFF => self.chr.banked_read(0x400, self.r[6] | 0x01, address as usize -  0x2800), 
+                        0x2C00 ..= 0x2FFF => self.chr.banked_read(0x400, self.r[7] | 0x01, address as usize -  0x2C00),
+                        _ => None // never reached
+                    }
+                },
+                3 => {
+                    match mirrored_address {
+                        0x2000 ..= 0x23FF => self.chr.banked_read(0x400, self.r[6] & 0xFE, address as usize -  0x2000),
+                        0x2400 ..= 0x27FF => self.chr.banked_read(0x400, self.r[6] & 0xFE, address as usize -  0x2400), 
+                        0x2800 ..= 0x2BFF => self.chr.banked_read(0x400, self.r[7] & 0xFE, address as usize -  0x2800), 
+                        0x2C00 ..= 0x2FFF => self.chr.banked_read(0x400, self.r[7] & 0xFE, address as usize -  0x2C00),
+                        _ => None // never reached
+                    }
+                },
+                _ => None
+            }
+        } else {
+            match self.mirroring_mode {
+                0 => Some(self.vram[mirroring::horizontal_mirroring(address) as usize]),
+                1 => Some(self.vram[mirroring::vertical_mirroring(address) as usize]),
+                2 => Some(self.vram[mirroring::one_screen_upper(address) as usize]),
+                3 => Some(self.vram[mirroring::one_screen_lower(address) as usize]),
+                _ => None
+            }
+        }
+    }
+
+    fn _mirroring_mode_3_write(&mut self, address: u16, data: u8) {
+        if self.nametable_chrrom {
+            println!("Attempt to write to CHR ROM nametables!");
+        } else {
+            match self.mirroring_mode {
+                0 => self.vram[mirroring::horizontal_mirroring(address) as usize] = data,
+                1 => self.vram[mirroring::vertical_mirroring(address) as usize] = data,
+                2 => self.vram[mirroring::one_screen_upper(address) as usize] = data,
+                3 => self.vram[mirroring::one_screen_lower(address) as usize] = data,
+                _ => {}
+            }
+        }
+    }
+
+     fn _a10_chr_address(&self, address: u16) -> usize {
+        let mirrored_address = address & 0x2FFF;
+        let masked_address = (mirrored_address & 0b0011_1111_1111) as usize;
+
+        match self.b003_shadow & 0xF {
+            0x0 | 0x6 | 0x7 | 0x8 | 0xE | 0xF => {
+                match mirrored_address {
+                    0x2000 ..= 0x23FF => (self.r[6] << 10) + masked_address,
+                    0x2400 ..= 0x27FF => (self.r[6] << 10) + masked_address,
+                    0x2800 ..= 0x2BFF => (self.r[7] << 10) + masked_address,
+                    0x2C00 ..= 0x2FFF => (self.r[7] << 10) + masked_address,
+                    _ => 0 // unreachable
+                }
+            },
+            0x1 | 0x5 | 0x9 | 0xD => {
+                match mirrored_address {
+                    0x2000 ..= 0x23FF => (self.r[4] << 10) + masked_address,
+                    0x2400 ..= 0x27FF => (self.r[5] << 10) + masked_address,
+                    0x2800 ..= 0x2BFF => (self.r[6] << 10) + masked_address,
+                    0x2C00 ..= 0x2FFF => (self.r[7] << 10) + masked_address,
+                    _ => 0 // unreachable
+                }
+            }
+            0x2 | 0x3 | 0x4 | 0xA | 0xB | 0xC => {
+                match mirrored_address {
+                    0x2000 ..= 0x23FF => (self.r[6] << 10) + masked_address,
+                    0x2400 ..= 0x27FF => (self.r[7] << 10) + masked_address,
+                    0x2800 ..= 0x2BFF => (self.r[6] << 10) + masked_address,
+                    0x2C00 ..= 0x2FFF => (self.r[7] << 10) + masked_address,
+                    _ => 0 // unreachable
+                }   
+            }
+            _ => 0 // unreachable
+        }
+    }   
+
+    fn _a10_nametable_address(&self, address: u16) -> usize {
+        let r4_lsb = (self.r[4] & 0x1) as usize;
+        let r5_lsb = (self.r[5] & 0x1) as usize;
+        let r6_lsb = (self.r[6] & 0x1) as usize;
+        let r7_lsb = (self.r[7] & 0x1) as usize;
+        let mirrored_address = address & 0x2FFF;
+        let masked_address = (address & 0b0011_1111_1111) as usize;
+
+        match self.b003_shadow & 0xF {
+            0x0 | 0x6 | 0x7 | 0x8 | 0xE | 0xF => {
+                match mirrored_address {
+                    0x2000 ..= 0x23FF => masked_address + (r6_lsb << 10),
+                    0x2400 ..= 0x27FF => masked_address + (r6_lsb << 10),
+                    0x2800 ..= 0x2BFF => masked_address + (r7_lsb << 10),
+                    0x2C00 ..= 0x2FFF => masked_address + (r7_lsb << 10),
+                    _ => 0 // unreachable
+                }
+            },
+            0x1 | 0x5 | 0x9 | 0xD => {
+                match mirrored_address {
+                    0x2000 ..= 0x23FF => masked_address + (r4_lsb << 10),
+                    0x2400 ..= 0x27FF => masked_address + (r5_lsb << 10),
+                    0x2800 ..= 0x2BFF => masked_address + (r6_lsb << 10),
+                    0x2C00 ..= 0x2FFF => masked_address + (r7_lsb << 10),
+                    _ => 0 // unreachable
+                }
+            }
+            0x2 | 0x3 | 0x4 | 0xA | 0xB | 0xC => {
+                match mirrored_address {
+                    0x2000 ..= 0x23FF => masked_address + (r6_lsb << 10),
+                    0x2400 ..= 0x27FF => masked_address + (r7_lsb << 10),
+                    0x2800 ..= 0x2BFF => masked_address + (r6_lsb << 10),
+                    0x2C00 ..= 0x2FFF => masked_address + (r7_lsb << 10),
+                    _ => 0 // unreachable
+                }   
+            }
+            _ => 0 // unreachable
+        }
+    }
+
+    fn _a10_nametable_read(&self, address: u16) -> Option<u8> {
+        if self.nametable_chrrom {
+            let a10_rules_address = self._a10_chr_address(address);
+            return self.chr.wrapping_read(a10_rules_address);
+        } else {
+            let a10_rules_address = self._a10_nametable_address(address);
+            return Some(self.vram[a10_rules_address]);
+        }
+    }
+
+    fn _a10_nametable_write(&mut self, address: u16, data: u8) {
+        if self.nametable_chrrom {
+            println!("Attempt to write to CHR ROM nametables!");
+            return;
+        }
+        let a10_rules_address = self._a10_nametable_address(address);
+        self.vram[a10_rules_address] = data;
     }
 
     fn _clock_irq_prescaler(&mut self) {
@@ -611,6 +968,7 @@ impl Mapper for Vrc6 {
             0xB003 => {
                 self.ppu_banking_mode = data & 0b0000_0011;
                 self.mirroring_mode = (data & 0b0000_1100) >> 2;
+                self.b003_shadow = data; // used for weird A10 nametable truth table
                 self.nametable_chrrom = (data & 0b0001_0000) != 0;
                 self.chr_a10_rules = (data & 0b0010_0000) != 0;
                 self.prg_ram_enable = (data & 0b1000_0000) != 0;
@@ -667,18 +1025,17 @@ impl Mapper for Vrc6 {
                 if self.chr_a10_rules {
                     match self.ppu_banking_mode {
                         0 => self._mirroring_mode_0_read(address),
-                        //1 => self._mirroring_mode_1(address),
-                        //2 => self._mirroring_mode_2(address),
-                        //3 => self._mirroring_mode_3(address),
+                        1 => self._mirroring_mode_1_read(address),
+                        2 => self._mirroring_mode_2_read(address),
+                        3 => self._mirroring_mode_3_read(address),
                         _ => {
-                            println!("Unimplemented mirroring mode {}! Bailing.", self.ppu_banking_mode);
+                            //println!("Unimplemented mirroring mode {}! Bailing.", self.ppu_banking_mode);
                             None
                         }
                     }
                 } else {
-                    // Unimplemented A10 weirdness
-                    println!("Nametable CHROM in use! This is unimplemented, returning open bus.");
-                    None
+                    // A10 rules weirdness
+                    return self._a10_nametable_read(address);
                 }
             }
             _ => None
@@ -691,16 +1048,16 @@ impl Mapper for Vrc6 {
                 if self.chr_a10_rules {
                     match self.ppu_banking_mode {
                         0 => self._mirroring_mode_0_write(address, data),
-                        //1 => self._mirroring_mode_1(address),
-                        //2 => self._mirroring_mode_2(address),
-                        //3 => self._mirroring_mode_3(address),
+                        1 => self._mirroring_mode_1_write(address, data),
+                        2 => self._mirroring_mode_2_write(address, data),
+                        3 => self._mirroring_mode_3_write(address, data),
                         _ => {
-                            println!("Unimplemented mirroring mode {}! Bailing.", self.ppu_banking_mode);
+                            //println!("Unimplemented mirroring mode {}! Bailing.", self.ppu_banking_mode);
                         }
                     }
                 } else {
-                    // Unimplemented A10 weirdness
-                    println!("Nametable CHROM in use! This is unimplemented, returning open bus.");
+                    // A10 rules weirdness
+                    self._a10_nametable_write(address, data);
                 }
             }
             _ => {}
