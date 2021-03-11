@@ -548,9 +548,14 @@ impl Mapper for Vrc6 {
         let pulse_1_output = self.pulse1.output() as f64;
         let pulse_2_output = self.pulse2.output() as f64;
         let sawtooth_output = self.sawtooth.output() as f64;
+        let vrc6_combined_sample = (pulse_1_output + pulse_2_output + sawtooth_output) / 61.0;
+
+        let nes_pulse_full_volume = 95.88 / ((8128.0 / 15.0) + 100.0);
+        let vrc6_pulse_full_volume = 15.0 / 61.0;
+        let vrc6_weight = nes_pulse_full_volume / vrc6_pulse_full_volume;
 
         return 
-            ((pulse_1_output + pulse_2_output + sawtooth_output) / 61.0) * 0.5 + 
+            (vrc6_combined_sample * vrc6_weight) + 
             nes_sample;
     }
 
