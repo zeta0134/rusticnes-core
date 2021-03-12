@@ -77,7 +77,7 @@ impl Vrc6PulseChannel {
     }
 
     pub fn output(&self) -> u8 {
-        if self.enabled && self.duty_compare >= self.duty_counter {
+        if self.enabled && self.duty_compare >= self.duty_counter && !self.debug_disable {
             return self.volume;
         }
         return 0;
@@ -242,7 +242,10 @@ impl Vrc6SawtoothChannel {
     }
 
     pub fn output(&self) -> u8 {
-        return self.accumulator >> 3;
+        if !self.debug_disable {
+            return self.accumulator >> 3;
+        }
+        return 0;
     }
 
     pub fn write_register(&mut self, index: u8, data: u8) {
