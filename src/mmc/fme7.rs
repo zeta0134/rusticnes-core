@@ -466,8 +466,7 @@ impl AudioChannelState for YmChannel {
     }
 
     fn playing(&self) -> bool {
-        return 
-            !self.muted &&
+        return             
             self.tone_enabled &&
             self.effective_volume > 1;
     }
@@ -577,16 +576,16 @@ impl YM2149F {
         if channel.noise_enabled {
             signal_bit &= self.noise.output();
         }
-        if signal_bit != 0 && !channel.muted {
+        if signal_bit != 0 {
             return self.effective_volume(channel);
         }
         return 0;
     }
 
     pub fn output(&self) -> f64 {
-        let channel_a = self.volume_lut[self.channel_output(&self.channel_a)];
-        let channel_b = self.volume_lut[self.channel_output(&self.channel_b)];
-        let channel_c = self.volume_lut[self.channel_output(&self.channel_c)];
+        let channel_a = if self.channel_a.muted() {0.0} else {self.volume_lut[self.channel_output(&self.channel_a)]};
+        let channel_b = if self.channel_b.muted() {0.0} else {self.volume_lut[self.channel_output(&self.channel_b)]};
+        let channel_c = if self.channel_c.muted() {0.0} else {self.volume_lut[self.channel_output(&self.channel_c)]};
         return (channel_a + channel_b + channel_c) / 3.0;
     }
 
