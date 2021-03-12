@@ -77,7 +77,7 @@ impl Vrc6PulseChannel {
     }
 
     pub fn output(&self) -> u8 {
-        if self.enabled && self.duty_compare >= self.duty_counter && !self.debug_disable {
+        if self.enabled && self.duty_compare >= self.duty_counter {
             return self.volume;
         }
         return 0;
@@ -242,10 +242,7 @@ impl Vrc6SawtoothChannel {
     }
 
     pub fn output(&self) -> u8 {
-        if !self.debug_disable {
-            return self.accumulator >> 3;
-        }
-        return 0;
+        return self.accumulator >> 3;
     }
 
     pub fn write_register(&mut self, index: u8, data: u8) {
@@ -905,9 +902,9 @@ impl Mapper for Vrc6 {
     }
 
     fn mix_expansion_audio(&self, nes_sample: f64) -> f64 {
-        let pulse_1_output = self.pulse1.output() as f64;
-        let pulse_2_output = self.pulse2.output() as f64;
-        let sawtooth_output = self.sawtooth.output() as f64;
+        let pulse_1_output = if !self.pulse1.debug_disable {self.pulse1.output() as f64} else {0.0};
+        let pulse_2_output = if !self.pulse2.debug_disable {self.pulse2.output() as f64} else {0.0};
+        let sawtooth_output = if !self.sawtooth.debug_disable {self.sawtooth.output() as f64} else {0.0};
         let vrc6_combined_sample = (pulse_1_output + pulse_2_output + sawtooth_output) / 61.0;
 
         let nes_pulse_full_volume = 95.88 / ((8128.0 / 15.0) + 100.0);
