@@ -1,3 +1,19 @@
+// NSF, a container format for NES music data and the 6502 code
+// necessary to play it back. Often used to house ripped music engines
+// from commercial games, but sees additional popularity for modern
+// chiptune artists and occasionally indie games.
+// https://wiki.nesdev.com/w/index.php/NSF
+
+// RusticNES is an NES emulator, so it will be attempting to mimick
+// the limitations of a hardware player. Some advanced NSF files,
+// especially those with many expansion chips or a fast playback rate,
+// may not perform correctly in RusticNES, just as they would fail in most
+// hardware NSF player implementations. This is a feature, not a bug.
+
+use std::io::Read;
+use std::error::Error;
+use std::fmt;
+
 #[derive(Copy, Clone)]
 pub struct NsfHeader {
     raw_bytes: [u8; 0x80]
@@ -98,6 +114,18 @@ impl NsfHeader {
         ];
     }
 
+    pub fn is_bank_switched(&self) -> bool {
+        return 
+            (self.raw_bytes[NSF_BANK_INIT + 0] != 0) ||
+            (self.raw_bytes[NSF_BANK_INIT + 1] != 0) ||
+            (self.raw_bytes[NSF_BANK_INIT + 2] != 0) ||
+            (self.raw_bytes[NSF_BANK_INIT + 3] != 0) ||
+            (self.raw_bytes[NSF_BANK_INIT + 4] != 0) ||
+            (self.raw_bytes[NSF_BANK_INIT + 5] != 0) ||
+            (self.raw_bytes[NSF_BANK_INIT + 6] != 0) ||
+            (self.raw_bytes[NSF_BANK_INIT + 7] != 0);
+    }
+
     pub fn program_length(&self) -> usize {
         let addr_low =   self.raw_bytes[NSF_PRG_LENGTH + 0] as usize;
         let addr_mid =  (self.raw_bytes[NSF_PRG_LENGTH + 1] as usize) << 8;
@@ -105,3 +133,88 @@ impl NsfHeader {
         return addr_low + addr_mid + addr_high;
     }
 }
+
+#[derive(Debug)]
+pub enum NsfError {
+    InvalidHeader,
+    Unimplemented,
+    ReadError{reason: String}
+}
+
+impl Error for NsfError {}
+
+impl fmt::Display for NsfError  {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            NsfError::InvalidHeader => {write!(f, "Invalid iNES Header")},
+            NsfError::Unimplemented => {write!(f, "Unimplemented (Lazy programmers!!1)")},
+            NsfError::ReadError{reason} => {write!(f, "Error reading cartridge: {}", reason)}
+        }
+    }
+}
+
+impl From<std::io::Error> for NsfError {
+    fn from(error: std::io::Error) -> Self {
+        return NsfError::ReadError{reason: error.to_string()};
+    }
+}
+
+#[derive(Clone)]
+pub struct NsfFile {
+    // Internal strategy is to store each major chunk of the file as
+    // raw data bytes, and then reinterpret these on the fly based
+    // on the header bytes when accessed.
+    pub header: NsfHeader,
+    pub prg: Vec<u8>,
+    pub metadata: Vec<u8>,
+}
+
+impl NsfFile {
+    pub fn from_reader(file_reader: &mut dyn Read) -> Result<NsfFile, NsfError> {
+        let mut header_bytes = [0u8; 0x80];
+        file_reader.read_exact(&mut header_bytes)?;
+
+        let header = NsfHeader::from(&header_bytes);
+        if !header.magic_header_valid() {
+            return Err(NsfError::InvalidHeader);
+        }
+
+        let mut prg: Vec<u8> = Vec::new();
+        let mut metadata: Vec<u8> = Vec::new();
+        if header.program_length() == 0 {
+            // There is no explicit length, so consider the entire rest of the file
+            // to be program data
+            file_reader.read_to_end(&mut prg)?;
+        } else {
+            // The size specifies only the program data area
+            prg.resize(header.program_length(), 0);
+            file_reader.read_exact(&mut prg)?;
+            // Everything else is "metadata" which for NSF2 might be parsed out separately.
+            // It should not be considered part of the rom image.
+            file_reader.read_to_end(&mut metadata)?;
+        }
+
+        if header.is_bank_switched() {
+            // Pad the beginning of this data with zero bytes up to the load address
+            let padding_bytes = (header.load_address() & 0x0FFF) as usize;
+            let mut rom_image = Vec::new();
+            rom_image.resize(padding_bytes, 0);
+            rom_image.extend(prg);
+            // If the final length at this point is not a multiple of 4k, the size of one PRG bank,
+            // then we now additionally extend it to fill out the last bank to this boundary
+            if rom_image.len() % 0x1000 != 0 {
+                let alignment_shortage = 0x1000 - (rom_image.len() % 0x1000);
+                let aligned_size = rom_image.len() + alignment_shortage;
+                rom_image.resize(aligned_size, 0);
+            }
+            prg = rom_image;
+        }
+
+        return Ok(NsfFile {
+            header: header,
+            prg: prg,
+            metadata: metadata
+        });
+    }
+}
+
