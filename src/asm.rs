@@ -97,10 +97,31 @@ fn high(word: u16) -> u8 {
 pub fn opcode_bytes(opcode: Opcode) -> Result<Vec<u8>, String> {
     match opcode {
         Opcode::Brk => {Ok(vec![0x00])},
+        Opcode::Bcc(AddressingMode::Relative(offset)) => {Ok(vec![0x90, offset as u8])},
+        Opcode::Bcs(AddressingMode::Relative(offset)) => {Ok(vec![0xB0, offset as u8])},
         Opcode::Beq(AddressingMode::Relative(offset)) => {Ok(vec![0xF0, offset as u8])},
+        Opcode::Bmi(AddressingMode::Relative(offset)) => {Ok(vec![0x30, offset as u8])},
+        Opcode::Bne(AddressingMode::Relative(offset)) => {Ok(vec![0xD0, offset as u8])},
+        Opcode::Bpl(AddressingMode::Relative(offset)) => {Ok(vec![0x10, offset as u8])},
         Opcode::Lda(AddressingMode::Immediate(byte)) => {Ok(vec![0xA9, byte])},
         Opcode::Sta(AddressingMode::Absolute(address)) => {Ok(vec![0x8D, low(address), high(address)])},
         _ => {Err("Unimplemented!".to_string())}
+    }
+}
+
+pub fn relative_offset(known_labels: &HashMap<String, u16>, label: &String, current_address: u16) -> Result<i8, String> {
+    match known_labels.get(label) {
+        Some(label_address) => {
+            //let current_offset = assemble(translated_opcodes.clone())?.len();
+            let relative_offset = (*label_address as i32) - (current_address as i32) - 2;
+            println!("Will emit branch to label {} with relative offset {}", label, relative_offset);
+            if relative_offset > 127 || relative_offset < -128 {
+                return Err(format!("Branch to label {} is out of range ({})", label, relative_offset))
+            }
+            return Ok(relative_offset as i8);
+
+        },
+        None => return Err(format!("Label not found: {}", label))
     }
 }
 
@@ -125,27 +146,23 @@ pub fn resolve_labels(opcodes: Vec<Opcode>) -> Result<Vec<Opcode>, String> {
     }
 
     // Now that we have our list of labels built up, we can actually apply their values
-    // to the opcode list. While we're at it, we'll remove the labels, as they don't map
+    // to the opcode list. While we're at it, we'll remove the labels tokens, as they don't map
     // to a valid byte sequence.
     let mut translated_opcodes: Vec<Opcode> = Vec::new();
+    total_bytes = 0;
     for opcode in &opcodes {
         match opcode {
             Opcode::Label(_) => {},
-            Opcode::Beq(AddressingMode::RelativeLabel(label)) => {
-                match known_labels.get(label) {
-                    Some(label_address) => {
-                        let current_offset = assemble(translated_opcodes.clone())?.len();
-                        let relative_offset = (*label_address as i32) - (current_offset as i32) - 2;
-                        println!("Will emit BEQ to label {} with relative offset {}", label, relative_offset);
-                        if relative_offset > 127 || relative_offset < -128 {
-                            return Err(format!("Branch to label {} is out of range ({})", label, relative_offset))
-                        }
-                        translated_opcodes.push(Opcode::Beq(AddressingMode::Relative(relative_offset as i8)))
-                    },
-                    None => return Err(format!("Label not found: {}", label))
-                }
+            Opcode::Bcc(AddressingMode::RelativeLabel(label)) => {translated_opcodes.push(Opcode::Bcc(AddressingMode::Relative(relative_offset(&known_labels, &label, total_bytes)?)))},
+            Opcode::Bcs(AddressingMode::RelativeLabel(label)) => {translated_opcodes.push(Opcode::Bcs(AddressingMode::Relative(relative_offset(&known_labels, &label, total_bytes)?)))},
+            Opcode::Beq(AddressingMode::RelativeLabel(label)) => {translated_opcodes.push(Opcode::Beq(AddressingMode::Relative(relative_offset(&known_labels, &label, total_bytes)?)))},
+            Opcode::Bmi(AddressingMode::RelativeLabel(label)) => {translated_opcodes.push(Opcode::Bmi(AddressingMode::Relative(relative_offset(&known_labels, &label, total_bytes)?)))},
+            Opcode::Bne(AddressingMode::RelativeLabel(label)) => {translated_opcodes.push(Opcode::Bne(AddressingMode::Relative(relative_offset(&known_labels, &label, total_bytes)?)))},
+            Opcode::Bpl(AddressingMode::RelativeLabel(label)) => {translated_opcodes.push(Opcode::Bpl(AddressingMode::Relative(relative_offset(&known_labels, &label, total_bytes)?)))},
+            opcode => {
+                translated_opcodes.push(opcode.clone());
+                total_bytes += opcode_bytes(opcode.clone())?.len() as u16;
             },
-            opcode => {translated_opcodes.push(opcode.clone())},
         }
     }
 
