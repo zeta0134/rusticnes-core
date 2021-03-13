@@ -5,6 +5,7 @@ use std::io::prelude::*;
 
 mod audio_channel;
 mod dmc;
+pub mod filters;
 mod length_counter;
 mod noise;
 mod pulse;
@@ -21,6 +22,13 @@ pub use self::noise::NoiseChannelState;
 pub use self::pulse::PulseChannelState;
 pub use self::ring_buffer::RingBuffer;
 pub use self::triangle::TriangleChannelState;
+
+pub use self::filters::DspFilter;
+
+pub enum FilterChain {
+    Nes,
+    FamiCom,
+}
 
 pub struct ApuState {
     pub current_cycle: u64,
@@ -51,14 +59,21 @@ pub struct ApuState {
     pub pulse_table: Vec<f64>,
     pub tnd_table: Vec<f64>,
 
-    // Partial results from the filters
-    pub last_dac_sample: f64,
-    pub last_37hz_hp_sample: f64,
-    pub last_lp_sample: f64,
-
     pub hq_buffer_full: bool,
     pub hq_staging_buffer: RingBuffer,
     pub hq_output_buffer: Vec<i16>,
+
+    // filter chain (todo: make this a tad more flexible)
+    // also todo: make sure these are recreated when changing sample rate
+
+    pub famicom_hp_37hz: filters::HighPassIIR,
+    pub nes_hp_90hz: filters::HighPassIIR,
+    pub nes_hp_440hz: filters::HighPassIIR,
+    pub nes_lp_14khz: filters::LowPassIIR,
+
+    pub lp_pre_decimate: filters::LowPassFIR,
+
+    pub filter_chain: FilterChain,
 }
 
 fn generate_pulse_table() -> Vec<f64> {
@@ -75,23 +90,6 @@ fn generate_tnd_table() -> Vec<f64> {
         tnd_table[n] = 163.67 / (24329.0 / (n as f64) + 100.0);
     }
     return tnd_table;
-}
-
-fn high_pass(sample_rate: f64, cutoff_frequency: f64, previous_output: f64, current_input: f64, previous_input: f64) -> f64 {
-    let delta_t = 1.0 / sample_rate;
-    let time_constant = 1.0 / cutoff_frequency;    
-    let alpha = time_constant / (time_constant + delta_t);
-    let change_in_input = current_input - previous_input;
-    let current_output = alpha * previous_output + alpha * change_in_input;
-    return current_output;
-}
-
-fn low_pass(sample_rate: f64, cutoff_frequency: f64, previous_output: f64, current_input: f64) -> f64 {
-    let delta_t = 1.0 / sample_rate;
-    let time_constant = 1.0 / cutoff_frequency;
-    let alpha = delta_t / (time_constant + delta_t);
-    let current_output = previous_output + alpha * (current_input - previous_output);
-    return current_output;
 }
 
 impl ApuState {
@@ -119,13 +117,24 @@ impl ApuState {
             next_sample_at: 0,
             pulse_table: generate_pulse_table(),
             tnd_table: generate_tnd_table(),
-            last_dac_sample: 0.0,
-            last_37hz_hp_sample: 0.0,
-            last_lp_sample: 0.0,
             hq_buffer_full: false,
             hq_staging_buffer: RingBuffer::new(32768),
             hq_output_buffer: vec!(0i16; 32768),
+
+            famicom_hp_37hz: filters::HighPassIIR::new(1786860.0, 37.0),
+            nes_hp_90hz: filters::HighPassIIR::new(1786860.0, 90.0),
+            nes_hp_440hz: filters::HighPassIIR::new(1786860.0, 440.0),
+            nes_lp_14khz: filters::LowPassIIR::new(1786860.0, 14000.0),
+
+            lp_pre_decimate: filters::LowPassFIR::new(1786860.0, 44100.0 * 0.45, 160), // just under half the sample rate
+
+            filter_chain: FilterChain::FamiCom,
         }
+    }
+
+    pub fn set_sample_rate(&mut self, sample_rate: u64) {
+        self.sample_rate = sample_rate;
+        self.lp_pre_decimate = filters::LowPassFIR::new(self.cpu_clock_rate as f64, (sample_rate as f64) * 0.45, 160);
     }
 
     pub fn channels(&self) -> Vec<& dyn AudioChannelState> {
@@ -528,17 +537,22 @@ impl ApuState {
             self.hq_buffer_full = true;
         }
 
-        // Apply FamiCom's low pass, using the CPU clock rate as the sample rate
-        let current_37hz_hp_sample = high_pass(self.cpu_clock_rate as f64, 37.0, self.last_37hz_hp_sample, current_dac_sample, self.last_dac_sample);
-        self.last_dac_sample = current_dac_sample;
-        self.last_37hz_hp_sample = current_37hz_hp_sample;
+        // apply filters
+        match self.filter_chain {
+            FilterChain::Nes => {
+                self.nes_hp_90hz.consume(current_dac_sample);
+                self.nes_hp_440hz.consume(self.nes_hp_90hz.output());
+                self.nes_lp_14khz.consume(self.nes_hp_440hz.output());
+                self.lp_pre_decimate.consume(self.nes_lp_14khz.output());
+            },
+            FilterChain::FamiCom => {
+                self.famicom_hp_37hz.consume(current_dac_sample);
+                self.lp_pre_decimate.consume(self.famicom_hp_37hz.output());
+            }
+        }
 
-        // Apply a high pass at half the target sample rate
-        let current_lp_sample = low_pass(self.cpu_clock_rate as f64, (self.sample_rate / 2) as f64, self.last_lp_sample, current_37hz_hp_sample);
-        self.last_lp_sample = current_lp_sample;
-
-        if self.current_cycle >= self.next_sample_at {
-            let composite_sample = (current_lp_sample * 32767.0) as i16;
+        if self.current_cycle >= self.next_sample_at {            
+            let composite_sample = (self.lp_pre_decimate.output() * 32767.0) as i16;
 
             self.staging_buffer.push(composite_sample);
 

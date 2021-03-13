@@ -91,7 +91,7 @@ impl INesHeader {
     pub fn version(&self) -> u8 {
         // A file is a NES 2.0 ROM image file if it begins with "NES<EOF>" (same as iNES) and, 
         // additionally, the byte at offset 7 has bit 2 clear and bit 3 set:
-        if self.raw_bytes[INES_FLAGS_7] == 0x08 {
+        if (self.raw_bytes[INES_FLAGS_7] & 0x0C) == 0x08 {
             return 2;
         }
         if self.magic_header_valid() {
