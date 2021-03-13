@@ -6,7 +6,7 @@
 
 pub enum AddressingMode {
     Accumulator,
-    Immediate,
+    Immediate(u8),
     ZeroPage(u8),
     ZeroPageX(u8),
     ZeroPageY(u8),
@@ -78,4 +78,13 @@ pub enum Opcode {
     Txa,
     Txs,
     Tya,   
+}
+
+pub fn opcode_bytes(opcode: Opcode) -> Result<Vec<u8>, String> {
+    match opcode {
+        Opcode::Brk => {Ok(vec![0x00])},
+        Opcode::Lda(AddressingMode::Immediate(byte)) => {Ok(vec![0xA9, byte])},
+        Opcode::Sta(AddressingMode::Absolute(address)) => {Ok(vec![0x8D, (address&0x00FF) as u8, ((address&0xFF00) >> 8) as u8])},
+        _ => {Err("Unimplemented!".to_string())}
+    }
 }
