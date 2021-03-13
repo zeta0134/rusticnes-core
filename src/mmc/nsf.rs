@@ -39,12 +39,8 @@ const APUFRAMECTRL: u16 = 0x4017;
 const COLOR_BLACK: u8 = 0x0F;
 const COLOR_WHITE: u8 = 0x30;
 
-fn nsf_player(init_address: u16) -> Vec<Opcode> {
-    vec![
-        // Disable IRQ-based interrupts (We don't need them; NSF code by spec
-        // shouldn't use them, and if it does, shenanigans.)
-        Sei,
-
+fn wait_for_ppu_ready() -> Opcode {
+    return List(vec![
         Label(String::from("vwait1")),
         // Wait for NMI twice (PPU is not ready before this)
         Bit(Absolute(PPUSTATUS)),
@@ -52,7 +48,11 @@ fn nsf_player(init_address: u16) -> Vec<Opcode> {
         Label(String::from("vwait2")),
         Bit(Absolute(PPUSTATUS)),
         Bpl(RelativeLabel(String::from("vwait2"))),
+    ]);
+}
 
+fn initialize_ppu() -> Opcode {
+    return List(vec![
         // We're in NMI now, so let's load in a better palette in slot 0
         Lda(Immediate(0x3F)),
         Sta(Absolute(PPUADDR)),
@@ -73,20 +73,42 @@ fn nsf_player(init_address: u16) -> Vec<Opcode> {
         Sta(Absolute(PPUSCROLL)),
         Lda(Immediate(0b0000_1110)),
         Sta(Absolute(PPUMASK)),
+    ]);
+}
 
+fn initialize_apu() -> Opcode {
+    return List(vec![
         // Enable all channels)
         Lda(Immediate(0x0F)),
         Sta(Absolute(APUSTATUS)),
         // Set the frame counter to 4-step mode
         Lda(Immediate(0x40)),
         Sta(Absolute(APUFRAMECTRL)),
+    ]);
+}
+
+fn init_track(track_number: u8, init_address: u16) -> Opcode {
+    let track_index = track_number - 1;
+    return List(vec![
         // (bank initialization is handled by the mapper)
         // Load the first song index to A
-        Lda(Immediate(0x00)),
+        Lda(Immediate(track_index)),
         // Indicate NTSC mode in X
         Ldx(Immediate(0x00)),
-        // Call the init subroutine
         Jsr(Absolute(init_address)),
+    ]);
+}
+
+fn nsf_player(init_address: u16) -> Vec<Opcode> {
+    vec![
+        // Disable IRQ-based interrupts (We don't need them; NSF code by spec
+        // shouldn't use them, and if it does, shenanigans.)
+        Sei,
+
+        wait_for_ppu_ready(),
+        initialize_ppu(),
+        initialize_apu(),
+        init_track(1, init_address),
 
         // For now, do nothing
         Label(String::from("wait_forever")),

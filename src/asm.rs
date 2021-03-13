@@ -57,6 +57,7 @@ pub enum Opcode {
     Jmp(AddressingMode),
     Jsr(AddressingMode),
     Label(String),
+    List(Vec<Opcode>),
     Lda(AddressingMode),
     Ldx(AddressingMode),
     Ldy(AddressingMode),
@@ -241,9 +242,27 @@ pub fn resolve_labels(opcodes: Vec<Opcode>) -> Result<Vec<Opcode>, String> {
     return Ok(translated_opcodes);
 }
 
+pub fn flatten(opcodes: Vec<Opcode>) -> Vec<Opcode> {
+    // given a list of opcodes that may contain List<Opcode>, pack this list into a flattened
+    // set of tokens. This function is recursive; do be careful.
+    let mut flattened_opcodes: Vec<Opcode> = Vec::new();
+    for opcode in opcodes {
+        match opcode {
+            Opcode::List(sublist) => {
+                flattened_opcodes.extend(flatten(sublist));
+            },
+            opcode => {
+                flattened_opcodes.push(opcode);
+            }
+        }
+    }
+    return flattened_opcodes;
+}
+
 pub fn assemble(opcodes: Vec<Opcode>) -> Result<Vec<u8>, String> {
     let mut bytes: Vec<u8> = Vec::new();
-    let translated_opcodes = resolve_labels(opcodes)?;
+    let flattened_opcodes = flatten(opcodes);
+    let translated_opcodes = resolve_labels(flattened_opcodes)?;
     for opcode in translated_opcodes {
         bytes.extend(opcode_bytes(opcode)?);
     }
