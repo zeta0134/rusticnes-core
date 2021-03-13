@@ -1,5 +1,6 @@
 pub mod addressing;
 pub mod apu;
+pub mod asm;
 pub mod cartridge;
 pub mod cycle_cpu;
 pub mod ines;
