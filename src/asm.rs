@@ -130,6 +130,13 @@ pub fn opcode_bytes(opcode: Opcode) -> Result<Vec<u8>, String> {
         Opcode::Ldy(AddressingMode::Absolute(address)) =>      {Ok(vec![0xAC, low(address), high(address)])},
         Opcode::Ldy(AddressingMode::AbsoluteX(address)) =>     {Ok(vec![0xBC, low(address), high(address)])},
 
+        Opcode::Jmp(AddressingMode::Absolute(address)) =>      {Ok(vec![0x4C, low(address), high(address)])},
+        Opcode::Jmp(AddressingMode::Indirect(address)) =>      {Ok(vec![0x6C, low(address), high(address)])},
+        Opcode::Jsr(AddressingMode::Absolute(address)) =>      {Ok(vec![0x20, low(address), high(address)])},
+
+        Opcode::Rts => {Ok(vec![0x60])},
+        Opcode::Rti => {Ok(vec![0x40])},
+
         Opcode::Sei => {Ok(vec![0x78])},
         Opcode::Sec => {Ok(vec![0x38])},
         
