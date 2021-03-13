@@ -22,8 +22,8 @@ pub enum AddressingMode {
     AbsoluteY(u16),
     AbsoluteLabelY(String),
     Indirect(u16),
-    IndexedIndirect(u8),
-    IndirectIndexed(u8),
+    IndexedIndirectX(u8),
+    IndirectIndexedY(u8),
 }
 
 #[derive(Clone)]
@@ -108,7 +108,28 @@ pub fn opcode_bytes(opcode: Opcode) -> Result<Vec<u8>, String> {
         Opcode::Bpl(AddressingMode::Relative(offset)) => {Ok(vec![0x10, offset as u8])},
         Opcode::Clc => {Ok(vec![0x18])},
         Opcode::Cli => {Ok(vec![0x58])},
-        Opcode::Lda(AddressingMode::Immediate(byte)) => {Ok(vec![0xA9, byte])},
+
+        Opcode::Lda(AddressingMode::Immediate(byte)) =>        {Ok(vec![0xA9, byte])},
+        Opcode::Lda(AddressingMode::ZeroPage(byte)) =>         {Ok(vec![0xA5, byte])},
+        Opcode::Lda(AddressingMode::ZeroPageX(byte)) =>        {Ok(vec![0xB5, byte])},
+        Opcode::Lda(AddressingMode::Absolute(address)) =>      {Ok(vec![0xAD, low(address), high(address)])},
+        Opcode::Lda(AddressingMode::AbsoluteX(address)) =>     {Ok(vec![0xBD, low(address), high(address)])},
+        Opcode::Lda(AddressingMode::AbsoluteY(address)) =>     {Ok(vec![0xB9, low(address), high(address)])},
+        Opcode::Lda(AddressingMode::IndexedIndirectX(byte)) => {Ok(vec![0xA1, byte])},
+        Opcode::Lda(AddressingMode::IndirectIndexedY(byte)) => {Ok(vec![0xB1, byte])},
+
+        Opcode::Ldx(AddressingMode::Immediate(byte)) =>        {Ok(vec![0xA2, byte])},
+        Opcode::Ldx(AddressingMode::ZeroPage(byte)) =>         {Ok(vec![0xA6, byte])},
+        Opcode::Ldx(AddressingMode::ZeroPageY(byte)) =>        {Ok(vec![0xB6, byte])},
+        Opcode::Ldx(AddressingMode::Absolute(address)) =>      {Ok(vec![0xAE, low(address), high(address)])},
+        Opcode::Ldx(AddressingMode::AbsoluteY(address)) =>     {Ok(vec![0xBE, low(address), high(address)])},
+
+        Opcode::Ldy(AddressingMode::Immediate(byte)) =>        {Ok(vec![0xA0, byte])},
+        Opcode::Ldy(AddressingMode::ZeroPage(byte)) =>         {Ok(vec![0xA4, byte])},
+        Opcode::Ldy(AddressingMode::ZeroPageX(byte)) =>        {Ok(vec![0xB4, byte])},
+        Opcode::Ldy(AddressingMode::Absolute(address)) =>      {Ok(vec![0xAC, low(address), high(address)])},
+        Opcode::Ldy(AddressingMode::AbsoluteX(address)) =>     {Ok(vec![0xBC, low(address), high(address)])},
+
         Opcode::Sei => {Ok(vec![0x78])},
         Opcode::Sec => {Ok(vec![0x38])},
         

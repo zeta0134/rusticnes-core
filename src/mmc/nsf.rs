@@ -30,7 +30,7 @@ const PPUDATA: u16 = 0x2007;
 const COLOR_BLACK: u8 = 0x0F;
 const COLOR_WHITE: u8 = 0x30;
 
-fn nsf_player() -> Vec<Opcode> {
+fn nsf_player(init_address: u16) -> Vec<Opcode> {
     vec![
         // Disable IRQ-based interrupts (We don't need them; NSF code by spec
         // shouldn't use them, and if it does, shenanigans.)
@@ -65,6 +65,20 @@ fn nsf_player() -> Vec<Opcode> {
         Lda(Immediate(0b0000_1110)),
         Sta(Absolute(PPUMASK)),
 
+        // Enable all channels)
+        Lda(Immediate(0x0F)),
+        Sta(Absolute(0x4015)),
+        // Set the frame counter to 4-step mode
+        Lda(Immediate(0x40)),
+        Sta(Absolute(0x4017)),
+        // (bank initialization is handled by the mapper)
+        // Load the first song index to A
+        Lda(Immediate(0x00)),
+        // Indicate NTSC mode in X
+        Ldx(Immediate(0x00)),
+        // Call the init subroutine
+        Jsr(Absolute(init_address)),
+
         // For now, do nothing
         Label(String::from("wait_forever")),
         Lda(Immediate(0x00)), // TODO: use a jump here once that's implemented
@@ -74,7 +88,7 @@ fn nsf_player() -> Vec<Opcode> {
 
 impl NsfMapper {
     pub fn from_nsf(nsf: NsfFile) -> Result<NsfMapper, String> {
-        let mut nsf_player = assemble(Vec::from(nsf_player()))?;
+        let mut nsf_player = assemble(Vec::from(nsf_player(nsf.header.init_address())))?;
         nsf_player.resize(0x1000, 0);
 
         return Ok(NsfMapper {
