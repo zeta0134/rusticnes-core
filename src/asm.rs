@@ -96,6 +96,8 @@ fn high(word: u16) -> u8 {
 
 pub fn opcode_bytes(opcode: Opcode) -> Result<Vec<u8>, String> {
     match opcode {
+        Opcode::Bit(AddressingMode::ZeroPage(byte)) => {Ok(vec![0x24, byte])},
+        Opcode::Bit(AddressingMode::Absolute(address)) => {Ok(vec![0x2C, low(address), high(address)])},
         Opcode::Brk => {Ok(vec![0x00])},
         Opcode::Bcc(AddressingMode::Relative(offset)) => {Ok(vec![0x90, offset as u8])},
         Opcode::Bcs(AddressingMode::Relative(offset)) => {Ok(vec![0xB0, offset as u8])},
@@ -109,7 +111,7 @@ pub fn opcode_bytes(opcode: Opcode) -> Result<Vec<u8>, String> {
     }
 }
 
-pub fn relative_offset(known_labels: &HashMap<String, u16>, label: &String, current_address: u16) -> Result<i8, String> {
+fn relative_offset(known_labels: &HashMap<String, u16>, label: &String, current_address: u16) -> Result<i8, String> {
     match known_labels.get(label) {
         Some(label_address) => {
             //let current_offset = assemble(translated_opcodes.clone())?.len();
@@ -125,6 +127,13 @@ pub fn relative_offset(known_labels: &HashMap<String, u16>, label: &String, curr
     }
 }
 
+fn label_address(known_labels: &HashMap<String, u16>, label: &String) -> Result<u16, String> {
+    match known_labels.get(label) {
+        Some(address) => Ok(*address),
+        None => Err(format!("Label not found: {}", label))
+    }
+}
+
 pub fn resolve_labels(opcodes: Vec<Opcode>) -> Result<Vec<Opcode>, String> {
     let mut known_labels: HashMap<String, u16> = HashMap::new();
     let mut total_bytes: u16 = 0;
@@ -136,7 +145,12 @@ pub fn resolve_labels(opcodes: Vec<Opcode>) -> Result<Vec<Opcode>, String> {
             },
             // These opcodes will fail to resolve in opcode_bytes, so we instead catch them here
             // and advance the total_bytes manually; we'll replace these in a later step
+            Opcode::Bcc(AddressingMode::RelativeLabel(_)) => {total_bytes += 2},
+            Opcode::Bcs(AddressingMode::RelativeLabel(_)) => {total_bytes += 2},
             Opcode::Beq(AddressingMode::RelativeLabel(_)) => {total_bytes += 2},
+            Opcode::Bmi(AddressingMode::RelativeLabel(_)) => {total_bytes += 2},
+            Opcode::Bne(AddressingMode::RelativeLabel(_)) => {total_bytes += 2},
+            Opcode::Bpl(AddressingMode::RelativeLabel(_)) => {total_bytes += 2},
 
             opcode => {
                 let bytes = opcode_bytes(opcode.clone())?;
@@ -153,12 +167,36 @@ pub fn resolve_labels(opcodes: Vec<Opcode>) -> Result<Vec<Opcode>, String> {
     for opcode in &opcodes {
         match opcode {
             Opcode::Label(_) => {},
-            Opcode::Bcc(AddressingMode::RelativeLabel(label)) => {translated_opcodes.push(Opcode::Bcc(AddressingMode::Relative(relative_offset(&known_labels, &label, total_bytes)?)))},
-            Opcode::Bcs(AddressingMode::RelativeLabel(label)) => {translated_opcodes.push(Opcode::Bcs(AddressingMode::Relative(relative_offset(&known_labels, &label, total_bytes)?)))},
-            Opcode::Beq(AddressingMode::RelativeLabel(label)) => {translated_opcodes.push(Opcode::Beq(AddressingMode::Relative(relative_offset(&known_labels, &label, total_bytes)?)))},
-            Opcode::Bmi(AddressingMode::RelativeLabel(label)) => {translated_opcodes.push(Opcode::Bmi(AddressingMode::Relative(relative_offset(&known_labels, &label, total_bytes)?)))},
-            Opcode::Bne(AddressingMode::RelativeLabel(label)) => {translated_opcodes.push(Opcode::Bne(AddressingMode::Relative(relative_offset(&known_labels, &label, total_bytes)?)))},
-            Opcode::Bpl(AddressingMode::RelativeLabel(label)) => {translated_opcodes.push(Opcode::Bpl(AddressingMode::Relative(relative_offset(&known_labels, &label, total_bytes)?)))},
+            Opcode::Bcc(AddressingMode::RelativeLabel(label)) => {
+                let offset = relative_offset(&known_labels, &label, total_bytes)?;
+                translated_opcodes.push(Opcode::Bcc(AddressingMode::Relative(offset)));
+                total_bytes += 2;
+            },
+            Opcode::Bcs(AddressingMode::RelativeLabel(label)) => {
+                let offset = relative_offset(&known_labels, &label, total_bytes)?;
+                translated_opcodes.push(Opcode::Bcs(AddressingMode::Relative(offset)));
+                total_bytes += 2;
+            },
+            Opcode::Beq(AddressingMode::RelativeLabel(label)) => {
+                let offset = relative_offset(&known_labels, &label, total_bytes)?;
+                translated_opcodes.push(Opcode::Beq(AddressingMode::Relative(offset)));
+                total_bytes += 2;
+            },
+            Opcode::Bmi(AddressingMode::RelativeLabel(label)) => {
+                let offset = relative_offset(&known_labels, &label, total_bytes)?;
+                translated_opcodes.push(Opcode::Bmi(AddressingMode::Relative(offset)));
+                total_bytes += 2;
+            },
+            Opcode::Bne(AddressingMode::RelativeLabel(label)) => {
+                let offset = relative_offset(&known_labels, &label, total_bytes)?;
+                translated_opcodes.push(Opcode::Bne(AddressingMode::Relative(offset)));
+                total_bytes += 2;
+            },
+            Opcode::Bpl(AddressingMode::RelativeLabel(label)) => {
+                let offset = relative_offset(&known_labels, &label, total_bytes)?;
+                translated_opcodes.push(Opcode::Bpl(AddressingMode::Relative(offset)));
+                total_bytes += 2;
+            },
             opcode => {
                 translated_opcodes.push(opcode.clone());
                 total_bytes += opcode_bytes(opcode.clone())?.len() as u16;
