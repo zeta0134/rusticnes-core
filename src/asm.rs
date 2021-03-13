@@ -80,11 +80,28 @@ pub enum Opcode {
     Tya,   
 }
 
+// Utilities to help compact the opcode decoding block
+fn low(word: u16) -> u8 {
+    return (word & 0x00FF) as u8;
+}
+
+fn high(word: u16) -> u8 {
+    return ((word & 0xFF00) >> 8) as u8;
+}
+
 pub fn opcode_bytes(opcode: Opcode) -> Result<Vec<u8>, String> {
     match opcode {
         Opcode::Brk => {Ok(vec![0x00])},
         Opcode::Lda(AddressingMode::Immediate(byte)) => {Ok(vec![0xA9, byte])},
-        Opcode::Sta(AddressingMode::Absolute(address)) => {Ok(vec![0x8D, (address&0x00FF) as u8, ((address&0xFF00) >> 8) as u8])},
+        Opcode::Sta(AddressingMode::Absolute(address)) => {Ok(vec![0x8D, low(address), high(address)])},
         _ => {Err("Unimplemented!".to_string())}
     }
+}
+
+pub fn assemble(opcodes: Vec<Opcode>) -> Result<Vec<u8>, String> {
+    let mut bytes: Vec<u8> = Vec::new();
+    for opcode in opcodes {
+        bytes.extend(opcode_bytes(opcode)?);
+    }
+    return Ok(bytes);
 }
