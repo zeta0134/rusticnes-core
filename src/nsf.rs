@@ -146,7 +146,7 @@ impl Error for NsfError {}
 impl fmt::Display for NsfError  {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            NsfError::InvalidHeader => {write!(f, "Invalid iNES Header")},
+            NsfError::InvalidHeader => {write!(f, "Invalid NSF Header")},
             NsfError::Unimplemented => {write!(f, "Unimplemented (Lazy programmers!!1)")},
             NsfError::ReadError{reason} => {write!(f, "Error reading cartridge: {}", reason)}
         }

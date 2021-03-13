@@ -14,6 +14,7 @@ use mmc::uxrom::UxRom;
 use mmc::vrc6::Vrc6;
 
 use ines::INesCartridge;
+use nsf::NsfFile;
 
 use std::io::Read;
 
@@ -46,10 +47,25 @@ fn mapper_from_ines(ines: INesCartridge) -> Result<Box<dyn Mapper>, String> {
 }
 
 pub fn mapper_from_reader(file_reader: &mut dyn Read) -> Result<Box<dyn Mapper>, String> {
+    let mut entire_file = Vec::new();
+    match file_reader.read_to_end(&mut entire_file) {
+        Ok(_) => {/* proceed normally */},
+        Err(e) => {
+            return Err(format!("Failed to read any data at all, giving up.{}\n", e));
+        }
+    }
+
     let mut errors = String::new();
-    match INesCartridge::from_reader(file_reader) {
+    match INesCartridge::from_reader(&mut entire_file.as_slice()) {
         Ok(ines) => {return mapper_from_ines(ines);},
         Err(e) => {errors += format!("ines: {}\n", e).as_str()}
+    }
+
+    match NsfFile::from_reader(&mut entire_file.as_slice()) {
+        Ok(_nsf) => {
+            errors += "nsf: file detected and successfully read, but NSF mapper unimplemented! Sorry. :(";
+        },
+        Err(e) => {errors += format!("nsf: {}\n", e).as_str()}
     }
 
     return Err(format!("Unable to open file as any known type, giving up.\n{}", errors));
