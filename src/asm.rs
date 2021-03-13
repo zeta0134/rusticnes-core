@@ -4,6 +4,9 @@
 // for whatever reason, but possibly also handy for units tests down
 // the line.
 
+use std::collections::HashMap;
+
+#[derive(Clone)]
 pub enum AddressingMode {
     Accumulator,
     Immediate(u8),
@@ -23,6 +26,7 @@ pub enum AddressingMode {
     IndirectIndexed(u8),
 }
 
+#[derive(Clone)]
 pub enum Opcode {
     Adc(AddressingMode),
     And(AddressingMode),
@@ -52,6 +56,7 @@ pub enum Opcode {
     Iny(AddressingMode),
     Jmp(AddressingMode),
     Jsr(AddressingMode),
+    Label(String),
     Lda(AddressingMode),
     Ldx(AddressingMode),
     Ldy(AddressingMode),
@@ -92,15 +97,65 @@ fn high(word: u16) -> u8 {
 pub fn opcode_bytes(opcode: Opcode) -> Result<Vec<u8>, String> {
     match opcode {
         Opcode::Brk => {Ok(vec![0x00])},
+        Opcode::Beq(AddressingMode::Relative(offset)) => {Ok(vec![0xF0, offset as u8])},
         Opcode::Lda(AddressingMode::Immediate(byte)) => {Ok(vec![0xA9, byte])},
         Opcode::Sta(AddressingMode::Absolute(address)) => {Ok(vec![0x8D, low(address), high(address)])},
         _ => {Err("Unimplemented!".to_string())}
     }
 }
 
+pub fn resolve_labels(opcodes: Vec<Opcode>) -> Result<Vec<Opcode>, String> {
+    let mut known_labels: HashMap<String, u16> = HashMap::new();
+    let mut total_bytes: u16 = 0;
+    for opcode in &opcodes {
+        match opcode {
+            Opcode::Label(label) => {
+                known_labels.insert(label.to_string(), total_bytes);
+                println!("Registering label {} with offset {}", label, total_bytes);
+            },
+            // These opcodes will fail to resolve in opcode_bytes, so we instead catch them here
+            // and advance the total_bytes manually; we'll replace these in a later step
+            Opcode::Beq(AddressingMode::RelativeLabel(_)) => {total_bytes += 2},
+
+            opcode => {
+                let bytes = opcode_bytes(opcode.clone())?;
+                total_bytes += bytes.len() as u16;
+            }
+        }
+    }
+
+    // Now that we have our list of labels built up, we can actually apply their values
+    // to the opcode list. While we're at it, we'll remove the labels, as they don't map
+    // to a valid byte sequence.
+    let mut translated_opcodes: Vec<Opcode> = Vec::new();
+    for opcode in &opcodes {
+        match opcode {
+            Opcode::Label(_) => {},
+            Opcode::Beq(AddressingMode::RelativeLabel(label)) => {
+                match known_labels.get(label) {
+                    Some(label_address) => {
+                        let current_offset = assemble(translated_opcodes.clone())?.len();
+                        let relative_offset = (*label_address as i32) - (current_offset as i32) - 2;
+                        println!("Will emit BEQ to label {} with relative offset {}", label, relative_offset);
+                        if relative_offset > 127 || relative_offset < -128 {
+                            return Err(format!("Branch to label {} is out of range ({})", label, relative_offset))
+                        }
+                        translated_opcodes.push(Opcode::Beq(AddressingMode::Relative(relative_offset as i8)))
+                    },
+                    None => return Err(format!("Label not found: {}", label))
+                }
+            },
+            opcode => {translated_opcodes.push(opcode.clone())},
+        }
+    }
+
+    return Ok(translated_opcodes);
+}
+
 pub fn assemble(opcodes: Vec<Opcode>) -> Result<Vec<u8>, String> {
     let mut bytes: Vec<u8> = Vec::new();
-    for opcode in opcodes {
+    let translated_opcodes = resolve_labels(opcodes)?;
+    for opcode in translated_opcodes {
         bytes.extend(opcode_bytes(opcode)?);
     }
     return Ok(bytes);

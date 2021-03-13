@@ -20,13 +20,17 @@ pub struct NsfMapper {
     vram: Vec<u8>,
 }
 
-const NSF_PLAYER: [Opcode; 1] = [
-    Lda(Immediate(0x42))
-];
+fn nsf_player() -> Vec<Opcode> {
+    vec![
+        Label(String::from("start")),
+        Lda(Immediate(0x0)),
+        Beq(RelativeLabel(String::from("start"))),
+    ]
+} 
 
 impl NsfMapper {
     pub fn from_nsf(nsf: NsfFile) -> Result<NsfMapper, String> {
-        let mut nsf_player = assemble(Vec::from(NSF_PLAYER))?;
+        let mut nsf_player = assemble(Vec::from(nsf_player()))?;
         nsf_player.resize(0x1000, 0);
 
         return Ok(NsfMapper {
