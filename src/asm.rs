@@ -96,6 +96,7 @@ fn high(word: u16) -> u8 {
 
 pub fn opcode_bytes(opcode: Opcode) -> Result<Vec<u8>, String> {
     match opcode {
+
         Opcode::Bit(AddressingMode::ZeroPage(byte)) => {Ok(vec![0x24, byte])},
         Opcode::Bit(AddressingMode::Absolute(address)) => {Ok(vec![0x2C, low(address), high(address)])},
         Opcode::Brk => {Ok(vec![0x00])},
@@ -105,7 +106,12 @@ pub fn opcode_bytes(opcode: Opcode) -> Result<Vec<u8>, String> {
         Opcode::Bmi(AddressingMode::Relative(offset)) => {Ok(vec![0x30, offset as u8])},
         Opcode::Bne(AddressingMode::Relative(offset)) => {Ok(vec![0xD0, offset as u8])},
         Opcode::Bpl(AddressingMode::Relative(offset)) => {Ok(vec![0x10, offset as u8])},
+        Opcode::Clc => {Ok(vec![0x18])},
+        Opcode::Cli => {Ok(vec![0x58])},
         Opcode::Lda(AddressingMode::Immediate(byte)) => {Ok(vec![0xA9, byte])},
+        Opcode::Sei => {Ok(vec![0x78])},
+        Opcode::Sec => {Ok(vec![0x38])},
+        
         Opcode::Sta(AddressingMode::Absolute(address)) => {Ok(vec![0x8D, low(address), high(address)])},
         _ => {Err("Unimplemented!".to_string())}
     }
