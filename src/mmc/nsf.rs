@@ -20,11 +20,55 @@ pub struct NsfMapper {
     vram: Vec<u8>,
 }
 
+const PPUCTRL: u16 = 0x2000;
+const PPUMASK: u16 = 0x2001;
+const PPUSTATUS: u16 = 0x2002;
+const PPUSCROLL: u16 = 0x2005;
+const PPUADDR: u16 = 0x2006;
+const PPUDATA: u16 = 0x2007;
+
+const COLOR_BLACK: u8 = 0x0F;
+const COLOR_WHITE: u8 = 0x30;
+
 fn nsf_player() -> Vec<Opcode> {
     vec![
-        Label(String::from("start")),
-        Lda(Immediate(0x0)),
-        Beq(RelativeLabel(String::from("start"))),
+        // Disable IRQ-based interrupts (We don't need them; NSF code by spec
+        // shouldn't use them, and if it does, shenanigans.)
+        Sei,
+
+        Label(String::from("vwait1")),
+        // Wait for NMI twice (PPU is not ready before this)
+        Bit(Absolute(PPUSTATUS)),
+        Bpl(RelativeLabel(String::from("vwait1"))),
+        Label(String::from("vwait2")),
+        Bit(Absolute(PPUSTATUS)),
+        Bpl(RelativeLabel(String::from("vwait2"))),
+
+        // We're in NMI now, so let's load in a better palette in slot 0
+        Lda(Immediate(0x3F)),
+        Sta(Absolute(PPUADDR)),
+        Lda(Immediate(0x00)),
+        Sta(Absolute(PPUADDR)),
+        Lda(Immediate(COLOR_BLACK)),
+        Sta(Absolute(PPUDATA)),
+        Lda(Immediate(COLOR_WHITE)),
+        Sta(Absolute(PPUDATA)),
+        Sta(Absolute(PPUDATA)),
+        Sta(Absolute(PPUDATA)),
+
+        // Disable NMI, then set the scroll position and enable rendering
+        Lda(Immediate(0b0000_1000)),
+        Sta(Absolute(PPUCTRL)),
+        Lda(Immediate(0x00)),
+        Sta(Absolute(PPUSCROLL)),
+        Sta(Absolute(PPUSCROLL)),
+        Lda(Immediate(0b0000_1110)),
+        Sta(Absolute(PPUMASK)),
+
+        // For now, do nothing
+        Label(String::from("wait_forever")),
+        Lda(Immediate(0x00)), // TODO: use a jump here once that's implemented
+        Beq(RelativeLabel(String::from("wait_forever"))),
     ]
 } 
 
