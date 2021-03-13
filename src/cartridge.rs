@@ -9,6 +9,7 @@ use mmc::mmc1::Mmc1;
 use mmc::mmc3::Mmc3;
 use mmc::mmc5::Mmc5;
 use mmc::nrom::Nrom;
+use mmc::nsf::NsfMapper;
 use mmc::pxrom::PxRom;
 use mmc::uxrom::UxRom;
 use mmc::vrc6::Vrc6;
@@ -62,9 +63,7 @@ pub fn mapper_from_reader(file_reader: &mut dyn Read) -> Result<Box<dyn Mapper>,
     }
 
     match NsfFile::from_reader(&mut entire_file.as_slice()) {
-        Ok(_nsf) => {
-            errors += "nsf: file detected and successfully read, but NSF mapper unimplemented! Sorry. :(";
-        },
+        Ok(nsf) => {return Ok(Box::new(NsfMapper::from_nsf(nsf)?));},
         Err(e) => {errors += format!("nsf: {}\n", e).as_str()}
     }
 
