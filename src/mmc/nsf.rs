@@ -38,12 +38,24 @@ const COLOR_LIGHT_GREY: u8 = 0x10;
 const COLOR_WHITE: u8 = 0x30;
 
 const PLAYER_COUNTER_COMPARE: u16 = 0x01FF;
+const PLAYER_BUTTON_SCRATCH: u16 = 0x01FE;
 const PLAYER_PLAYBACK_COUNTER: u16 = 0x4900;
 const PLAYER_TRACK_SELECT: u16 = 0x4901;
+const PLAYER_BUTTON_REPORT: u16 = 0x4902;
 const PLAYER_ORIGIN: u16 = 0x4A00;
 const PLAYER_SIZE: u16 = 0x0200;
 const PLAYER_END: u16 = PLAYER_ORIGIN + PLAYER_SIZE;
 
+const JOYPAD1: u16 = 0x4016;
+
+//const BUTTON_A: u8      = 1 << 7;
+//const BUTTON_B: u8      = 1 << 6;
+//const BUTTON_SELECT: u8 = 1 << 5;
+//const BUTTON_START: u8  = 1 << 4;
+//const BUTTON_UP: u8     = 1 << 3;
+//const BUTTON_DOWN: u8   = 1 << 2;
+const BUTTON_LEFT: u8   = 1 << 1;
+const BUTTON_RIGHT: u8  = 1 << 0;
 
 fn wait_for_ppu_ready() -> Opcode {
     return List(vec![
@@ -107,6 +119,41 @@ fn init_track(track_number: u8, init_address: u16) -> Opcode {
     ]);
 }
 
+fn poll_input() -> Opcode {
+    return List(vec![
+        // Repeatedly attempt the joypad read until we get the same value twice
+        // works around a DPCM conflict
+        Label(String::from("readjoy_safe")),
+        Jsr(AbsoluteLabel(String::from("readjoy"))),
+        Label(String::from("reread")),
+        Lda(Absolute(PLAYER_BUTTON_SCRATCH)),
+        Pha,
+        Jsr(AbsoluteLabel(String::from("readjoy"))),
+        Pla,
+        Cmp(Absolute(PLAYER_BUTTON_SCRATCH)),
+        Bne(RelativeLabel(String::from("reread"))),
+        // Now the value in our scratch register is valid, so report it to
+        // the mapper
+        Sta(Absolute(PLAYER_BUTTON_REPORT)),
+        Rts,
+
+        // The joypad reading function; on its own this would be fine
+        // if it weren't for DPCM
+        Label(String::from("readjoy")),
+        Lda(Immediate(0x01)),
+        Sta(Absolute(JOYPAD1)),
+        Sta(Absolute(PLAYER_BUTTON_SCRATCH)),
+        Lsr(Accumulator),
+        Sta(Absolute(JOYPAD1)),
+        Label(String::from("joypadloop")),
+        Lda(Absolute(JOYPAD1)),
+        Lsr(Accumulator),
+        Rol(Absolute(PLAYER_BUTTON_SCRATCH)),
+        Bcc(RelativeLabel(String::from("joypadloop"))),
+        Rts
+    ]);
+}
+
 fn playback_loop(play_address: u16) -> Opcode {
     return List(vec![
         // setup playback counter wait condition
@@ -126,6 +173,8 @@ fn playback_loop(play_address: u16) -> Opcode {
         Jsr(Absolute(play_address)), // not yet
         // Preserve A, since we are about to clobber it
         Pha,
+        // Poll for input (clobbers only A)
+        Jsr(AbsoluteLabel(String::from("readjoy_safe"))),
         // All done!
         Jmp(AbsoluteLabel(String::from("playback_loop"))),
     ]);
@@ -145,8 +194,11 @@ fn nsf_player(init_address: u16, play_address: u16) -> Vec<Opcode> {
         initialize_apu(),
         init_track(1, init_address),
 
-        // For now, do nothing
+        // This loop will never exit, it drives the playback indefinitely
         playback_loop(play_address),
+
+        // subroutines
+        poll_input(),
     ]
 } 
 
@@ -157,6 +209,8 @@ pub struct NsfMapper {
     header: NsfHeader,
 
     current_track: u8,
+    p1_held: u8,
+    p1_pressed: u8,
 
     prg_rom_banks: Vec<usize>,
     playback_accumulator: f64,
@@ -222,6 +276,8 @@ impl NsfMapper {
             playback_counter: 0,
 
             current_track: nsf.header.starting_song(),
+            p1_held: 0,
+            p1_pressed: 0,
 
             vrc6_enabled: nsf.header.vrc6(),
             vrc6_pulse1: Vrc6PulseChannel::new("Pulse 1"),
@@ -262,7 +318,7 @@ impl NsfMapper {
         }
     }
 
-    pub fn update_gui(&mut self) {
+    pub fn draw_track_info(&mut self) {
         self.draw_string(21, 2, 9,  "RusticNES".as_bytes().to_vec());
         self.draw_string(20, 3, 10, "NSF Player".as_bytes().to_vec());
 
@@ -280,7 +336,26 @@ impl NsfMapper {
 
         let track_display = format!("{}", self.current_track);
         self.draw_string(4, 16, 6, "Track:".as_bytes().to_vec());
+        self.draw_string(11, 16, 3, "   ".as_bytes().to_vec());
         self.draw_string(11, 16, 3, track_display.as_bytes().to_vec());
+    }
+
+    pub fn process_input(&mut self) {
+        if (self.p1_pressed & BUTTON_RIGHT) != 0 {
+            if self.current_track < self.header.total_songs() {
+                self.current_track += 1;
+            }
+        }
+        if (self.p1_pressed & BUTTON_LEFT) != 0 {
+            if self.current_track > 1 {
+               self.current_track -= 1; 
+            }
+        }
+    }
+
+    pub fn update_gui(&mut self) {
+        self.process_input();
+        self.draw_track_info();
     }
 
     pub fn vrc6_output(&self) -> f64 {
@@ -656,6 +731,10 @@ impl Mapper for NsfMapper {
 
     fn write_cpu(&mut self, address: u16, data: u8) {
         match address {
+            PLAYER_BUTTON_REPORT => {
+                self.p1_pressed = data & (!self.p1_held);
+                self.p1_held = data;
+            },
             0x5FF8 => {self.prg_rom_banks[0] = data as usize},
             0x5FF9 => {self.prg_rom_banks[1] = data as usize},
             0x5FFA => {self.prg_rom_banks[2] = data as usize},
