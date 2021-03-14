@@ -19,6 +19,8 @@ use mmc::vrc6::Vrc6SawtoothChannel;
 use apu::PulseChannelState;
 use mmc::mmc5::Mmc5PcmChannel;
 
+use mmc::fme7::YM2149F;
+
 const PPUCTRL: u16 = 0x2000;
 const PPUMASK: u16 = 0x2001;
 const PPUSTATUS: u16 = 0x2002;
@@ -168,6 +170,10 @@ pub struct NsfMapper {
     mmc5_audio_sequencer_counter: u16,
     mmc5_pcm_channel: Mmc5PcmChannel,
     mmc5_exram: Vec<u8>,
+
+    s5b_enabled: bool,
+    s5b_audio_command_select: u8,
+    s5b_expansion_audio_chip: YM2149F,
 }
 
 impl NsfMapper {
@@ -179,7 +185,7 @@ impl NsfMapper {
         let mut prg_rom = nsf.prg.clone();
         let mut prg_rom_banks = nsf.header.initial_banks();
         if !nsf.header.is_bank_switched() {
-            if nsf.header.load_address() <= 0x8000 {
+            if nsf.header.load_address() < 0x8000 {
                 return Err(format!("Load address {} is below 0x8000, this conflicts with player implementation. Refusing to load.", nsf.header.load_address()));
             }
 
@@ -216,6 +222,10 @@ impl NsfMapper {
             mmc5_audio_sequencer_counter: 0,
             mmc5_pcm_channel: Mmc5PcmChannel::new(),
             mmc5_exram: vec![0u8; 0x400],
+
+            s5b_enabled: nsf.header.s5b(),
+            s5b_audio_command_select: 0,
+            s5b_expansion_audio_chip: YM2149F::new(),
 
             prg_rom_banks: prg_rom_banks,
 
@@ -452,6 +462,35 @@ impl NsfMapper {
             (pulse_1_output + pulse_2_output) * 0.12 + 
             pcm_output * 0.25;
     }
+
+    fn s5b_write(&mut self, address: u16, data: u8) {
+        if !self.s5b_enabled {
+            return;
+        }
+        match address {
+            0xC000 => {
+                self.s5b_audio_command_select = data & 0x0F;
+            },
+            0xE000 => {
+                self.s5b_expansion_audio_chip.execute_command(self.s5b_audio_command_select, data);
+            }
+            _ => {}
+        }
+    }
+
+    fn s5b_output(&self) -> f64 {
+        if !self.s5b_enabled {
+            return 0.0;
+        }
+        return (self.s5b_expansion_audio_chip.output() - 0.5) * -1.06;
+    }
+
+    fn clock_s5b(&mut self) {
+        if !self.s5b_enabled {
+            return;
+        }
+        self.s5b_expansion_audio_chip.clock();
+    }
 }
 
 impl Mapper for NsfMapper {
@@ -468,12 +507,14 @@ impl Mapper for NsfMapper {
 
         self.clock_vrc6();
         self.clock_mmc5();
+        self.clock_s5b();
     }
 
     fn mix_expansion_audio(&self, nes_sample: f64) -> f64 {
         return 
             self.vrc6_output() +
             self.mmc5_output() +
+            self.s5b_output() +
             nes_sample;
     }
 
@@ -488,6 +529,11 @@ impl Mapper for NsfMapper {
             channels.push(&self.mmc5_pulse_1);
             channels.push(&self.mmc5_pulse_2);
             channels.push(&self.mmc5_pcm_channel);
+        }
+        if self.s5b_enabled {
+            channels.push(&self.s5b_expansion_audio_chip.channel_a);
+            channels.push(&self.s5b_expansion_audio_chip.channel_b);
+            channels.push(&self.s5b_expansion_audio_chip.channel_c);
         }
         return channels;
     }
@@ -504,6 +550,11 @@ impl Mapper for NsfMapper {
             channels.push(&mut self.mmc5_pulse_2);
             channels.push(&mut self.mmc5_pcm_channel);
         }
+        if self.s5b_enabled {
+            channels.push(&mut self.s5b_expansion_audio_chip.channel_a);
+            channels.push(&mut self.s5b_expansion_audio_chip.channel_b);
+            channels.push(&mut self.s5b_expansion_audio_chip.channel_c);
+        }
         return channels;
     }
 
@@ -517,6 +568,9 @@ impl Mapper for NsfMapper {
             self.mmc5_pulse_1.record_current_output();
             self.mmc5_pulse_2.record_current_output();
             self.mmc5_pcm_channel.record_current_output();
+        }
+        if self.s5b_enabled {
+            self.s5b_expansion_audio_chip.record_output();
         }
     }
     
@@ -566,6 +620,9 @@ impl Mapper for NsfMapper {
         }
         if self.mmc5_enabled {
             self.mmc5_write(address, data);
+        }
+        if self.s5b_enabled {
+            self.s5b_write(address, data);
         }
     }
 

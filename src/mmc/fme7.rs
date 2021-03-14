@@ -223,7 +223,7 @@ impl Mapper for Fme7 {
     }
 }
 
-struct ToneGenerator {
+pub struct ToneGenerator {
     pub period_compare: u16,
     pub period_current: u16,
     pub output: u8,
@@ -251,7 +251,7 @@ impl ToneGenerator {
     }
 }
 
-struct NoiseGenerator {
+pub struct NoiseGenerator {
     pub period_compare: u16,
     pub period_current: u16,
     // Actually a 17bit register, higher bits are unused
@@ -288,7 +288,7 @@ impl NoiseGenerator {
     }
 }
 
-struct EnvelopeGenerator {
+pub struct EnvelopeGenerator {
     pub period_compare: u16,
     pub period_current: u16,
     pub continue_flag: bool,
@@ -393,7 +393,7 @@ impl EnvelopeGenerator {
     }
 }
 
-struct YmChannel {
+pub struct YmChannel {
     pub name: String,
     pub output_buffer: RingBuffer,
     pub muted: bool,
@@ -495,7 +495,7 @@ impl AudioChannelState for YmChannel {
     }
 }
 
-struct YM2149F {
+pub struct YM2149F {
     pub channel_a: YmChannel,
     pub channel_b: YmChannel,
     pub channel_c: YmChannel,
