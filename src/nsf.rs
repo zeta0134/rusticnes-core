@@ -39,7 +39,7 @@ const NSF_NTSC_PLAY_SPEED: usize = 0x06E;
 const NSF_BANK_INIT: usize = 0x070;
 const NSF_PAL_PLAY_SPEED: usize = 0x078;
 //const NSF_NTSC_PAL_SELECTION: usize = 0x07A;
-//const NSF_EXPANSION_CHIPS: usize = 0x07B;
+const NSF_EXPANSION_CHIPS: usize = 0x07B;
 //const NSF2_FLAGS: usize = 0x07C;
 const NSF_PRG_LENGTH: usize = 0x07D;
 
@@ -131,6 +131,30 @@ impl NsfHeader {
         let addr_mid =  (self.raw_bytes[NSF_PRG_LENGTH + 1] as usize) << 8;
         let addr_high = (self.raw_bytes[NSF_PRG_LENGTH + 2] as usize) << 16;
         return addr_low + addr_mid + addr_high;
+    }
+
+    pub fn vrc6(&self) -> bool {
+        return (self.raw_bytes[NSF_EXPANSION_CHIPS] & 0b0000_0001) != 0;
+    }
+
+    pub fn vrc7(&self) -> bool {
+        return (self.raw_bytes[NSF_EXPANSION_CHIPS] & 0b0000_0010) != 0;
+    }
+
+    pub fn fds(&self) -> bool {
+        return (self.raw_bytes[NSF_EXPANSION_CHIPS] & 0b0000_0100) != 0;
+    }
+
+    pub fn mmc5(&self) -> bool {
+        return (self.raw_bytes[NSF_EXPANSION_CHIPS] & 0b0000_1000) != 0;
+    }
+
+    pub fn n163(&self) -> bool {
+        return (self.raw_bytes[NSF_EXPANSION_CHIPS] & 0b0001_0000) != 0;
+    }
+
+    pub fn s5b(&self) -> bool {
+        return (self.raw_bytes[NSF_EXPANSION_CHIPS] & 0b0010_0000) != 0;
     }
 }
 

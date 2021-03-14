@@ -2,6 +2,7 @@
 // player, so it will have some inherent limitations similar to most flashcarts.
 // Reference capabilities: https://wiki.nesdev.com/w/index.php/NSF
 
+use apu::AudioChannelState;
 use asm::*;
 use asm::Opcode::*;
 use asm::AddressingMode::*;
@@ -10,6 +11,10 @@ use memoryblock::MemoryType;
 use mmc::mapper::*;
 use mmc::mirroring;
 use nsf::NsfFile;
+
+// various expansion audio chips
+use mmc::vrc6::Vrc6PulseChannel;
+use mmc::vrc6::Vrc6SawtoothChannel;
 
 const PPUCTRL: u16 = 0x2000;
 const PPUMASK: u16 = 0x2001;
@@ -127,9 +132,6 @@ fn nsf_player(init_address: u16, play_address: u16) -> Vec<Opcode> {
         init_track(1, init_address),
 
         // For now, do nothing
-        //Label(String::from("wait_forever")),
-        //Lda(Immediate(0x00)), // TODO: use a jump here once that's implemented
-        //Beq(RelativeLabel(String::from("wait_forever"))),
         playback_loop(play_address),
     ]
 } 
@@ -144,12 +146,14 @@ pub struct NsfMapper {
     playback_period: f64,
     playback_counter: u8,
 
-    // YOU WERE HERE. Next steps: implement banking, so the call to init_address reaches real code. Then,
-    // see if that code executes and returns correctly; you should see a spinwait on page 0x5000, and might
-    // also see some RAM values set.
 
     mirroring: Mirroring,
     vram: Vec<u8>,
+
+    vrc6_enabled: bool,
+    vrc6_pulse1: Vrc6PulseChannel,
+    vrc6_pulse2: Vrc6PulseChannel,
+    vrc6_sawtooth: Vrc6SawtoothChannel,
 }
 
 impl NsfMapper {
@@ -185,11 +189,52 @@ impl NsfMapper {
             playback_period: cycles_per_play,
             playback_counter: 0,
 
+            vrc6_enabled: nsf.header.vrc6(),
+            vrc6_pulse1: Vrc6PulseChannel::new("Pulse 1"),
+            vrc6_pulse2: Vrc6PulseChannel::new("Pulse 2"),
+            vrc6_sawtooth: Vrc6SawtoothChannel::new(),
+
             prg_rom_banks: prg_rom_banks,
 
             mirroring: Mirroring::FourScreen,
             vram: vec![0u8; 0x1000],
         });
+    }
+
+    pub fn vrc6_output(&self) -> f64 {
+        if !self.vrc6_enabled {
+            return 0.0;
+        }
+        let pulse_1_output = if !self.vrc6_pulse1.debug_disable {self.vrc6_pulse1.output() as f64} else {0.0};
+        let pulse_2_output = if !self.vrc6_pulse2.debug_disable {self.vrc6_pulse2.output() as f64} else {0.0};
+        let sawtooth_output = if !self.vrc6_sawtooth.debug_disable {self.vrc6_sawtooth.output() as f64} else {0.0};
+        let vrc6_combined_sample = (pulse_1_output + pulse_2_output + sawtooth_output) / 61.0;
+
+        let nes_pulse_full_volume = 95.88 / ((8128.0 / 15.0) + 100.0);
+        let vrc6_pulse_full_volume = 15.0 / 61.0;
+        let vrc6_weight = nes_pulse_full_volume / vrc6_pulse_full_volume;
+        return vrc6_combined_sample * vrc6_weight;
+    }
+
+    pub fn vrc6_write(&mut self, address: u16, data: u8) {
+        match address {
+            0x9000 => {self.vrc6_pulse1.write_register(0, data);},
+            0x9001 => {self.vrc6_pulse1.write_register(1, data);},
+            0x9002 => {self.vrc6_pulse1.write_register(2, data);},
+            0x9003 => {
+                self.vrc6_pulse1.write_register(3, data);
+                self.vrc6_pulse2.write_register(3, data);
+                self.vrc6_sawtooth.write_register(3, data);
+            },
+            0xA000 => {self.vrc6_pulse2.write_register(0, data);},
+            0xA001 => {self.vrc6_pulse2.write_register(1, data);},
+            0xA002 => {self.vrc6_pulse2.write_register(2, data);},
+            // no 0xA003
+            0xB000 => {self.vrc6_sawtooth.write_register(0, data);},
+            0xB001 => {self.vrc6_sawtooth.write_register(1, data);},
+            0xB002 => {self.vrc6_sawtooth.write_register(2, data);},
+            _ => {}
+        }
     }
 }
 
@@ -203,6 +248,46 @@ impl Mapper for NsfMapper {
         if self.playback_accumulator > self.playback_period {
             self.playback_counter = self.playback_counter.wrapping_add(1);
             self.playback_accumulator -= self.playback_period;
+        }
+
+        if self.vrc6_enabled {
+            self.vrc6_pulse1.clock();
+            self.vrc6_pulse2.clock();
+            self.vrc6_sawtooth.clock();
+        }
+    }
+
+    fn mix_expansion_audio(&self, nes_sample: f64) -> f64 {
+        return 
+            self.vrc6_output() +
+            nes_sample;
+    }
+
+    fn channels(&self) ->  Vec<& dyn AudioChannelState> {
+        let mut channels: Vec<& dyn AudioChannelState> = Vec::new();
+        if self.vrc6_enabled {
+            channels.push(&self.vrc6_pulse1);
+            channels.push(&self.vrc6_pulse2);
+            channels.push(&self.vrc6_sawtooth);
+        }
+        return channels;
+    }
+
+    fn channels_mut(&mut self) ->  Vec<&mut dyn AudioChannelState> {
+        let mut channels: Vec<&mut dyn AudioChannelState> = Vec::new();
+        if self.vrc6_enabled {
+            channels.push(&mut self.vrc6_pulse1);
+            channels.push(&mut self.vrc6_pulse2);
+            channels.push(&mut self.vrc6_sawtooth);
+        }
+        return channels;
+    }
+
+    fn record_expansion_audio_output(&mut self) {
+        if self.vrc6_enabled {
+            self.vrc6_pulse1.record_current_output();
+            self.vrc6_pulse2.record_current_output();
+            self.vrc6_sawtooth.record_current_output();
         }
     }
     
@@ -235,6 +320,9 @@ impl Mapper for NsfMapper {
             0x5FFE => {self.prg_rom_banks[6] = data as usize},
             0x5FFF => {self.prg_rom_banks[7] = data as usize},
             _ => {}
+        }
+        if self.vrc6_enabled {
+            self.vrc6_write(address, data);
         }
     }
 
