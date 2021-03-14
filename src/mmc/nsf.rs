@@ -11,21 +11,6 @@ use mmc::mapper::*;
 use mmc::mirroring;
 use nsf::NsfFile;
 
-pub struct NsfMapper {
-    prg: MemoryBlock,
-    chr: Vec<u8>,
-    nsf_player: Vec<u8>,
-
-    prg_rom_banks: Vec<usize>,
-
-    // YOU WERE HERE. Next steps: implement banking, so the call to init_address reaches real code. Then,
-    // see if that code executes and returns correctly; you should see a spinwait on page 0x5000, and might
-    // also see some RAM values set.
-
-    mirroring: Mirroring,
-    vram: Vec<u8>,
-}
-
 const PPUCTRL: u16 = 0x2000;
 const PPUMASK: u16 = 0x2001;
 const PPUSTATUS: u16 = 0x2002;
@@ -38,6 +23,10 @@ const APUFRAMECTRL: u16 = 0x4017;
 
 const COLOR_BLACK: u8 = 0x0F;
 const COLOR_WHITE: u8 = 0x30;
+
+const PLAYER_COUNTER_COMPARE: u16 = 0x01FF;
+const PLAYER_PLAYBACK_COUNTER: u16 = 0x4900;
+
 
 fn wait_for_ppu_ready() -> Opcode {
     return List(vec![
@@ -99,11 +88,38 @@ fn init_track(track_number: u8, init_address: u16) -> Opcode {
     ]);
 }
 
-fn nsf_player(init_address: u16) -> Vec<Opcode> {
+fn playback_loop(play_address: u16) -> Opcode {
+    return List(vec![
+        // setup playback counter wait condition
+        Lda(Absolute(PLAYER_PLAYBACK_COUNTER)),
+        Sta(Absolute(PLAYER_COUNTER_COMPARE)),
+        // push a 0x00 byte to the stack; this will become our preserved value of A
+        Lda(Immediate(0x00)),
+        Pha,
+        Label(String::from("playback_loop")),
+        // wait for the playback counter in the mapper to change to the next value
+        Lda(Absolute(PLAYER_PLAYBACK_COUNTER)),
+        Cmp(Absolute(PLAYER_COUNTER_COMPARE)),
+        Beq(RelativeLabel(String::from("playback_loop"))),
+        Sta(Absolute(PLAYER_COUNTER_COMPARE)),
+        // Pop A off the stack, and call the play address
+        Pla,
+        Jsr(Absolute(play_address)), // not yet
+        // Preserve A, since we are about to clobber it
+        Pha,
+        // All done!
+        Jmp(AbsoluteLabel(String::from("playback_loop"))),
+    ]);
+}
+
+fn nsf_player(init_address: u16, play_address: u16) -> Vec<Opcode> {
     vec![
         // Disable IRQ-based interrupts (We don't need them; NSF code by spec
         // shouldn't use them, and if it does, shenanigans.)
         Sei,
+        // Setup the stack frame at 0x01F0 (we'll use 0x01FF for our own single variable)
+        Ldx(Immediate(0xF0)),
+        Txs,
 
         wait_for_ppu_ready(),
         initialize_ppu(),
@@ -111,15 +127,35 @@ fn nsf_player(init_address: u16) -> Vec<Opcode> {
         init_track(1, init_address),
 
         // For now, do nothing
-        Label(String::from("wait_forever")),
-        Lda(Immediate(0x00)), // TODO: use a jump here once that's implemented
-        Beq(RelativeLabel(String::from("wait_forever"))),
+        //Label(String::from("wait_forever")),
+        //Lda(Immediate(0x00)), // TODO: use a jump here once that's implemented
+        //Beq(RelativeLabel(String::from("wait_forever"))),
+        playback_loop(play_address),
     ]
 } 
 
+pub struct NsfMapper {
+    prg: MemoryBlock,
+    chr: Vec<u8>,
+    nsf_player: Vec<u8>,
+
+    prg_rom_banks: Vec<usize>,
+    playback_accumulator: f64,
+    playback_period: f64,
+    playback_counter: u8,
+
+    // YOU WERE HERE. Next steps: implement banking, so the call to init_address reaches real code. Then,
+    // see if that code executes and returns correctly; you should see a spinwait on page 0x5000, and might
+    // also see some RAM values set.
+
+    mirroring: Mirroring,
+    vram: Vec<u8>,
+}
+
 impl NsfMapper {
     pub fn from_nsf(nsf: NsfFile) -> Result<NsfMapper, String> {
-        let mut nsf_player = assemble(Vec::from(nsf_player(nsf.header.init_address())))?;
+        let nsf_player_opcodes = nsf_player(nsf.header.init_address(), nsf.header.play_address());
+        let mut nsf_player = assemble(nsf_player_opcodes, 0x5000)?;
         nsf_player.resize(0x1000, 0);
 
         let mut prg_rom = nsf.prg.clone();
@@ -138,10 +174,16 @@ impl NsfMapper {
             prg_rom_banks = vec![0, 1, 2, 3, 4, 5, 6, 7];
         }
 
+        let ntsc_clockrate = 1786860.0;
+        let cycles_per_play = (nsf.header.ntsc_playback_speed() as f64) * ntsc_clockrate / 1000000.0;
+
         return Ok(NsfMapper {
             prg: MemoryBlock::new(&prg_rom, MemoryType::Ram),
             chr: vec![0u8; 0x2000],
             nsf_player: nsf_player,
+            playback_accumulator: 0.0,
+            playback_period: cycles_per_play,
+            playback_counter: 0,
 
             prg_rom_banks: prg_rom_banks,
 
@@ -155,9 +197,18 @@ impl Mapper for NsfMapper {
     fn mirroring(&self) -> Mirroring {
         return self.mirroring;
     }
+
+    fn clock_cpu(&mut self) {
+        self.playback_accumulator += 1.0;
+        if self.playback_accumulator > self.playback_period {
+            self.playback_counter = self.playback_counter.wrapping_add(1);
+            self.playback_accumulator -= self.playback_period;
+        }
+    }
     
     fn debug_read_cpu(&self, address: u16) -> Option<u8> {
         match address {
+            PLAYER_PLAYBACK_COUNTER => Some(self.playback_counter),
             0x5000 ..= 0x5FFF => Some(self.nsf_player[(address - 0x5000) as usize]),
             0x8000 ..= 0x8FFF => self.prg.banked_read(0x1000, self.prg_rom_banks[0], (address - 0x8000) as usize),
             0x9000 ..= 0x9FFF => self.prg.banked_read(0x1000, self.prg_rom_banks[1], (address - 0x9000) as usize),
