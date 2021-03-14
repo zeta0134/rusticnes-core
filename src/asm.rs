@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 
-#[derive(Clone)]
+#[derive(Clone,Debug)]
 pub enum AddressingMode {
     Accumulator,
     Immediate(u8),
@@ -26,7 +26,7 @@ pub enum AddressingMode {
     IndirectIndexedY(u8),
 }
 
-#[derive(Clone)]
+#[derive(Clone,Debug)]
 pub enum Opcode {
     Adc(AddressingMode),
     And(AddressingMode),
@@ -97,6 +97,11 @@ fn high(word: u16) -> u8 {
 
 pub fn opcode_bytes(opcode: Opcode) -> Result<Vec<u8>, String> {
     match opcode {
+        Opcode::Asl(AddressingMode::Accumulator) =>            {Ok(vec![0x0A])},
+        Opcode::Asl(AddressingMode::ZeroPage(byte)) =>         {Ok(vec![0x06, byte])},
+        Opcode::Asl(AddressingMode::ZeroPageX(byte)) =>        {Ok(vec![0x16, byte])},
+        Opcode::Asl(AddressingMode::Absolute(address)) =>      {Ok(vec![0x0E, low(address), high(address)])},
+        Opcode::Asl(AddressingMode::AbsoluteX(address)) =>     {Ok(vec![0x1E, low(address), high(address)])},
 
         Opcode::Bit(AddressingMode::ZeroPage(byte)) => {Ok(vec![0x24, byte])},
         Opcode::Bit(AddressingMode::Absolute(address)) => {Ok(vec![0x2C, low(address), high(address)])},
@@ -146,6 +151,12 @@ pub fn opcode_bytes(opcode: Opcode) -> Result<Vec<u8>, String> {
         Opcode::Ldy(AddressingMode::Absolute(address)) =>      {Ok(vec![0xAC, low(address), high(address)])},
         Opcode::Ldy(AddressingMode::AbsoluteX(address)) =>     {Ok(vec![0xBC, low(address), high(address)])},
 
+        Opcode::Lsr(AddressingMode::Accumulator) =>            {Ok(vec![0x4A])},
+        Opcode::Lsr(AddressingMode::ZeroPage(byte)) =>         {Ok(vec![0x46, byte])},
+        Opcode::Lsr(AddressingMode::ZeroPageX(byte)) =>        {Ok(vec![0x56, byte])},
+        Opcode::Lsr(AddressingMode::Absolute(address)) =>      {Ok(vec![0x4E, low(address), high(address)])},
+        Opcode::Lsr(AddressingMode::AbsoluteX(address)) =>     {Ok(vec![0x5E, low(address), high(address)])},
+
         Opcode::Jmp(AddressingMode::Absolute(address)) =>      {Ok(vec![0x4C, low(address), high(address)])},
         Opcode::Jmp(AddressingMode::Indirect(address)) =>      {Ok(vec![0x6C, low(address), high(address)])},
         Opcode::Jsr(AddressingMode::Absolute(address)) =>      {Ok(vec![0x20, low(address), high(address)])},
@@ -154,6 +165,18 @@ pub fn opcode_bytes(opcode: Opcode) -> Result<Vec<u8>, String> {
         Opcode::Php => {Ok(vec![0x08])},
         Opcode::Pla => {Ok(vec![0x68])},
         Opcode::Plp => {Ok(vec![0x28])},
+
+        Opcode::Rol(AddressingMode::Accumulator) =>            {Ok(vec![0x2A])},
+        Opcode::Rol(AddressingMode::ZeroPage(byte)) =>         {Ok(vec![0x26, byte])},
+        Opcode::Rol(AddressingMode::ZeroPageX(byte)) =>        {Ok(vec![0x36, byte])},
+        Opcode::Rol(AddressingMode::Absolute(address)) =>      {Ok(vec![0x2E, low(address), high(address)])},
+        Opcode::Rol(AddressingMode::AbsoluteX(address)) =>     {Ok(vec![0x3E, low(address), high(address)])},
+
+        Opcode::Ror(AddressingMode::Accumulator) =>            {Ok(vec![0x6A])},
+        Opcode::Ror(AddressingMode::ZeroPage(byte)) =>         {Ok(vec![0x66, byte])},
+        Opcode::Ror(AddressingMode::ZeroPageX(byte)) =>        {Ok(vec![0x76, byte])},
+        Opcode::Ror(AddressingMode::Absolute(address)) =>      {Ok(vec![0x6E, low(address), high(address)])},
+        Opcode::Ror(AddressingMode::AbsoluteX(address)) =>     {Ok(vec![0x7E, low(address), high(address)])},
 
         Opcode::Rts => {Ok(vec![0x60])},
         Opcode::Rti => {Ok(vec![0x40])},
@@ -169,7 +192,7 @@ pub fn opcode_bytes(opcode: Opcode) -> Result<Vec<u8>, String> {
         Opcode::Tya => {Ok(vec![0x98])},
         
         Opcode::Sta(AddressingMode::Absolute(address)) => {Ok(vec![0x8D, low(address), high(address)])},
-        _ => {Err("Unimplemented!".to_string())}
+        opcode => {Err(format!("Unimplemented! {:<3?}", opcode))}
     }
 }
 
@@ -214,6 +237,7 @@ pub fn resolve_labels(opcodes: Vec<Opcode>, starting_address: u16) -> Result<Vec
             Opcode::Bne(AddressingMode::RelativeLabel(_)) => {total_bytes += 2},
             Opcode::Bpl(AddressingMode::RelativeLabel(_)) => {total_bytes += 2},
             Opcode::Jmp(AddressingMode::AbsoluteLabel(_)) => {total_bytes += 3},
+            Opcode::Jsr(AddressingMode::AbsoluteLabel(_)) => {total_bytes += 3},
 
             opcode => {
                 let bytes = opcode_bytes(opcode.clone())?;
@@ -264,7 +288,12 @@ pub fn resolve_labels(opcodes: Vec<Opcode>, starting_address: u16) -> Result<Vec
                 let offset = label_address(&known_labels, &label)?;
                 translated_opcodes.push(Opcode::Jmp(AddressingMode::Absolute(starting_address + offset)));
                 total_bytes += 3;
-            }
+            },
+            Opcode::Jsr(AddressingMode::AbsoluteLabel(label)) => {
+                let offset = label_address(&known_labels, &label)?;
+                translated_opcodes.push(Opcode::Jsr(AddressingMode::Absolute(starting_address + offset)));
+                total_bytes += 3;
+            },
             opcode => {
                 translated_opcodes.push(opcode.clone());
                 total_bytes += opcode_bytes(opcode.clone())?.len() as u16;
