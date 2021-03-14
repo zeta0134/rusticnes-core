@@ -43,6 +43,7 @@ const PLAYER_PLAYBACK_COUNTER: u16 = 0x4900;
 const PLAYER_TRACK_SELECT: u16 = 0x4901;
 const PLAYER_CURRENT_TRACK: u16 = 0x01FD;
 const PLAYER_BUTTON_REPORT: u16 = 0x4902;
+const PLAYER_RESET_BANKS: u16 = 0x4903;
 const PLAYER_ORIGIN: u16 = 0x4A00;
 const PLAYER_SIZE: u16 = 0x0200;
 const PLAYER_END: u16 = PLAYER_ORIGIN + PLAYER_SIZE;
@@ -163,6 +164,9 @@ fn switch_tracks(init_address: u16) -> Opcode  {
         Beq(RelativeLabel(String::from("done_switching_tracks"))),
         // save the current track which we are about to switch to
         Sta(Absolute(PLAYER_CURRENT_TRACK)),
+        // Reset the banks prior to the init call
+        // (The value written here is unimportant)
+        Sta(Absolute(PLAYER_RESET_BANKS)),
         // load X for NTSC mode and call Init with the new track number
         Ldx(Immediate(0x00)),
         Jsr(Absolute(init_address)),
@@ -753,6 +757,12 @@ impl Mapper for NsfMapper {
             PLAYER_BUTTON_REPORT => {
                 self.p1_pressed = data & (!self.p1_held);
                 self.p1_held = data;
+            },
+            PLAYER_RESET_BANKS => {
+                self.prg_rom_banks = self.header.initial_banks();
+                if !self.header.is_bank_switched() {
+                    self.prg_rom_banks = vec![0, 1, 2, 3, 4, 5, 6, 7];
+                }
             },
             0x5FF8 => {self.prg_rom_banks[0] = data as usize},
             0x5FF9 => {self.prg_rom_banks[1] = data as usize},
