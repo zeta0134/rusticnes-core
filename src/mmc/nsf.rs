@@ -32,6 +32,8 @@ const APUSTATUS: u16 = 0x4015;
 const APUFRAMECTRL: u16 = 0x4017;
 
 const COLOR_BLACK: u8 = 0x0F;
+const COLOR_DARK_GREY: u8 = 0x2D;
+const COLOR_LIGHT_GREY: u8 = 0x10;
 const COLOR_WHITE: u8 = 0x30;
 
 const PLAYER_COUNTER_COMPARE: u16 = 0x01FF;
@@ -62,9 +64,11 @@ fn initialize_ppu() -> Opcode {
         Sta(Absolute(PPUADDR)),
         Lda(Immediate(COLOR_BLACK)),
         Sta(Absolute(PPUDATA)),
+        Lda(Immediate(COLOR_DARK_GREY)),
+        Sta(Absolute(PPUDATA)),
+        Lda(Immediate(COLOR_LIGHT_GREY)),
+        Sta(Absolute(PPUDATA)),
         Lda(Immediate(COLOR_WHITE)),
-        Sta(Absolute(PPUDATA)),
-        Sta(Absolute(PPUDATA)),
         Sta(Absolute(PPUDATA)),
 
         // Disable NMI, then set the scroll position and enable rendering
@@ -200,10 +204,12 @@ impl NsfMapper {
 
         let ntsc_clockrate = 1786860.0;
         let cycles_per_play = (nsf.header.ntsc_playback_speed() as f64) * ntsc_clockrate / 1000000.0;
+        let mut font_chr = include_bytes!("../../assets/troll8x8.chr").to_vec();
+        font_chr.resize(0x2000, 0);
 
         return Ok(NsfMapper {
             prg: MemoryBlock::new(&prg_rom, MemoryType::Ram),
-            chr: vec![0u8; 0x2000],
+            chr: font_chr,
             nsf_player: nsf_player,
             playback_accumulator: 0.0,
             playback_period: cycles_per_play,
