@@ -39,6 +39,7 @@ const COLOR_WHITE: u8 = 0x30;
 
 const PLAYER_COUNTER_COMPARE: u16 = 0x01FF;
 const PLAYER_PLAYBACK_COUNTER: u16 = 0x4900;
+const PLAYER_TRACK_SELECT: u16 = 0x4901;
 const PLAYER_ORIGIN: u16 = 0x4A00;
 const PLAYER_SIZE: u16 = 0x0200;
 const PLAYER_END: u16 = PLAYER_ORIGIN + PLAYER_SIZE;
@@ -155,6 +156,8 @@ pub struct NsfMapper {
     nsf_player: Vec<u8>,
     header: NsfHeader,
 
+    current_track: u8,
+
     prg_rom_banks: Vec<usize>,
     playback_accumulator: f64,
     playback_period: f64,
@@ -218,6 +221,8 @@ impl NsfMapper {
             playback_period: cycles_per_play,
             playback_counter: 0,
 
+            current_track: nsf.header.starting_song(),
+
             vrc6_enabled: nsf.header.vrc6(),
             vrc6_pulse1: Vrc6PulseChannel::new("Pulse 1"),
             vrc6_pulse2: Vrc6PulseChannel::new("Pulse 2"),
@@ -273,7 +278,9 @@ impl NsfMapper {
         let copyright_holder = self.header.copyright_holder();
         self.draw_string(2, 12, 28, copyright_holder);
 
-
+        let track_display = format!("{}", self.current_track);
+        self.draw_string(4, 16, 6, "Track:".as_bytes().to_vec());
+        self.draw_string(11, 16, 3, track_display.as_bytes().to_vec());
     }
 
     pub fn vrc6_output(&self) -> f64 {
@@ -631,6 +638,7 @@ impl Mapper for NsfMapper {
 
         match address {
             PLAYER_PLAYBACK_COUNTER => Some(self.playback_counter),
+            PLAYER_TRACK_SELECT => Some(self.current_track - 1),
             PLAYER_ORIGIN ..= PLAYER_END => Some(self.nsf_player[(address - PLAYER_ORIGIN) as usize]),
             0x8000 ..= 0x8FFF => self.prg.banked_read(0x1000, self.prg_rom_banks[0], (address - 0x8000) as usize),
             0x9000 ..= 0x9FFF => self.prg.banked_read(0x1000, self.prg_rom_banks[1], (address - 0x9000) as usize),
