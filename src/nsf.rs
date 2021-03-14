@@ -32,9 +32,9 @@ const NSF_STARTING_SONG: usize = 0x007;
 const NSF_LOAD_ADDR: usize = 0x008;
 const NSF_INIT_ADDR: usize = 0x00A;
 const NSF_PLAY_ADDR: usize = 0x00C;
-//const NSF_SONG_NAME: usize = 0x00E;
-//const NSF_ARTIST_NAME: usize = 0x02E;
-//const NSF_COPYRIGHT_HOLDER: usize = 0x04E;
+const NSF_SONG_NAME: usize = 0x00E;
+const NSF_ARTIST_NAME: usize = 0x02E;
+const NSF_COPYRIGHT_HOLDER: usize = 0x04E;
 const NSF_NTSC_PLAY_SPEED: usize = 0x06E;
 const NSF_BANK_INIT: usize = 0x070;
 const NSF_PAL_PLAY_SPEED: usize = 0x078;
@@ -155,6 +155,18 @@ impl NsfHeader {
 
     pub fn s5b(&self) -> bool {
         return (self.raw_bytes[NSF_EXPANSION_CHIPS] & 0b0010_0000) != 0;
+    }
+
+    pub fn song_name(&self) -> Vec<u8> {
+        return self.raw_bytes[NSF_SONG_NAME ..= (NSF_SONG_NAME + 32)].to_vec();
+    }
+
+    pub fn artist_name(&self) -> Vec<u8> {
+        return self.raw_bytes[NSF_ARTIST_NAME ..= (NSF_ARTIST_NAME + 32)].to_vec();
+    }
+
+    pub fn copyright_holder(&self) -> Vec<u8> {
+        return self.raw_bytes[NSF_COPYRIGHT_HOLDER ..= (NSF_COPYRIGHT_HOLDER + 32)].to_vec();
     }
 }
 

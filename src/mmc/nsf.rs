@@ -11,6 +11,7 @@ use memoryblock::MemoryType;
 use mmc::mapper::*;
 use mmc::mirroring;
 use nsf::NsfFile;
+use nsf::NsfHeader;
 
 // various expansion audio chips
 use mmc::vrc6::Vrc6PulseChannel;
@@ -152,6 +153,7 @@ pub struct NsfMapper {
     prg: MemoryBlock,
     chr: Vec<u8>,
     nsf_player: Vec<u8>,
+    header: NsfHeader,
 
     prg_rom_banks: Vec<usize>,
     playback_accumulator: f64,
@@ -211,6 +213,7 @@ impl NsfMapper {
             prg: MemoryBlock::new(&prg_rom, MemoryType::Ram),
             chr: font_chr,
             nsf_player: nsf_player,
+            header: nsf.header,
             playback_accumulator: 0.0,
             playback_period: cycles_per_play,
             playback_counter: 0,
@@ -238,6 +241,39 @@ impl NsfMapper {
             mirroring: Mirroring::FourScreen,
             vram: vec![0u8; 0x1000],
         });
+    }
+
+    pub fn draw_string(&mut self, x: usize, y: usize, width: usize, chars: Vec<u8>) {
+        let mut dx = x;
+        for c in chars {
+            if dx < 32 && dx < (x + width) {
+                if c >= 32 && c <= 127 {
+                    let tile = y * 32 + dx;
+                    let index = c - 32;
+                    self.vram[tile] = index;
+                }
+            }
+            dx += 1;
+        }
+    }
+
+    pub fn update_gui(&mut self) {
+        self.draw_string(21, 2, 9,  "RusticNES".as_bytes().to_vec());
+        self.draw_string(20, 3, 10, "NSF Player".as_bytes().to_vec());
+
+        self.draw_string(2, 5, 28, "- Title -".as_bytes().to_vec());
+        let song_name = self.header.song_name();
+        self.draw_string(2, 6, 28, song_name);
+
+        self.draw_string(2, 8, 28, "- Artist -".as_bytes().to_vec());
+        let artist_name = self.header.artist_name();
+        self.draw_string(2, 9, 28, artist_name);
+
+        self.draw_string(2, 11, 28, "- Copyright -".as_bytes().to_vec());
+        let copyright_holder = self.header.copyright_holder();
+        self.draw_string(2, 12, 28, copyright_holder);
+
+
     }
 
     pub fn vrc6_output(&self) -> f64 {
@@ -509,6 +545,7 @@ impl Mapper for NsfMapper {
         if self.playback_accumulator > self.playback_period {
             self.playback_counter = self.playback_counter.wrapping_add(1);
             self.playback_accumulator -= self.playback_period;
+            self.update_gui();
         }
 
         self.clock_vrc6();
