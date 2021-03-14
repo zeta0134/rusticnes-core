@@ -737,7 +737,7 @@ impl Mapper for Mmc5 {
                     self.pcm_channel.level = data;
                 }
             }
-            0x4015 => {
+            0x5015 => {
                 self.pulse_1.length_counter.channel_enabled  = (data & 0b0001) != 0;
                 self.pulse_2.length_counter.channel_enabled  = (data & 0b0010) != 0;
               
