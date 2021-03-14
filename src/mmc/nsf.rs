@@ -41,6 +41,7 @@ const PLAYER_COUNTER_COMPARE: u16 = 0x01FF;
 const PLAYER_BUTTON_SCRATCH: u16 = 0x01FE;
 const PLAYER_PLAYBACK_COUNTER: u16 = 0x4900;
 const PLAYER_TRACK_SELECT: u16 = 0x4901;
+const PLAYER_CURRENT_TRACK: u16 = 0x01FD;
 const PLAYER_BUTTON_REPORT: u16 = 0x4902;
 const PLAYER_ORIGIN: u16 = 0x4A00;
 const PLAYER_SIZE: u16 = 0x0200;
@@ -107,12 +108,12 @@ fn initialize_apu() -> Opcode {
     ]);
 }
 
-fn init_track(track_number: u8, init_address: u16) -> Opcode {
-    let track_index = track_number - 1;
+fn init_track(init_address: u16) -> Opcode {
     return List(vec![
         // (bank initialization is handled by the mapper)
         // Load the first song index to A
-        Lda(Immediate(track_index)),
+        Lda(Absolute(PLAYER_TRACK_SELECT)),
+        Sta(Absolute(PLAYER_CURRENT_TRACK)),
         // Indicate NTSC mode in X
         Ldx(Immediate(0x00)),
         Jsr(Absolute(init_address)),
@@ -154,6 +155,22 @@ fn poll_input() -> Opcode {
     ]);
 }
 
+fn switch_tracks(init_address: u16) -> Opcode  {
+    return List(vec![
+        Label(String::from("switch_tracks")),
+        Lda(Absolute(PLAYER_TRACK_SELECT)),
+        Cmp(Absolute(PLAYER_CURRENT_TRACK)),
+        Beq(RelativeLabel(String::from("done_switching_tracks"))),
+        // save the current track which we are about to switch to
+        Sta(Absolute(PLAYER_CURRENT_TRACK)),
+        // load X for NTSC mode and call Init with the new track number
+        Ldx(Immediate(0x00)),
+        Jsr(Absolute(init_address)),
+        Label(String::from("done_switching_tracks")),
+        Rts
+    ]);
+}
+
 fn playback_loop(play_address: u16) -> Opcode {
     return List(vec![
         // setup playback counter wait condition
@@ -175,6 +192,7 @@ fn playback_loop(play_address: u16) -> Opcode {
         Pha,
         // Poll for input (clobbers only A)
         Jsr(AbsoluteLabel(String::from("readjoy_safe"))),
+        Jsr(AbsoluteLabel(String::from("switch_tracks"))),
         // All done!
         Jmp(AbsoluteLabel(String::from("playback_loop"))),
     ]);
@@ -192,13 +210,14 @@ fn nsf_player(init_address: u16, play_address: u16) -> Vec<Opcode> {
         wait_for_ppu_ready(),
         initialize_ppu(),
         initialize_apu(),
-        init_track(1, init_address),
+        init_track(init_address),
 
         // This loop will never exit, it drives the playback indefinitely
         playback_loop(play_address),
 
         // subroutines
         poll_input(),
+        switch_tracks(init_address),
     ]
 } 
 
