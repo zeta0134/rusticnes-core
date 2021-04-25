@@ -306,12 +306,17 @@ pub struct NsfMapper {
     nsf_player: Vec<u8>,
     header: NsfHeader,
 
+    // player state, mostly used to drive the GUI and switch tracks
     current_track: u8,
     advance_mode: TrackAdvanceMode,
     advance_seconds: u16,
     current_cycles: u64,
     fade_cycles: u64,
     max_cycles: u64,
+    last_sample: f64,
+    silence_counter: u64,
+
+    // input shadows, populated by 6502 code
     p1_held: u8,
     p1_pressed: u8,
 
@@ -387,6 +392,9 @@ impl NsfMapper {
             fade_cycles: 1_789_773 * 2,
             //max_cycles: 1_789_773 * 120,
             max_cycles: 1_789_773 * 10,
+            last_sample: 0.0,
+            silence_counter: 0,
+
             p1_held: 0,
             p1_pressed: 0,
 
@@ -840,7 +848,7 @@ impl Mapper for NsfMapper {
         return channels;
     }
 
-    fn record_expansion_audio_output(&mut self) {
+    fn record_expansion_audio_output(&mut self, nes_sample: f64) {
         if self.vrc6_enabled {
             self.vrc6_pulse1.record_current_output();
             self.vrc6_pulse2.record_current_output();

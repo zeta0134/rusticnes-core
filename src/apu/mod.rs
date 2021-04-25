@@ -562,7 +562,7 @@ impl ApuState {
             self.triangle.record_current_output();
             self.noise.record_current_output();
             self.dmc.record_current_output();
-            mapper.record_expansion_audio_output();
+            mapper.record_expansion_audio_output(current_2a03_sample);
 
             self.generated_samples += 1;
             self.next_sample_at = ((self.generated_samples + 1) * self.cpu_clock_rate) / self.sample_rate;

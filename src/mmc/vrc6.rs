@@ -1080,7 +1080,7 @@ impl Mapper for Vrc6 {
         return channels;
     }
 
-    fn record_expansion_audio_output(&mut self) {
+    fn record_expansion_audio_output(&mut self, _nes_sample: f64) {
         self.pulse1.record_current_output();
         self.pulse2.record_current_output();
         self.sawtooth.record_current_output();

@@ -218,7 +218,7 @@ impl Mapper for Fme7 {
         return channels;
     }
 
-    fn record_expansion_audio_output(&mut self) {
+    fn record_expansion_audio_output(&mut self, _nes_sample: f64) {
         self.expansion_audio_chip.record_output();
     }
 }

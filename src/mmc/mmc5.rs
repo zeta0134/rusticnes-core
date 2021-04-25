@@ -870,7 +870,7 @@ impl Mapper for Mmc5 {
         return channels;
     }
 
-    fn record_expansion_audio_output(&mut self) {
+    fn record_expansion_audio_output(&mut self, _nes_sample: f64) {
         self.pulse_1.record_current_output();
         self.pulse_2.record_current_output();
         self.pcm_channel.record_current_output();
