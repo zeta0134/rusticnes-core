@@ -192,6 +192,8 @@ pub fn opcode_bytes(opcode: Opcode) -> Result<Vec<u8>, String> {
         Opcode::Tya => {Ok(vec![0x98])},
         
         Opcode::Sta(AddressingMode::Absolute(address)) => {Ok(vec![0x8D, low(address), high(address)])},
+        Opcode::Sta(AddressingMode::AbsoluteX(address)) => {Ok(vec![0x9D, low(address), high(address)])},
+        Opcode::Sta(AddressingMode::AbsoluteY(address)) => {Ok(vec![0x99, low(address), high(address)])},
         opcode => {Err(format!("Unimplemented! {:<3?}", opcode))}
     }
 }
