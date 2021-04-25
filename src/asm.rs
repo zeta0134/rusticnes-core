@@ -48,12 +48,12 @@ pub enum Opcode {
     Cpx(AddressingMode),
     Cpy(AddressingMode),
     Dec(AddressingMode),
-    Dex(AddressingMode),
-    Dey(AddressingMode),
+    Dex,
+    Dey,
     Eor(AddressingMode),
     Inc(AddressingMode),
-    Inx(AddressingMode),
-    Iny(AddressingMode),
+    Inx,
+    Iny,
     Jmp(AddressingMode),
     Jsr(AddressingMode),
     Label(String),
@@ -130,6 +130,22 @@ pub fn opcode_bytes(opcode: Opcode) -> Result<Vec<u8>, String> {
         Opcode::Cpy(AddressingMode::ZeroPage(byte)) =>         {Ok(vec![0xC4, byte])},
         Opcode::Cpy(AddressingMode::Absolute(address)) =>      {Ok(vec![0xCC, low(address), high(address)])},
 
+        Opcode::Dec(AddressingMode::ZeroPage(byte)) =>         {Ok(vec![0xC6, byte])},
+        Opcode::Dec(AddressingMode::ZeroPageX(byte)) =>        {Ok(vec![0xD6, byte])},
+        Opcode::Dec(AddressingMode::Absolute(address)) =>      {Ok(vec![0xCE, low(address), high(address)])},
+        Opcode::Dec(AddressingMode::AbsoluteX(address)) =>     {Ok(vec![0xDE, low(address), high(address)])},
+
+        Opcode::Dex => {Ok(vec![0xCA])},
+        Opcode::Dey => {Ok(vec![0x88])},
+
+        Opcode::Inc(AddressingMode::ZeroPage(byte)) =>         {Ok(vec![0xE6, byte])},
+        Opcode::Inc(AddressingMode::ZeroPageX(byte)) =>        {Ok(vec![0xF6, byte])},
+        Opcode::Inc(AddressingMode::Absolute(address)) =>      {Ok(vec![0xEE, low(address), high(address)])},
+        Opcode::Inc(AddressingMode::AbsoluteX(address)) =>     {Ok(vec![0xFE, low(address), high(address)])},
+
+        Opcode::Inx => {Ok(vec![0xE8])},
+        Opcode::Iny => {Ok(vec![0xC8])},
+
         Opcode::Lda(AddressingMode::Immediate(byte)) =>        {Ok(vec![0xA9, byte])},
         Opcode::Lda(AddressingMode::ZeroPage(byte)) =>         {Ok(vec![0xA5, byte])},
         Opcode::Lda(AddressingMode::ZeroPageX(byte)) =>        {Ok(vec![0xB5, byte])},
@@ -191,9 +207,14 @@ pub fn opcode_bytes(opcode: Opcode) -> Result<Vec<u8>, String> {
         Opcode::Txs => {Ok(vec![0x9A])},
         Opcode::Tya => {Ok(vec![0x98])},
         
+        Opcode::Sta(AddressingMode::ZeroPage(byte)) =>         {Ok(vec![0x85, byte])},
+        Opcode::Sta(AddressingMode::ZeroPageX(byte)) =>        {Ok(vec![0x95, byte])},
         Opcode::Sta(AddressingMode::Absolute(address)) => {Ok(vec![0x8D, low(address), high(address)])},
         Opcode::Sta(AddressingMode::AbsoluteX(address)) => {Ok(vec![0x9D, low(address), high(address)])},
         Opcode::Sta(AddressingMode::AbsoluteY(address)) => {Ok(vec![0x99, low(address), high(address)])},
+        Opcode::Sta(AddressingMode::IndexedIndirectX(byte)) => {Ok(vec![0x81, byte])},
+        Opcode::Sta(AddressingMode::IndirectIndexedY(byte)) => {Ok(vec![0x91, byte])},
+
         opcode => {Err(format!("Unimplemented! {:<3?}", opcode))}
     }
 }
