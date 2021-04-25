@@ -388,12 +388,11 @@ impl NsfMapper {
             playback_counter: 0,
 
             current_track: nsf.header.starting_song(),
-            advance_mode: TrackAdvanceMode::Silence,
+            advance_mode: TrackAdvanceMode::Timer,
             advance_seconds: 120,
             current_cycles: 0,
             fade_cycles: 1_789_773 * 2,
-            //max_cycles: 1_789_773 * 120,
-            max_cycles: 1_789_773 * 10,
+            max_cycles: 1_789_773 * 120,
             current_sample: 0.0,
             last_sample: 0.0,
             silence_counter: 0,
@@ -505,6 +504,12 @@ impl NsfMapper {
             TrackAdvanceMode::Timer => {
                 if self.current_cycles > self.max_cycles {
                     self.advance_track_with_wraparound();
+                }
+                // *also* advance when the silence threshold is passed, for short tracks in an otherwise
+                // loopy album
+                if self.silence_counter > self.silence_threshold {
+                    self.advance_track_with_wraparound();
+                    self.silence_counter = 0;
                 }
             },
             TrackAdvanceMode::Silence => {
