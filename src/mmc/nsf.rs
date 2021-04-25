@@ -125,16 +125,8 @@ fn initialize_memory() -> Opcode {
     return List(vec![
         Label(String::from("initialize_memory")),
 
-        // zero page
-        Lda(Immediate(0x00)),
-        Ldx(Immediate(0x00)),
-        Label(String::from("_zero_page_loop")),
-        Sta(AbsoluteX(0x0000)),
-        Dex,
-        Bne(RelativeLabel(String::from("_zero_page_loop"))),
-
         // Main memory
-        Lda(Immediate(0x00)),
+        Lda(Immediate(0x00)), // Start at 0x200
         Sta(ZeroPage(0x00)),
         Lda(Immediate(0x02)),
         Sta(ZeroPage(0x01)),
@@ -147,8 +139,33 @@ fn initialize_memory() -> Opcode {
         Bne(RelativeLabel(String::from("_main_ram_loop"))),
         Inc(ZeroPage(0x01)),
         Ldx(ZeroPage(0x01)),
-        Cpx(Immediate(0x08)),
+        Cpx(Immediate(0x08)), // Stop when we reach 0x800
         Bne(RelativeLabel(String::from("_main_ram_loop"))),
+
+        // PRG RAM
+        Lda(Immediate(0x00)), // Start at 0x6000
+        Sta(ZeroPage(0x00)),
+        Lda(Immediate(0x60)),
+        Sta(ZeroPage(0x01)),
+
+        Lda(Immediate(0x00)),
+        Ldy(Immediate(0x00)),
+        Label(String::from("_prg_ram_loop")),
+        Sta(IndirectIndexedY(0x00)),
+        Inc(ZeroPage(0x00)),
+        Bne(RelativeLabel(String::from("_prg_ram_loop"))),
+        Inc(ZeroPage(0x01)),
+        Ldx(ZeroPage(0x01)),
+        Cpx(Immediate(0x80)), // Stop when we reach 0x8000
+        Bne(RelativeLabel(String::from("_prg_ram_loop"))),
+
+        // zero page
+        Lda(Immediate(0x00)),
+        Ldx(Immediate(0x00)),
+        Label(String::from("_zero_page_loop")),
+        Sta(AbsoluteX(0x0000)),
+        Dex,
+        Bne(RelativeLabel(String::from("_zero_page_loop"))),
 
         Rts,
     ]);
@@ -275,7 +292,13 @@ fn nsf_player(init_address: u16, play_address: u16) -> Vec<Opcode> {
         initialize_apu(),
         initialize_memory(),
     ]
-} 
+}
+
+enum TrackAdvanceMode {
+    Timer,
+    Silence,
+    Manual
+}
 
 pub struct NsfMapper {
     prg: MemoryBlock,
@@ -284,6 +307,10 @@ pub struct NsfMapper {
     header: NsfHeader,
 
     current_track: u8,
+    advance_mode: TrackAdvanceMode,
+    advance_seconds: u16,
+    current_cycles: u64,
+    max_cycles: u64,
     p1_held: u8,
     p1_pressed: u8,
 
@@ -320,6 +347,8 @@ impl NsfMapper {
         let mut nsf_player = assemble(nsf_player_opcodes, PLAYER_ORIGIN)?;
         nsf_player.resize(PLAYER_SIZE as usize, 0);
 
+        println!("NSF Version: {}", nsf.header.version_number());
+
         let mut prg_rom = nsf.prg.clone();
         let mut prg_rom_banks = nsf.header.initial_banks();
         if !nsf.header.is_bank_switched() {
@@ -351,6 +380,10 @@ impl NsfMapper {
             playback_counter: 0,
 
             current_track: nsf.header.starting_song(),
+            advance_mode: TrackAdvanceMode::Timer,
+            advance_seconds: 120,
+            current_cycles: 0,
+            max_cycles: 1_789_773 * 120,
             p1_held: 0,
             p1_pressed: 0,
 
@@ -409,21 +442,33 @@ impl NsfMapper {
         let copyright_holder = self.header.copyright_holder();
         self.draw_string(2, 12, 28, copyright_holder);
 
-        let track_display = format!("{}", self.current_track);
+        let current_seconds = self.current_cycles / 1_789_773;
+        let max_seconds = self.max_cycles / 1_789_773;
+
+        let track_count = format!("{}", self.current_track);
+        let track_play_time = format!("{}:{:02}", current_seconds / 60, current_seconds % 60);
+        let max_play_time = format!("{}:{:02}", max_seconds / 60, max_seconds % 60);
+        let track_display = match self.advance_mode {
+            TrackAdvanceMode::Timer => format!("{} - {} / {}", track_count, track_play_time, max_play_time),
+            _ => format!("{} - {}", track_count, track_play_time),
+        };
+        
         self.draw_string(4, 16, 6, "Track:".as_bytes().to_vec());
         self.draw_string(11, 16, 3, "   ".as_bytes().to_vec());
-        self.draw_string(11, 16, 3, track_display.as_bytes().to_vec());
+        self.draw_string(11, 16, track_display.len(), track_display.as_bytes().to_vec());
     }
 
     pub fn process_input(&mut self) {
         if (self.p1_pressed & BUTTON_RIGHT) != 0 {
             if self.current_track < self.header.total_songs() {
                 self.current_track += 1;
+                self.current_cycles = 0;
             }
         }
         if (self.p1_pressed & BUTTON_LEFT) != 0 {
             if self.current_track > 1 {
-               self.current_track -= 1; 
+               self.current_track -= 1;
+               self.current_cycles = 0;
             }
         }
     }
@@ -708,6 +753,7 @@ impl Mapper for NsfMapper {
         self.clock_vrc6();
         self.clock_mmc5();
         self.clock_s5b();
+        self.current_cycles += 1;
     }
 
     fn mix_expansion_audio(&self, nes_sample: f64) -> f64 {
