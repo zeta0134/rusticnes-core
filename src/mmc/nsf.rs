@@ -313,8 +313,10 @@ pub struct NsfMapper {
     current_cycles: u64,
     fade_cycles: u64,
     max_cycles: u64,
+    current_sample: f64, // used for silence detection
     last_sample: f64,
     silence_counter: u64,
+    silence_threshold: u64,
 
     // input shadows, populated by 6502 code
     p1_held: u8,
@@ -386,14 +388,16 @@ impl NsfMapper {
             playback_counter: 0,
 
             current_track: nsf.header.starting_song(),
-            advance_mode: TrackAdvanceMode::Timer,
+            advance_mode: TrackAdvanceMode::Silence,
             advance_seconds: 120,
             current_cycles: 0,
             fade_cycles: 1_789_773 * 2,
             //max_cycles: 1_789_773 * 120,
             max_cycles: 1_789_773 * 10,
+            current_sample: 0.0,
             last_sample: 0.0,
             silence_counter: 0,
+            silence_threshold: 1_789_773 * 3,
 
             p1_held: 0,
             p1_pressed: 0,
@@ -467,6 +471,9 @@ impl NsfMapper {
         self.draw_string(4, 16, 6, "Track:".as_bytes().to_vec());
         self.draw_string(11, 16, 20, "                    ".as_bytes().to_vec());
         self.draw_string(11, 16, track_display.len(), track_display.as_bytes().to_vec());
+
+        let silence_display = format!("Silence: {:12}", self.silence_counter);
+        self.draw_string(5, 20, silence_display.len(), silence_display.as_bytes().to_vec())
     }
 
     pub fn process_input(&mut self) {
@@ -484,18 +491,28 @@ impl NsfMapper {
         }
     }
 
+    pub fn advance_track_with_wraparound(&mut self) {
+        if self.current_track < self.header.total_songs() {
+            self.current_track += 1;
+        } else {
+            self.current_track = 1;
+        }
+        self.current_cycles = 0;
+    }
+
     pub fn update_player(&mut self) {
         match self.advance_mode {
             TrackAdvanceMode::Timer => {
                 if self.current_cycles > self.max_cycles {
-                    if self.current_track < self.header.total_songs() {
-                        self.current_track += 1;
-                    } else {
-                        self.current_track = 1;
-                    }
-                    self.current_cycles = 0;
+                    self.advance_track_with_wraparound();
                 }
             },
+            TrackAdvanceMode::Silence => {
+                if self.silence_counter > self.silence_threshold {
+                    self.advance_track_with_wraparound();
+                    self.silence_counter = 0;
+                }
+            }
         _ => {/* do nothing! */},
         }
     }
@@ -778,6 +795,11 @@ impl NsfMapper {
             _ => return 1.0 // do not fade
         }
     }
+
+    fn detect_silence(&self) -> bool {
+        let delta = (self.last_sample - self.current_sample).abs();
+        return delta < 0.005;
+    }
 }
 
 impl Mapper for NsfMapper {
@@ -797,6 +819,12 @@ impl Mapper for NsfMapper {
         self.clock_mmc5();
         self.clock_s5b();
         self.current_cycles += 1;
+
+        if self.detect_silence() {
+            self.silence_counter += 1;
+        } else {
+            self.silence_counter = 0;
+        }
     }
 
     fn mix_expansion_audio(&self, nes_sample: f64) -> f64 {
@@ -862,6 +890,8 @@ impl Mapper for NsfMapper {
         if self.s5b_enabled {
             self.s5b_expansion_audio_chip.record_output();
         }
+        self.last_sample = self.current_sample;
+        self.current_sample = self.mix_expansion_audio(nes_sample);
     }
     
     fn read_cpu(&mut self, address: u16) -> Option<u8> {
