@@ -46,7 +46,7 @@ const PLAYER_BUTTON_REPORT: u16 = 0x4902;
 const PLAYER_RESET_BANKS: u16 = 0x4903;
 const PLAYER_ORIGIN: u16 = 0x4A00;
 const PLAYER_SIZE: u16 = 0x0200;
-const PLAYER_END: u16 = PLAYER_ORIGIN + PLAYER_SIZE;
+const PLAYER_END: u16 = PLAYER_ORIGIN + PLAYER_SIZE - 1;
 
 const JOYPAD1: u16 = 0x4016;
 
@@ -100,12 +100,57 @@ fn initialize_ppu() -> Opcode {
 
 fn initialize_apu() -> Opcode {
     return List(vec![
+        Label(String::from("initialize_apu")),
+        // Disable / reset all channels
+        Lda(Immediate(0x00)),
+        Sta(Absolute(APUSTATUS)),
+
+        Ldx(Immediate(0x14)),
+        Label(String::from("_apu_reset_loop")),
+        Dex,
+        Sta(AbsoluteX(0x4000)),
+        Bne(RelativeLabel(String::from("_apu_reset_loop"))),
+
         // Enable all channels)
         Lda(Immediate(0x0F)),
         Sta(Absolute(APUSTATUS)),
         // Set the frame counter to 4-step mode
         Lda(Immediate(0x40)),
         Sta(Absolute(APUFRAMECTRL)),
+        Rts,
+    ]);
+}
+
+fn initialize_memory() -> Opcode {
+    return List(vec![
+        Label(String::from("initialize_memory")),
+
+        // zero page
+        Lda(Immediate(0x00)),
+        Ldx(Immediate(0x00)),
+        Label(String::from("_zero_page_loop")),
+        Sta(AbsoluteX(0x0000)),
+        Dex,
+        Bne(RelativeLabel(String::from("_zero_page_loop"))),
+
+        // Main memory
+        Lda(Immediate(0x00)),
+        Sta(ZeroPage(0x00)),
+        Lda(Immediate(0x02)),
+        Sta(ZeroPage(0x01)),
+
+        Lda(Immediate(0x00)),
+        Ldy(Immediate(0x00)),
+        Label(String::from("_main_ram_loop")),
+        Sta(IndirectIndexedY(0x00)),
+        Inc(ZeroPage(0x00)),
+        Bne(RelativeLabel(String::from("_main_ram_loop"))),
+        Inc(ZeroPage(0x01)),
+        Ldx(ZeroPage(0x01)),
+        Cpx(Immediate(0x08)),
+        Bne(RelativeLabel(String::from("_main_ram_loop"))),
+
+        Rts,
     ]);
 }
 
@@ -167,8 +212,13 @@ fn switch_tracks(init_address: u16) -> Opcode  {
         // Reset the banks prior to the init call
         // (The value written here is unimportant)
         Sta(Absolute(PLAYER_RESET_BANKS)),
+        // Re-initialize the system, to clear any mode / state changes from
+        // the previous track
+        Jsr(AbsoluteLabel(String::from("initialize_apu"))),
+        Jsr(AbsoluteLabel(String::from("initialize_memory"))),
         // load X for NTSC mode and call Init with the new track number
         Ldx(Immediate(0x00)),
+        Lda(Absolute(PLAYER_CURRENT_TRACK)),
         Jsr(Absolute(init_address)),
         Label(String::from("done_switching_tracks")),
         Rts
@@ -213,7 +263,7 @@ fn nsf_player(init_address: u16, play_address: u16) -> Vec<Opcode> {
 
         wait_for_ppu_ready(),
         initialize_ppu(),
-        initialize_apu(),
+        Jsr(AbsoluteLabel(String::from("initialize_apu"))),
         init_track(init_address),
 
         // This loop will never exit, it drives the playback indefinitely
@@ -222,6 +272,8 @@ fn nsf_player(init_address: u16, play_address: u16) -> Vec<Opcode> {
         // subroutines
         poll_input(),
         switch_tracks(init_address),
+        initialize_apu(),
+        initialize_memory(),
     ]
 } 
 
