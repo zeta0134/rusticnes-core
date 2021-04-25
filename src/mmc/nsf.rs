@@ -310,6 +310,7 @@ pub struct NsfMapper {
     advance_mode: TrackAdvanceMode,
     advance_seconds: u16,
     current_cycles: u64,
+    fade_cycles: u64,
     max_cycles: u64,
     p1_held: u8,
     p1_pressed: u8,
@@ -383,7 +384,9 @@ impl NsfMapper {
             advance_mode: TrackAdvanceMode::Timer,
             advance_seconds: 120,
             current_cycles: 0,
-            max_cycles: 1_789_773 * 120,
+            fade_cycles: 1_789_773 * 2,
+            //max_cycles: 1_789_773 * 120,
+            max_cycles: 1_789_773 * 10,
             p1_held: 0,
             p1_pressed: 0,
 
@@ -454,7 +457,7 @@ impl NsfMapper {
         };
         
         self.draw_string(4, 16, 6, "Track:".as_bytes().to_vec());
-        self.draw_string(11, 16, 3, "   ".as_bytes().to_vec());
+        self.draw_string(11, 16, 20, "                    ".as_bytes().to_vec());
         self.draw_string(11, 16, track_display.len(), track_display.as_bytes().to_vec());
     }
 
@@ -473,8 +476,25 @@ impl NsfMapper {
         }
     }
 
+    pub fn update_player(&mut self) {
+        match self.advance_mode {
+            TrackAdvanceMode::Timer => {
+                if self.current_cycles > self.max_cycles {
+                    if self.current_track < self.header.total_songs() {
+                        self.current_track += 1;
+                    } else {
+                        self.current_track = 1;
+                    }
+                    self.current_cycles = 0;
+                }
+            },
+        _ => {/* do nothing! */},
+        }
+    }
+
     pub fn update_gui(&mut self) {
         self.process_input();
+        self.update_player();
         self.draw_track_info();
     }
 
@@ -735,6 +755,21 @@ impl NsfMapper {
         }
         self.s5b_expansion_audio_chip.clock();
     }
+
+    fn fade_weight(&self) -> f64 {
+        match self.advance_mode {
+            TrackAdvanceMode::Timer => {
+                let fade_start = self.max_cycles - self.fade_cycles;
+                if self.current_cycles < fade_start {
+                    return 1.0
+                }
+                let cycles_into_fade = self.current_cycles - fade_start;
+                let fade_weight = (cycles_into_fade as f64) / (self.fade_cycles as f64);
+                return 1.0 - fade_weight.max(0.0).min(1.0);
+            },
+            _ => return 1.0 // do not fade
+        }
+    }
 }
 
 impl Mapper for NsfMapper {
@@ -757,11 +792,12 @@ impl Mapper for NsfMapper {
     }
 
     fn mix_expansion_audio(&self, nes_sample: f64) -> f64 {
-        return 
+        let mixed_sample =  
             self.vrc6_output() +
             self.mmc5_output() +
             self.s5b_output() +
             nes_sample;
+        return mixed_sample * self.fade_weight();
     }
 
     fn channels(&self) ->  Vec<& dyn AudioChannelState> {
