@@ -407,7 +407,7 @@ impl NsfMapper {
             advance_mode: TrackAdvanceMode::Timer,
             current_cycles: 0,
             fade_cycles: 1_789_773 * 2,
-            max_cycles: 1_789_773 * 120,
+            max_cycles: 1_789_773 * 180,
             current_sample: 0.0,
             last_sample: 0.0,
             silence_counter: 0,
@@ -456,6 +456,11 @@ impl NsfMapper {
         }
     }
 
+    pub fn set_tile(&mut self, x: usize, y: usize, index: u8) {
+        let tile = y * 32 + x;
+        self.vram[tile] = index;
+    }
+
     pub fn clear_display(&mut self) {
         for i in 0 .. 1024 {
             self.vram[i] = 0;
@@ -463,6 +468,31 @@ impl NsfMapper {
         // palette things
         for i in 0x3C8 ..= 0x3E0 {
             self.vram[i] = 0b0000_0101;
+        }
+    }
+
+    pub fn progress_bar(&mut self, x: usize, y: usize, width: usize, progress: f64, out_of: f64) {
+        // ends
+        self.set_tile(x, y, 0x79);
+        self.set_tile(x + width - 1, y, 0x7A);
+        // middle bits
+
+        let tile_width = width - 2;
+        let effective_progress = progress / out_of; // ranging from 0 - 1
+        for i in 0 .. tile_width {
+            let tile_min = (i as f64) / (tile_width as f64);
+            let tile_max = ((i + 1) as f64) / (tile_width as f64);
+            // simple cases: this tile is before / after the middle point
+            if effective_progress <= tile_min {
+                self.set_tile(x + i + 1, y, 0x70);
+            } else if effective_progress >= tile_max {
+                self.set_tile(x + i + 1, y, 0x78);
+            } else {
+                // complicated case: how far are we through this specific tile?
+                let tile_progress = (effective_progress - tile_min) * (tile_width as f64);
+                let index = ((tile_progress * 8.0) as u8).min(0x7).max(0x0) + 0x71;
+                self.set_tile(x + i + 1, y, index);
+            }
         }
     }
 
@@ -488,29 +518,36 @@ impl NsfMapper {
         let max_seconds = self.max_cycles / 1_789_773;
 
         let track_count = format!("{}", self.current_track);
-        let track_play_time = format!("{}:{:02}", current_seconds / 60, current_seconds % 60);
-        let max_play_time = format!("{}:{:02}", max_seconds / 60, max_seconds % 60);
-        let track_display = match self.advance_mode {
-            TrackAdvanceMode::Timer => format!("{}   {} / {}", track_count, track_play_time, max_play_time),
-            _ => format!("{} - {}", track_count, track_play_time),
-        };
+        let track_display = format!("{}", track_count);
         
         self.draw_string(4, 20, 6, "Track:".as_bytes().to_vec());
-        self.draw_string(11, 20, track_display.len(), track_display.as_bytes().to_vec());
+        self.draw_string(12, 20, track_display.len(), track_display.as_bytes().to_vec());
 
         let advance_mode_string = match self.advance_mode {
-            TrackAdvanceMode::Timer => "after",
-            TrackAdvanceMode::Silence => "silence",
-            TrackAdvanceMode::Manual => "manual"
+            TrackAdvanceMode::Timer => "After Length",
+            TrackAdvanceMode::Silence => "After Silence",
+            TrackAdvanceMode::Manual => "Manual"
         };
-        let advance_display = format!("Next:  {}", advance_mode_string);
+        let advance_display = format!("Next:   {}", advance_mode_string);
         self.draw_string(4, 22, advance_display.len(), advance_display.as_bytes().to_vec());
 
+        let track_play_time = format!("{}:{:02}", current_seconds / 60, current_seconds % 60);
+        let max_play_time = format!("{}:{:02}", max_seconds / 60, max_seconds % 60);
+
         if matches!(self.advance_mode, TrackAdvanceMode::Timer) {
+            self.draw_string(4, 24, 8, "Length: ".as_bytes().to_vec());
             self.draw_string(12, 24, max_play_time.len(), max_play_time.as_bytes().to_vec());
         }
 
         self.draw_string(2, (20 + self.gui_row * 2) as usize, 1, ">".as_bytes().to_vec());
+
+        let duration_display = match self.advance_mode {
+            TrackAdvanceMode::Timer => format!("{} / {}", track_play_time, max_play_time),
+            _ => format!("{}", track_play_time),
+        };
+        self.draw_string(20, 28, duration_display.len(), duration_display.as_bytes().to_vec());
+
+        self.progress_bar(1, 28, 18, self.current_cycles as f64, self.max_cycles as f64);
     }
 
     pub fn process_input(&mut self) {
