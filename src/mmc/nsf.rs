@@ -37,6 +37,10 @@ const COLOR_DARK_GREY: u8 = 0x2D;
 const COLOR_LIGHT_GREY: u8 = 0x10;
 const COLOR_WHITE: u8 = 0x30;
 
+const COLOR_DARK_ORANGE: u8 = 0x07;
+const COLOR_LIGHT_ORANGE: u8 = 0x17;
+const COLOR_REALLY_LIGHT_ORANGE: u8 = 0x27;
+
 const PLAYER_COUNTER_COMPARE: u16 = 0x01FF;
 const PLAYER_BUTTON_SCRATCH: u16 = 0x01FE;
 const PLAYER_PLAYBACK_COUNTER: u16 = 0x4900;
@@ -78,6 +82,8 @@ fn initialize_ppu() -> Opcode {
         Sta(Absolute(PPUADDR)),
         Lda(Immediate(0x00)),
         Sta(Absolute(PPUADDR)),
+
+        // Font color: white
         Lda(Immediate(COLOR_BLACK)),
         Sta(Absolute(PPUDATA)),
         Lda(Immediate(COLOR_DARK_GREY)),
@@ -85,6 +91,16 @@ fn initialize_ppu() -> Opcode {
         Lda(Immediate(COLOR_LIGHT_GREY)),
         Sta(Absolute(PPUDATA)),
         Lda(Immediate(COLOR_WHITE)),
+        Sta(Absolute(PPUDATA)),
+
+        // Font color: yellow
+        Lda(Immediate(COLOR_BLACK)),
+        Sta(Absolute(PPUDATA)),
+        Lda(Immediate(COLOR_DARK_ORANGE)),
+        Sta(Absolute(PPUDATA)),
+        Lda(Immediate(COLOR_LIGHT_ORANGE)),
+        Sta(Absolute(PPUDATA)),
+        Lda(Immediate(COLOR_REALLY_LIGHT_ORANGE)),
         Sta(Absolute(PPUDATA)),
 
         // Disable NMI, then set the scroll position and enable rendering
@@ -309,7 +325,6 @@ pub struct NsfMapper {
     // player state, mostly used to drive the GUI and switch tracks
     current_track: u8,
     advance_mode: TrackAdvanceMode,
-    advance_seconds: u16,
     current_cycles: u64,
     fade_cycles: u64,
     max_cycles: u64,
@@ -390,7 +405,6 @@ impl NsfMapper {
 
             current_track: nsf.header.starting_song(),
             advance_mode: TrackAdvanceMode::Timer,
-            advance_seconds: 120,
             current_cycles: 0,
             fade_cycles: 1_789_773 * 2,
             max_cycles: 1_789_773 * 120,
@@ -443,8 +457,12 @@ impl NsfMapper {
     }
 
     pub fn clear_display(&mut self) {
-        for i in 0 .. 960 {
+        for i in 0 .. 1024 {
             self.vram[i] = 0;
+        }
+        // palette things
+        for i in 0x3C8 ..= 0x3E0 {
+            self.vram[i] = 0b0000_0101;
         }
     }
 
@@ -454,17 +472,17 @@ impl NsfMapper {
         self.draw_string(21, 2, 9,  "RusticNES".as_bytes().to_vec());
         self.draw_string(20, 3, 10, "NSF Player".as_bytes().to_vec());
 
-        self.draw_string(2, 6, 28, "- Title -".as_bytes().to_vec());
+        self.draw_string(2, 5, 28, "Title".as_bytes().to_vec());
         let song_name = self.header.song_name();
-        self.draw_string(2, 7, 28, song_name);
+        self.draw_string(2, 6, 28, song_name);
 
-        self.draw_string(2, 10, 28, "- Artist -".as_bytes().to_vec());
+        self.draw_string(2, 9, 28, "Artist".as_bytes().to_vec());
         let artist_name = self.header.artist_name();
-        self.draw_string(2, 11, 28, artist_name);
+        self.draw_string(2, 10, 28, artist_name);
 
-        self.draw_string(2, 14, 28, "- Copyright -".as_bytes().to_vec());
+        self.draw_string(2, 13, 28, "Copyright".as_bytes().to_vec());
         let copyright_holder = self.header.copyright_holder();
-        self.draw_string(2, 15, 28, copyright_holder);
+        self.draw_string(2, 14, 28, copyright_holder);
 
         let current_seconds = self.current_cycles / 1_789_773;
         let max_seconds = self.max_cycles / 1_789_773;
@@ -473,7 +491,7 @@ impl NsfMapper {
         let track_play_time = format!("{}:{:02}", current_seconds / 60, current_seconds % 60);
         let max_play_time = format!("{}:{:02}", max_seconds / 60, max_seconds % 60);
         let track_display = match self.advance_mode {
-            TrackAdvanceMode::Timer => format!("{} - {} / {}", track_count, track_play_time, max_play_time),
+            TrackAdvanceMode::Timer => format!("{}   {} / {}", track_count, track_play_time, max_play_time),
             _ => format!("{} - {}", track_count, track_play_time),
         };
         
@@ -485,7 +503,7 @@ impl NsfMapper {
             TrackAdvanceMode::Silence => "silence",
             TrackAdvanceMode::Manual => "manual"
         };
-        let advance_display = format!("Next: {}", advance_mode_string);
+        let advance_display = format!("Next:  {}", advance_mode_string);
         self.draw_string(4, 22, advance_display.len(), advance_display.as_bytes().to_vec());
 
         if matches!(self.advance_mode, TrackAdvanceMode::Timer) {
