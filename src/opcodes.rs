@@ -18,8 +18,9 @@ pub fn pop(nes: &mut NesState) -> u8 {
 }
 
 // Flag Utilities
-pub fn overflow(a: u8, b: u8, result: u8) -> bool {
-    return (((!(a ^ b)) & (a ^ result)) & 0x80) != 0
+pub fn overflow(a: i8, b: i8, carry: i8) -> bool {
+    let result: i16 = a as i16 + b as i16 + carry as i16;
+    return result < -128 || result > 127;
 }
 
 // Logical inclusive OR
@@ -45,8 +46,8 @@ pub fn eor(registers: &mut Registers, data: u8) {
 // Add with Carry
 pub fn adc(registers: &mut Registers, data: u8) {
   let result: u16 = registers.a as u16 + data as u16 + registers.flags.carry as u16;
+  registers.flags.overflow = overflow(registers.a as i8, data as i8, registers.flags.carry as i8);
   registers.flags.carry = result > 0xFF;
-  registers.flags.overflow = overflow(registers.a, data, result as u8);
   registers.a = (result & 0xFF) as u8;
   registers.flags.zero = registers.a == 0;
   registers.flags.negative = registers.a & 0x80 != 0;
