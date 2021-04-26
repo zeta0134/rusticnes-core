@@ -54,8 +54,8 @@ const JOYPAD1: u16 = 0x4016;
 //const BUTTON_B: u8      = 1 << 6;
 //const BUTTON_SELECT: u8 = 1 << 5;
 //const BUTTON_START: u8  = 1 << 4;
-//const BUTTON_UP: u8     = 1 << 3;
-//const BUTTON_DOWN: u8   = 1 << 2;
+const BUTTON_UP: u8     = 1 << 3;
+const BUTTON_DOWN: u8   = 1 << 2;
 const BUTTON_LEFT: u8   = 1 << 1;
 const BUTTON_RIGHT: u8  = 1 << 0;
 
@@ -317,6 +317,7 @@ pub struct NsfMapper {
     last_sample: f64,
     silence_counter: u64,
     silence_threshold: u64,
+    gui_row: u8,
 
     // input shadows, populated by 6502 code
     p1_held: u8,
@@ -397,6 +398,7 @@ impl NsfMapper {
             last_sample: 0.0,
             silence_counter: 0,
             silence_threshold: 1_789_773 * 3,
+            gui_row: 0,
 
             p1_held: 0,
             p1_pressed: 0,
@@ -440,21 +442,29 @@ impl NsfMapper {
         }
     }
 
-    pub fn draw_track_info(&mut self) {
+    pub fn clear_display(&mut self) {
+        for i in 0 .. 960 {
+            self.vram[i] = 0;
+        }
+    }
+
+    pub fn update_display(&mut self) {
+        self.clear_display();
+
         self.draw_string(21, 2, 9,  "RusticNES".as_bytes().to_vec());
         self.draw_string(20, 3, 10, "NSF Player".as_bytes().to_vec());
 
-        self.draw_string(2, 5, 28, "- Title -".as_bytes().to_vec());
+        self.draw_string(2, 6, 28, "- Title -".as_bytes().to_vec());
         let song_name = self.header.song_name();
-        self.draw_string(2, 6, 28, song_name);
+        self.draw_string(2, 7, 28, song_name);
 
-        self.draw_string(2, 8, 28, "- Artist -".as_bytes().to_vec());
+        self.draw_string(2, 10, 28, "- Artist -".as_bytes().to_vec());
         let artist_name = self.header.artist_name();
-        self.draw_string(2, 9, 28, artist_name);
+        self.draw_string(2, 11, 28, artist_name);
 
-        self.draw_string(2, 11, 28, "- Copyright -".as_bytes().to_vec());
+        self.draw_string(2, 14, 28, "- Copyright -".as_bytes().to_vec());
         let copyright_holder = self.header.copyright_holder();
-        self.draw_string(2, 12, 28, copyright_holder);
+        self.draw_string(2, 15, 28, copyright_holder);
 
         let current_seconds = self.current_cycles / 1_789_773;
         let max_seconds = self.max_cycles / 1_789_773;
@@ -467,26 +477,83 @@ impl NsfMapper {
             _ => format!("{} - {}", track_count, track_play_time),
         };
         
-        self.draw_string(4, 16, 6, "Track:".as_bytes().to_vec());
-        self.draw_string(11, 16, 20, "                    ".as_bytes().to_vec());
-        self.draw_string(11, 16, track_display.len(), track_display.as_bytes().to_vec());
+        self.draw_string(4, 20, 6, "Track:".as_bytes().to_vec());
+        self.draw_string(11, 20, track_display.len(), track_display.as_bytes().to_vec());
 
-        let silence_display = format!("Silence: {:12}", self.silence_counter);
-        self.draw_string(5, 20, silence_display.len(), silence_display.as_bytes().to_vec())
+        let advance_mode_string = match self.advance_mode {
+            TrackAdvanceMode::Timer => "after",
+            TrackAdvanceMode::Silence => "silence",
+            TrackAdvanceMode::Manual => "manual"
+        };
+        let advance_display = format!("Next: {}", advance_mode_string);
+        self.draw_string(4, 22, advance_display.len(), advance_display.as_bytes().to_vec());
+
+        if matches!(self.advance_mode, TrackAdvanceMode::Timer) {
+            self.draw_string(12, 24, max_play_time.len(), max_play_time.as_bytes().to_vec());
+        }
+
+        self.draw_string(2, (20 + self.gui_row * 2) as usize, 1, ">".as_bytes().to_vec());
     }
 
     pub fn process_input(&mut self) {
-        if (self.p1_pressed & BUTTON_RIGHT) != 0 {
-            if self.current_track < self.header.total_songs() {
-                self.current_track += 1;
-                self.current_cycles = 0;
-            }
-        }
-        if (self.p1_pressed & BUTTON_LEFT) != 0 {
-            if self.current_track > 1 {
-               self.current_track -= 1;
-               self.current_cycles = 0;
-            }
+        match self.gui_row {
+            0 => {
+            /* Track select row */
+              if (self.p1_pressed & BUTTON_RIGHT) != 0 {
+                    if self.current_track < self.header.total_songs() {
+                        self.current_track += 1;
+                        self.current_cycles = 0;
+                    }
+                }
+                if (self.p1_pressed & BUTTON_LEFT) != 0 {
+                    if self.current_track > 1 {
+                       self.current_track -= 1;
+                       self.current_cycles = 0;
+                    }
+                }
+                if (self.p1_pressed & BUTTON_DOWN) != 0 {
+                    self.gui_row += 1;
+                }
+            },
+            /* advance mode select row */
+            1 => {
+                if (self.p1_pressed & BUTTON_UP) != 0 {
+                    self.gui_row -= 1;
+                }
+                if (self.p1_pressed & BUTTON_RIGHT) != 0  {
+                    if matches!(self.advance_mode, TrackAdvanceMode::Silence) {
+                        self.advance_mode = TrackAdvanceMode::Manual
+                    }
+                    if matches!(self.advance_mode, TrackAdvanceMode::Timer) {
+                        self.advance_mode = TrackAdvanceMode::Silence
+                    }
+                }
+                if (self.p1_pressed & BUTTON_LEFT) != 0 {
+                    if matches!(self.advance_mode, TrackAdvanceMode::Silence) {
+                        self.advance_mode = TrackAdvanceMode::Timer
+                    }
+                    if matches!(self.advance_mode, TrackAdvanceMode::Manual) {
+                        self.advance_mode = TrackAdvanceMode::Silence
+                    }
+                }
+                if (self.p1_pressed & BUTTON_DOWN) != 0  && matches!(self.advance_mode, TrackAdvanceMode::Timer) {
+                    self.gui_row += 1;
+                }
+
+            },
+            /* timer duration row */
+            2 => {
+                if (self.p1_pressed & BUTTON_UP) != 0 {
+                    self.gui_row -= 1;
+                }
+                if (self.p1_pressed & BUTTON_RIGHT) != 0  {
+                    self.max_cycles += 1_789_773 * 30;
+                }
+                if (self.p1_pressed & BUTTON_LEFT) != 0 && self.max_cycles > 1_789_773 * 30 {
+                    self.max_cycles -= 1_789_773 * 30;
+                }
+            },
+            _ => {}
         }
     }
 
@@ -525,7 +592,7 @@ impl NsfMapper {
     pub fn update_gui(&mut self) {
         self.process_input();
         self.update_player();
-        self.draw_track_info();
+        self.update_display();
     }
 
     pub fn vrc6_output(&self) -> f64 {
