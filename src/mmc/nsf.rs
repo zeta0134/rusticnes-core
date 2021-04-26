@@ -541,13 +541,27 @@ impl NsfMapper {
 
         self.draw_string(2, (20 + self.gui_row * 2) as usize, 1, ">".as_bytes().to_vec());
 
-        let duration_display = match self.advance_mode {
-            TrackAdvanceMode::Timer => format!("{} / {}", track_play_time, max_play_time),
-            _ => format!("{}", track_play_time),
-        };
-        self.draw_string(20, 28, duration_display.len(), duration_display.as_bytes().to_vec());
-
-        self.progress_bar(1, 28, 18, self.current_cycles as f64, self.max_cycles as f64);
+        match self.advance_mode {
+            TrackAdvanceMode::Timer => {
+                let duration_display = format!("{} / {}", track_play_time, max_play_time);
+                self.draw_string(19, 27, duration_display.len(), duration_display.as_bytes().to_vec());
+                self.progress_bar(1, 27, 17, self.current_cycles as f64, self.max_cycles as f64);
+            },
+            TrackAdvanceMode::Silence => {
+                let duration_display = format!("{}", track_play_time);
+                self.draw_string(26, 27, duration_display.len(), duration_display.as_bytes().to_vec());
+                // fudge this just slightly; chop off the first 1% or so, to avoid a flicker. (silence detection
+                // can be a bit noisy, ironically)
+                let one_percent = (self.silence_threshold as f64) * 0.01;
+                let fudged_counter = ((self.silence_counter  as f64) - one_percent).max(0.0);
+                let fudged_threshold = (self.silence_threshold  as f64) - one_percent;
+                self.progress_bar(1, 27, 24, fudged_counter, fudged_threshold);
+            },
+            TrackAdvanceMode::Manual => {
+                let duration_display = format!("{}", track_play_time);
+                self.draw_string(26, 27, duration_display.len(), duration_display.as_bytes().to_vec());
+            },
+        }
     }
 
     pub fn process_input(&mut self) {
