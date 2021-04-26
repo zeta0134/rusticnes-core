@@ -404,7 +404,7 @@ impl NsfMapper {
             playback_counter: 0,
 
             current_track: nsf.header.starting_song(),
-            advance_mode: TrackAdvanceMode::Timer,
+            advance_mode: if nsf.header.total_songs() > 1 {TrackAdvanceMode::Timer} else {TrackAdvanceMode::Manual},
             current_cycles: 0,
             fade_cycles: 1_789_773 * 2,
             max_cycles: 1_789_773 * 180,
@@ -517,11 +517,18 @@ impl NsfMapper {
         let current_seconds = self.current_cycles / 1_789_773;
         let max_seconds = self.max_cycles / 1_789_773;
 
-        let track_count = format!("{}", self.current_track);
-        let track_display = format!("{}", track_count);
+        let track_display = if self.header.total_songs() <= 1 {
+            format!("{}", self.current_track)
+        } else {
+            format!("{}  /  {}", self.current_track, self.header.total_songs())
+        };
         
         self.draw_string(4, 20, 6, "Track:".as_bytes().to_vec());
         self.draw_string(12, 20, track_display.len(), track_display.as_bytes().to_vec());
+
+        if self.header.total_songs() <= 1 {
+            return;
+        }
 
         let advance_mode_string = match self.advance_mode {
             TrackAdvanceMode::Timer => "After Length",
@@ -580,7 +587,7 @@ impl NsfMapper {
                        self.current_cycles = 0;
                     }
                 }
-                if (self.p1_pressed & BUTTON_DOWN) != 0 {
+                if (self.p1_pressed & BUTTON_DOWN) != 0 && self.header.total_songs() > 1 {
                     self.gui_row += 1;
                 }
             },
