@@ -51,7 +51,6 @@ pub struct ApuState {
     pub buffer_full: bool,
     pub sample_rate: u64,
     pub cpu_clock_rate: u64,
-    pub buffer_index: usize,
     pub generated_samples: u64,
     pub next_sample_at: u64,
 
@@ -101,8 +100,22 @@ fn generate_tnd_table() -> Vec<f64> {
     return tnd_table;
 }
 
+fn recommended_buffer_size(sample_rate: u64) -> usize {
+    let samples_per_frame = sample_rate / 60;
+    let mut buffer_size = 1;
+    // Because most audio hardware will prefer a power of 2 buffer size, find the smallest
+    // one of those that is large enough to house all the samples we could generate in
+    // a single frame
+    while buffer_size < samples_per_frame {
+        buffer_size = buffer_size * 2;
+    }
+    return buffer_size as usize;
+}
+
 impl ApuState {
     pub fn new() -> ApuState {
+        let default_samplerate = 44100;
+        let output_buffer_size = recommended_buffer_size(44100);
 
         return ApuState {
             current_cycle: 0,
@@ -116,12 +129,11 @@ impl ApuState {
             triangle: TriangleChannelState::new("Triangle", "2A03", 1_789_773),
             noise: NoiseChannelState::new("Noise", "2A03"),
             dmc: DmcState::new("DMC", "2A03"),
-            staging_buffer: RingBuffer::new(4096),
-            output_buffer: vec!(0i16; 4096),
+            staging_buffer: RingBuffer::new(output_buffer_size),
+            output_buffer: vec!(0i16; output_buffer_size),
             buffer_full: false,
-            sample_rate: 44100,
+            sample_rate: default_samplerate,
             cpu_clock_rate: 1_786_860,
-            buffer_index: 0,
             generated_samples: 0,
             next_sample_at: 0,
             pulse_table: generate_pulse_table(),
@@ -141,9 +153,17 @@ impl ApuState {
         }
     }
 
+    pub fn set_buffer_size(&mut self, buffer_size: usize) {
+        self.staging_buffer = RingBuffer::new(buffer_size);
+        self.output_buffer = vec!(0i16; buffer_size);
+        self.buffer_full = false;
+    }
+
     pub fn set_sample_rate(&mut self, sample_rate: u64) {
         self.sample_rate = sample_rate;
         self.lp_pre_decimate = filters::LowPassFIR::new(self.cpu_clock_rate as f64, (sample_rate as f64) * 0.45, 160);
+        let output_buffer_size = recommended_buffer_size(44100);
+        self.set_buffer_size(output_buffer_size);
     }
 
     pub fn channels(&self) -> Vec<& dyn AudioChannelState> {
