@@ -84,10 +84,19 @@ fn generate_pulse_table() -> Vec<f64> {
     return pulse_table;
 }
 
+fn full_tnd_index(t: usize, n: usize, d: usize) -> usize {
+    return (d * 16 * 16) + (n * 16) + t;
+}
+
 fn generate_tnd_table() -> Vec<f64> {
-    let mut tnd_table = vec!(0f64; 203);
-    for n in 0 .. 203 {
-        tnd_table[n] = 163.67 / (24329.0 / (n as f64) + 100.0);
+    let mut tnd_table = vec!(0f64; 16*16*128);
+    for tri in 0 .. 16 {
+        for noise in 0 .. 16 {
+            for dmc in 0 .. 128 {
+                let i = full_tnd_index(tri, noise, dmc);
+                tnd_table[i] = 159.79 / ((1.0 / ((tri as f64 / 8227.0) + (noise as f64 / 12241.0) + (dmc as f64 / 22638.0))) + 100.0);
+            }
+        }
     }
     return tnd_table;
 }
@@ -516,17 +525,12 @@ impl ApuState {
             combined_pulse += pulse_2_sample;
         }
         let pulse_output = self.pulse_table[combined_pulse as usize];
-        let mut tnd_index = 0;
-        if !(self.triangle.debug_disable) {
-            tnd_index += triangle_sample * 3;
-        }
-        if !(self.noise.debug_disable) {
-            tnd_index += noise_sample * 2;
-        }
-        if !(self.dmc.debug_disable) {
-            tnd_index += dmc_sample;
-        }
-        let tnd_output = self.tnd_table[tnd_index as usize];
+        
+        let tri_output = if self.triangle.debug_disable {0} else {triangle_sample};
+        let noise_output = if self.noise.debug_disable {0} else {noise_sample};
+        let dmc_output = if self.dmc.debug_disable {0} else {dmc_sample};
+        let tnd_output = self.tnd_table[full_tnd_index(tri_output as usize, noise_output as usize, dmc_output as usize)];
+
         let current_2a03_sample = (pulse_output - 0.5) + (tnd_output - 0.5);
         let current_dac_sample = mapper.mix_expansion_audio(current_2a03_sample);
 
