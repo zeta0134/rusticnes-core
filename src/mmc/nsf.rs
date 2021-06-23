@@ -394,7 +394,7 @@ impl NsfMapper {
         let mut font_chr = include_bytes!("../../assets/troll8x8.chr").to_vec();
         font_chr.resize(0x2000, 0);
 
-        return Ok(NsfMapper {
+        let mut mapper = NsfMapper {
             prg: MemoryBlock::new(&prg_rom, MemoryType::Ram),
             chr: font_chr,
             nsf_player: nsf_player,
@@ -439,7 +439,10 @@ impl NsfMapper {
 
             mirroring: Mirroring::FourScreen,
             vram: vec![0u8; 0x1000],
-        });
+        };
+
+        mapper.vrc6_write(0x9003, 0x00); // some NSF files expect VRC6 to already be enabled, so do that
+        return Ok(mapper);
     }
 
     pub fn draw_string(&mut self, x: usize, y: usize, width: usize, chars: Vec<u8>) {
