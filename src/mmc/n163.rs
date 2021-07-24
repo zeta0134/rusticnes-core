@@ -14,6 +14,7 @@ pub struct Namco163 {
     pub internal_ram: Vec<u8>,
 
     pub irq_enabled: bool,
+    pub irq_pending: bool,
     pub irq_counter: u16, // 15bit, actually
 
     pub chr_banks: Vec<u8>,
@@ -40,8 +41,9 @@ impl Namco163 {
             vram: vec![0u8; 0x2000],
             internal_ram: vec![0u8; 0x80],
 
-            irq_counter: 0,
             irq_enabled: false,
+            irq_pending: false,
+            irq_counter: 0,
 
             chr_banks: vec![0u8; 8],
             nt_banks: vec![0u8; 4],
@@ -68,8 +70,35 @@ impl Mapper for Namco163 {
         return None;
     }
 
-    fn write_cpu(&mut self, _: u16, _: u8) {
-        //Do nothing
+    fn write_cpu(&mut self, address: u16, data: u8) {
+        let masked_address = address & 0xF800;
+        match masked_address {
+            0x5000 => {
+                let irq_low = data as u16;
+                self.irq_counter = (self.irq_counter & 0xFF00) | irq_low;
+                self.irq_pending = false;
+            },
+            0x5800 => {
+                let irq_high = ((data as u16) & 0x7F) << 8;
+                self.irq_counter = (self.irq_counter & 0x00FF) | irq_high;
+                self.irq_enabled = (data & 0x80) != 0;
+                self.irq_pending = false;
+            },
+            _ => {}
+        }
+    }
+
+    fn clock_cpu(&mut self) {
+        if self.irq_enabled && self.irq_counter < 0x7FFF {
+            self.irq_counter += 1;
+            if self.irq_counter == 0x7FFF {
+                self.irq_pending = true;
+            }
+        }
+    }
+
+    fn irq_flag(&self) -> bool {
+        return self.irq_pending;
     }
 
     fn write_ppu(&mut self, _: u16, _: u8) {
