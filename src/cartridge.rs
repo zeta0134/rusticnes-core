@@ -8,6 +8,7 @@ use mmc::ines31::INes31;
 use mmc::mmc1::Mmc1;
 use mmc::mmc3::Mmc3;
 use mmc::mmc5::Mmc5;
+use mmc::n163::Namco163;
 use mmc::nrom::Nrom;
 use mmc::nsf::NsfMapper;
 use mmc::pxrom::PxRom;
@@ -31,6 +32,7 @@ fn mapper_from_ines(ines: INesCartridge) -> Result<Box<dyn Mapper>, String> {
         5 => Box::new(Mmc5::from_ines(ines)?),
         7 => Box::new(AxRom::from_ines(ines)?),
         9 => Box::new(PxRom::from_ines(ines)?),
+        19 => Box::new(Namco163::from_ines(ines)?),
         24 => Box::new(Vrc6::from_ines(ines)?),
         26 => Box::new(Vrc6::from_ines(ines)?),
         31 => Box::new(INes31::from_ines(ines)?),
