@@ -65,6 +65,15 @@ impl Namco163 {
             return self.chr.banked_read(0x400, bank_index as usize, address as usize);
         }
     }
+
+    pub fn write_banked_chr(&mut self, address: u16, bank_index: u8, use_nt: bool, data: u8) {
+        if use_nt {
+            let effective_bank_index = bank_index & 0x1;
+            self.vram.banked_write(0x400, effective_bank_index as usize, address as usize, data);
+        } else {
+            self.chr.banked_write(0x400, bank_index as usize, address as usize, data);
+        }
+    }
 }
 
 impl Mapper for Namco163 {
@@ -94,6 +103,25 @@ impl Mapper for Namco163 {
             _ => {None}
         }
     }
+
+    fn write_ppu(&mut self, address: u16, data: u8) {
+        let masked_address = address & 0xFC00;
+        match masked_address {
+            0x0000 => {self.write_banked_chr(address, self.chr_banks[0], self.nt_ram_at_0000, data)},
+            0x0400 => {self.write_banked_chr(address, self.chr_banks[1], self.nt_ram_at_0000, data)},
+            0x0800 => {self.write_banked_chr(address, self.chr_banks[2], self.nt_ram_at_0000, data)},
+            0x0C00 => {self.write_banked_chr(address, self.chr_banks[3], self.nt_ram_at_0000, data)},
+            0x1000 => {self.write_banked_chr(address, self.chr_banks[4], self.nt_ram_at_1000, data)},
+            0x1400 => {self.write_banked_chr(address, self.chr_banks[5], self.nt_ram_at_1000, data)},
+            0x1800 => {self.write_banked_chr(address, self.chr_banks[6], self.nt_ram_at_1000, data)},
+            0x1C00 => {self.write_banked_chr(address, self.chr_banks[7], self.nt_ram_at_1000, data)},
+            0x2000 => {self.write_banked_chr(address, self.nt_banks[0], true, data)},
+            0x2400 => {self.write_banked_chr(address, self.nt_banks[1], true, data)},
+            0x2800 => {self.write_banked_chr(address, self.nt_banks[2], true, data)},
+            0x2C00 => {self.write_banked_chr(address, self.nt_banks[3], true, data)},
+            _ => {}
+        }
+    }    
 
     fn write_cpu(&mut self, address: u16, data: u8) {
         let masked_address = address & 0xF800;
@@ -137,8 +165,4 @@ impl Mapper for Namco163 {
     fn irq_flag(&self) -> bool {
         return self.irq_pending;
     }
-
-    fn write_ppu(&mut self, _: u16, _: u8) {
-        //Do nothing
-    }    
 }
