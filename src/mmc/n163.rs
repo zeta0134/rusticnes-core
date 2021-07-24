@@ -3,6 +3,7 @@
 
 use ines::INesCartridge;
 use memoryblock::MemoryBlock;
+use memoryblock::MemoryType;
 
 use mmc::mapper::*;
 
@@ -10,7 +11,7 @@ pub struct Namco163 {
     pub prg_rom: MemoryBlock,
     pub prg_ram: MemoryBlock,
     pub chr: MemoryBlock,
-    pub vram: Vec<u8>,
+    pub vram: MemoryBlock,
     pub internal_ram: Vec<u8>,
 
     pub irq_enabled: bool,
@@ -38,7 +39,7 @@ impl Namco163 {
             prg_rom: prg_rom_block.clone(),
             prg_ram: prg_ram_block.clone(),
             chr: chr_block.clone(),
-            vram: vec![0u8; 0x2000],
+            vram: MemoryBlock::new(&[0u8; 0x2000], MemoryType::Ram),
             internal_ram: vec![0u8; 0x80],
 
             irq_enabled: false,
@@ -55,6 +56,15 @@ impl Namco163 {
             nt_ram_at_1000: false,
         })
     }
+
+    pub fn read_banked_chr(&self, address: u16, bank_index: u8, use_nt: bool) -> Option<u8> {
+        if use_nt {
+            let effective_bank_index = bank_index & 0x1;
+            return self.vram.banked_read(0x400, effective_bank_index as usize, address as usize);
+        } else {
+            return self.chr.banked_read(0x400, bank_index as usize, address as usize);
+        }
+    }
 }
 
 impl Mapper for Namco163 {
@@ -66,8 +76,23 @@ impl Mapper for Namco163 {
         return None;
     }
 
-    fn debug_read_ppu(&self, _: u16) -> Option<u8> {
-        return None;
+    fn debug_read_ppu(&self, address: u16) -> Option<u8> {
+        let masked_address = address & 0xFC00;
+        match masked_address {
+            0x0000 => {self.read_banked_chr(address, self.chr_banks[0], self.nt_ram_at_0000)},
+            0x0400 => {self.read_banked_chr(address, self.chr_banks[1], self.nt_ram_at_0000)},
+            0x0800 => {self.read_banked_chr(address, self.chr_banks[2], self.nt_ram_at_0000)},
+            0x0C00 => {self.read_banked_chr(address, self.chr_banks[3], self.nt_ram_at_0000)},
+            0x1000 => {self.read_banked_chr(address, self.chr_banks[4], self.nt_ram_at_1000)},
+            0x1400 => {self.read_banked_chr(address, self.chr_banks[5], self.nt_ram_at_1000)},
+            0x1800 => {self.read_banked_chr(address, self.chr_banks[6], self.nt_ram_at_1000)},
+            0x1C00 => {self.read_banked_chr(address, self.chr_banks[7], self.nt_ram_at_1000)},
+            0x2000 => {self.read_banked_chr(address, self.nt_banks[0], true)},
+            0x2400 => {self.read_banked_chr(address, self.nt_banks[1], true)},
+            0x2800 => {self.read_banked_chr(address, self.nt_banks[2], true)},
+            0x2C00 => {self.read_banked_chr(address, self.nt_banks[3], true)},
+            _ => {None}
+        }
     }
 
     fn write_cpu(&mut self, address: u16, data: u8) {
@@ -84,6 +109,18 @@ impl Mapper for Namco163 {
                 self.irq_enabled = (data & 0x80) != 0;
                 self.irq_pending = false;
             },
+            0x8000 => {self.chr_banks[0] = data;},
+            0x8800 => {self.chr_banks[1] = data;},
+            0x9000 => {self.chr_banks[2] = data;},
+            0x9800 => {self.chr_banks[3] = data;},
+            0xA000 => {self.chr_banks[4] = data;},
+            0xA800 => {self.chr_banks[5] = data;},
+            0xB000 => {self.chr_banks[6] = data;},
+            0xB800 => {self.chr_banks[7] = data;},
+            0xC000 => {self.nt_banks[0] = data;},
+            0xC800 => {self.nt_banks[1] = data;},
+            0xD000 => {self.nt_banks[2] = data;},
+            0xD800 => {self.nt_banks[3] = data;},
             _ => {}
         }
     }
