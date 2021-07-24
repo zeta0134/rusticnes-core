@@ -702,6 +702,14 @@ impl PpuState {
     pub fn clock(&mut self, mapper: &mut dyn Mapper) {
         match self.current_scanline {
             0 ..= 239 => self.render_scanline(mapper),
+            240 => {
+                if self.current_scanline_cycle == 1 && self.rendering_enabled() {
+                    // When scanline 240 is reached, rendering ends and the contents of v are immediately placed
+                    // on the bus. (They stay there until rendering begins or PPUADDR is changed by the program.)
+                    let vram_address = self.current_vram_address;
+                    let _ = self.read_byte(mapper, vram_address);
+                }
+            }
             241 => self.vblank_scanline(),
             261 => self.prerender_scanline(mapper),
             _ => ()
