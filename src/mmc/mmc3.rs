@@ -35,6 +35,8 @@ pub struct Mmc3 {
     pub irq_flag: bool,
 
     pub last_a12: u8,
+    pub filtered_a12: u8,
+    pub low_a12_counter: u8,
 
     // Debug
     pub last_chr_read: u16,
@@ -77,31 +79,55 @@ impl Mmc3 {
             irq_flag: false,
 
             last_a12: 0,
+            filtered_a12: 0,
             last_chr_read: 0,
+            low_a12_counter: 0,
 
             mirroring: ines.header.mirroring(),
         })
     }
 
-    fn snoop_ppu_read(&mut self, address: u16) {
-        match address {
-            0x0000 ..= 0x1FFF => {
-                self.last_chr_read = address;
-                let current_a12 = ((address & 0b0001_0000_0000_0000) >> 12) as u8;
-                if current_a12 == 1 && self.last_a12 == 0 {
-                    if self.irq_counter == 0 || self.irq_reload_requested {
-                        self.irq_counter = self.irq_reload;
-                        self.irq_reload_requested = false;
-                    } else {
-                        self.irq_counter -= 1;                        
-                    }
-                    if self.irq_counter == 0 && self.irq_enabled {
-                        self.irq_flag = true;                        
-                    }
-                }
-                self.last_a12 = current_a12;
+    fn snoop_ppu_a12(&mut self, address: u16) {
+        self.last_chr_read = address;
+        let current_a12 = ((address & 0b0001_0000_0000_0000) >> 12) as u8;
+        
+        let last_filtered_a12 = self.filtered_a12;
+
+        if current_a12 == 1 {
+            self.filtered_a12 = 1;
+        }
+
+        let filtered_a12_rising_edge = (self.filtered_a12 == 1) && (last_filtered_a12 == 0);
+        if filtered_a12_rising_edge {
+            self.clock_irq_counter();
+        }
+
+        // Caching this value so the M2 counter can see it
+        self.last_a12 = current_a12;
+    }
+
+    fn snoop_cpu_m2(&mut self) {
+        if self.last_a12 == 1 {
+            self.low_a12_counter = 0;
+        } else {
+            if self.low_a12_counter < 255 {
+                self.low_a12_counter += 1;
             }
-            _ => {}
+        }
+        if self.low_a12_counter >= 4 {
+            self.filtered_a12 = 0;
+        }
+    }
+
+    fn clock_irq_counter(&mut self) {
+        if self.irq_counter == 0 || self.irq_reload_requested {
+            self.irq_counter = self.irq_reload;
+            self.irq_reload_requested = false;
+        } else {
+            self.irq_counter -= 1;                        
+        }
+        if self.irq_counter == 0 && self.irq_enabled {
+            self.irq_flag = true;                        
         }
     }
 
@@ -157,6 +183,10 @@ impl Mapper for Mmc3 {
 
     fn irq_flag(&self) -> bool {
         return self.irq_flag;
+    }
+
+    fn clock_cpu(&mut self) {
+        self.snoop_cpu_m2();
     }
 
     fn debug_read_cpu(&self, address: u16) -> Option<u8> {
@@ -263,7 +293,7 @@ impl Mapper for Mmc3 {
     }
 
     fn read_ppu(&mut self, address: u16) -> Option<u8> {
-        self.snoop_ppu_read(address);
+        self.snoop_ppu_a12(address);
         return self._read_ppu(address);
     }
 
@@ -272,6 +302,7 @@ impl Mapper for Mmc3 {
     }
 
     fn write_ppu(&mut self, address: u16, data: u8) {
+        self.snoop_ppu_a12(address);
         match address {
             // CHR RAM (if enabled)
             0x0000 ..= 0x1FFF => {
