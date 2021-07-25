@@ -22,6 +22,8 @@ use mmc::mmc5::Mmc5PcmChannel;
 
 use mmc::fme7::YM2149F;
 
+use mmc::n163::Namco163Audio;
+
 const PPUCTRL: u16 = 0x2000;
 const PPUMASK: u16 = 0x2001;
 const PPUSTATUS: u16 = 0x2002;
@@ -363,6 +365,11 @@ pub struct NsfMapper {
     s5b_enabled: bool,
     s5b_audio_command_select: u8,
     s5b_expansion_audio_chip: YM2149F,
+
+    n163_enabled: bool,
+    n163_ram_addr: u8,
+    n163_ram_auto_increment: bool,
+    n163_expansion_audio_chip: Namco163Audio,
 }
 
 impl NsfMapper {
@@ -434,6 +441,11 @@ impl NsfMapper {
             s5b_enabled: nsf.header.s5b(),
             s5b_audio_command_select: 0,
             s5b_expansion_audio_chip: YM2149F::new(),
+
+            n163_enabled: nsf.header.n163(),
+            n163_ram_addr: 0,
+            n163_ram_auto_increment: false,
+            n163_expansion_audio_chip: Namco163Audio::new(),
 
             prg_rom_banks: prg_rom_banks,
 
@@ -932,6 +944,65 @@ impl NsfMapper {
         self.s5b_expansion_audio_chip.clock();
     }
 
+    fn n163_write(&mut self, address: u16, data: u8) {
+        if !self.n163_enabled {
+            return;
+        }
+        match address {
+            0x4800 => {
+                self.n163_expansion_audio_chip.internal_ram[self.n163_ram_addr as usize] = data;
+                if self.n163_ram_auto_increment {
+                    self.n163_ram_addr = (self.n163_ram_addr + 1) & 0x7F;
+                }
+            },
+            0xF800 => {
+                self.n163_ram_addr = data & 0x7F;
+                self.n163_ram_auto_increment = (data & 0b1000_0000) != 0;
+            },
+            _ => {}
+        }
+    }
+
+    fn n163_read(&self, address: u16) -> Option<u8> {
+        if !self.n163_enabled {
+            return None;
+        }
+        match address {
+            0x4800 => {
+                Some(self.n163_expansion_audio_chip.internal_ram[self.n163_ram_addr as usize])
+            },
+            _ => None
+        }
+    }
+
+    fn n163_snoop(&mut self, address: u16) {
+        if !self.n163_enabled {
+            return;
+        }
+        match address {
+            0x4800 => {
+                if self.n163_ram_auto_increment {
+                    self.n163_ram_addr = (self.n163_ram_addr + 1) & 0x7F;
+                }
+            },
+            _ => {}
+        }
+    }
+
+    fn n163_output(&self) -> f64 {
+        if !self.n163_enabled {
+            return 0.0;
+        }
+        return self.n163_expansion_audio_chip.current_output / 256.0;
+    }
+
+    fn clock_n163(&mut self) {
+        if !self.n163_enabled {
+            return;
+        }
+        self.n163_expansion_audio_chip.clock();
+    }
+
     fn fade_weight(&self) -> f64 {
         match self.advance_mode {
             TrackAdvanceMode::Timer => {
@@ -969,6 +1040,7 @@ impl Mapper for NsfMapper {
         self.clock_vrc6();
         self.clock_mmc5();
         self.clock_s5b();
+        self.clock_n163();
         self.current_cycles += 1;
 
         if self.detect_silence() {
@@ -983,6 +1055,7 @@ impl Mapper for NsfMapper {
             self.vrc6_output() +
             self.mmc5_output() +
             self.s5b_output() +
+            self.n163_output() + 
             nes_sample;
         return mixed_sample * self.fade_weight();
     }
@@ -1004,6 +1077,20 @@ impl Mapper for NsfMapper {
             channels.push(&self.s5b_expansion_audio_chip.channel_b);
             channels.push(&self.s5b_expansion_audio_chip.channel_c);
         }
+        if self.n163_enabled {
+            let mut n163_channels: Vec<& dyn AudioChannelState> = Vec::new();
+            let enabled_channels = self.n163_expansion_audio_chip.enabled_channels();
+            n163_channels.push(&self.n163_expansion_audio_chip.channel1);
+            n163_channels.push(&self.n163_expansion_audio_chip.channel2);
+            n163_channels.push(&self.n163_expansion_audio_chip.channel3);
+            n163_channels.push(&self.n163_expansion_audio_chip.channel4);
+            n163_channels.push(&self.n163_expansion_audio_chip.channel5);
+            n163_channels.push(&self.n163_expansion_audio_chip.channel6);
+            n163_channels.push(&self.n163_expansion_audio_chip.channel7);
+            n163_channels.push(&self.n163_expansion_audio_chip.channel8);
+            n163_channels.truncate(enabled_channels);
+            channels.append(&mut n163_channels);
+        }
         return channels;
     }
 
@@ -1024,6 +1111,20 @@ impl Mapper for NsfMapper {
             channels.push(&mut self.s5b_expansion_audio_chip.channel_b);
             channels.push(&mut self.s5b_expansion_audio_chip.channel_c);
         }
+        if self.n163_enabled {
+            let mut n163_channels: Vec<&mut dyn AudioChannelState> = Vec::new();
+            let enabled_channels = self.n163_expansion_audio_chip.enabled_channels();
+            n163_channels.push(&mut self.n163_expansion_audio_chip.channel1);
+            n163_channels.push(&mut self.n163_expansion_audio_chip.channel2);
+            n163_channels.push(&mut self.n163_expansion_audio_chip.channel3);
+            n163_channels.push(&mut self.n163_expansion_audio_chip.channel4);
+            n163_channels.push(&mut self.n163_expansion_audio_chip.channel5);
+            n163_channels.push(&mut self.n163_expansion_audio_chip.channel6);
+            n163_channels.push(&mut self.n163_expansion_audio_chip.channel7);
+            n163_channels.push(&mut self.n163_expansion_audio_chip.channel8);
+            n163_channels.truncate(enabled_channels);
+            channels.append(&mut n163_channels);
+        }
         return channels;
     }
 
@@ -1041,6 +1142,9 @@ impl Mapper for NsfMapper {
         if self.s5b_enabled {
             self.s5b_expansion_audio_chip.record_output();
         }
+        if self.n163_enabled {
+            self.n163_expansion_audio_chip.record_output();
+        }
         self.last_sample = self.current_sample;
         self.current_sample = self.mix_expansion_audio(nes_sample);
     }
@@ -1048,6 +1152,7 @@ impl Mapper for NsfMapper {
     fn read_cpu(&mut self, address: u16) -> Option<u8> {
         let data = self.debug_read_cpu(address);
         self.snoop_mmc5(address);
+        self.n163_snoop(address);
         return data;
     }
 
@@ -1056,6 +1161,11 @@ impl Mapper for NsfMapper {
             Some(data) => return Some(data),
             None => {}
         }
+
+        match self.n163_read(address) {
+            Some(data) => return Some(data),
+            None => {}
+        }        
 
         match address {
             PLAYER_PLAYBACK_COUNTER => Some(self.playback_counter),
@@ -1105,6 +1215,9 @@ impl Mapper for NsfMapper {
         }
         if self.s5b_enabled {
             self.s5b_write(address, data);
+        }
+        if self.n163_enabled {
+            self.n163_write(address, data);
         }
     }
 
