@@ -20,6 +20,7 @@ pub struct Namco163AudioChannel {
     // cache these to return for debugging purposes
     pub tracked_frequency: f64,
     pub tracked_volume: u8,
+    pub tracked_address: u8,
     pub output_buffer: RingBuffer,
 }
 
@@ -51,6 +52,7 @@ impl Namco163AudioChannel {
             current_output: 0.0,
             tracked_frequency: 0.0,
             tracked_volume: 0,
+            tracked_address: 0,
             output_buffer: RingBuffer::new(32768),
         }
     }
@@ -113,6 +115,7 @@ impl Namco163AudioChannel {
 
         self.tracked_frequency = (ntsc_clockrate * (frequency as f64)) / (15.0 * 65536.0 * (length as f64) * (enabled_channels as f64));
         self.tracked_volume = volume;
+        self.tracked_address = sample_address as u8;
     }
 }
 
@@ -168,7 +171,7 @@ impl AudioChannelState for Namco163AudioChannel {
     }
 
     fn timbre(&self) -> Option<Timbre> {
-        return None;
+        return Some(Timbre::PatchIndex{ index: self.tracked_address as usize, max: 255 });
     }
 }
 
@@ -287,7 +290,7 @@ impl Namco163 {
     }
 
     pub fn read_banked_chr(&self, address: u16, bank_index: u8, use_nt: bool) -> Option<u8> {
-        if use_nt {
+        if use_nt && (bank_index >= 0xE0) {
             let effective_bank_index = bank_index & 0x1;
             return self.vram.banked_read(0x400, effective_bank_index as usize, address as usize);
         } else {
@@ -296,7 +299,7 @@ impl Namco163 {
     }
 
     pub fn write_banked_chr(&mut self, address: u16, bank_index: u8, use_nt: bool, data: u8) {
-        if use_nt {
+        if use_nt && (bank_index >= 0xE0) {
             let effective_bank_index = bank_index & 0x1;
             self.vram.banked_write(0x400, effective_bank_index as usize, address as usize, data);
         } else {
@@ -317,10 +320,6 @@ impl Namco163 {
             _ => false
         }
     }
-
-
-
-
 }
 
 impl Mapper for Namco163 {
