@@ -7,13 +7,20 @@ use memoryblock::MemoryType;
 
 use mmc::mapper::*;
 
+use apu::AudioChannelState;
+use apu::PlaybackRate;
+use apu::Volume;
+use apu::Timbre;
+use apu::RingBuffer;
+
 pub struct Namco163AudioChannel {
     pub debug_disable: bool,
     pub channel_address: usize,
     pub current_output: f64,
     // cache these to return for debugging purposes
-    pub tracked_frequency: u32,
+    pub tracked_frequency: f64,
     pub tracked_volume: u8,
+    pub output_buffer: RingBuffer,
 }
 
 const AUDIO_FREQ_LOW:     usize = 0;
@@ -42,8 +49,9 @@ impl Namco163AudioChannel {
             debug_disable: false,
             channel_address: channel_address,
             current_output: 0.0,
-            tracked_frequency: 0,
+            tracked_frequency: 0.0,
             tracked_volume: 0,
+            output_buffer: RingBuffer::new(32768),
         }
     }
 
@@ -100,11 +108,67 @@ impl Namco163AudioChannel {
         self.current_output = (sample - 8.0) * (volume as f64);
 
         // for debug visualizations
-        let ntsc_clockrate: u32 = 1_789_773;
+        let ntsc_clockrate: f64 = 1_789_773.0;
         let enabled_channels = (((audio_ram[0x7F] & 0b0111_0000) >> 4) + 1) as u32;
 
-        self.tracked_frequency = (ntsc_clockrate * frequency) / (15 * 65536 * (length as u32) * enabled_channels);
+        self.tracked_frequency = (ntsc_clockrate * (frequency as f64)) / (15.0 * 65536.0 * (length as f64) * (enabled_channels as f64));
         self.tracked_volume = volume;
+    }
+}
+
+impl AudioChannelState for Namco163AudioChannel {
+    fn name(&self) -> String {
+        return format!("WAVE {}", ((self.channel_address - 0x40) / 8) + 1);
+    }
+
+    fn chip(&self) -> String {
+        return "N163".to_string();
+    }
+
+    fn sample_buffer(&self) -> &RingBuffer {
+        return &self.output_buffer;
+    }
+
+    fn record_current_output(&mut self) {
+        self.output_buffer.push(self.current_output as i16);
+    }
+
+    fn min_sample(&self) -> i16 {
+        return -128;
+    }
+
+    fn max_sample(&self) -> i16 {
+        return 127;
+    }
+
+    fn muted(&self) -> bool {
+        return self.debug_disable;
+    }
+
+    fn mute(&mut self) {
+        self.debug_disable = true;
+    }
+
+    fn unmute(&mut self) {
+        self.debug_disable = false;
+    }
+
+    fn playing(&self) -> bool {
+        return 
+            (self.tracked_volume > 0) &&
+            (self.tracked_frequency > 0.0);
+    }
+
+    fn rate(&self) -> PlaybackRate {
+        return PlaybackRate::FundamentalFrequency {frequency: self.tracked_frequency};
+    }
+
+    fn volume(&self) -> Option<Volume> {
+        return Some(Volume::VolumeIndex{ index: self.tracked_volume as usize, max: 15 });
+    }
+
+    fn timbre(&self) -> Option<Timbre> {
+        return None;
     }
 }
 
@@ -155,6 +219,12 @@ impl Namco163Audio {
             }
 
             self.channel_delay_counter = 15;
+        }
+    }
+
+    pub fn record_output(&mut self) {
+        for channel in &mut self.channels {
+            channel.record_current_output();
         }
     }
 }
@@ -397,6 +467,26 @@ impl Mapper for Namco163 {
         let expansion_mix = self.expansion_audio_chip.current_output / 256.0; // for testing
         return nes_sample + expansion_mix;
     }
+
+    fn record_expansion_audio_output(&mut self, _nes_sample: f64) {
+        self.expansion_audio_chip.record_output();
+    }
+
+    fn channels(&self) ->  Vec<& dyn AudioChannelState> {
+        let mut channels: Vec<& dyn AudioChannelState> = Vec::new();
+        for i in 0 ..= 7 {
+            channels.push(&self.expansion_audio_chip.channels[i]);
+        }
+        return channels;
+    }
+    /*
+    fn channels_mut(&mut self) ->  Vec<&mut dyn AudioChannelState> {
+        let mut channels: Vec<&mut dyn AudioChannelState> = Vec::new();
+        for i in (0 ..= 7).rev() {
+            channels.push(&mut (self.expansion_audio_chip.channels[i]));
+        }
+        return channels;
+    }*/
 
     fn irq_flag(&self) -> bool {
         return self.irq_pending;
