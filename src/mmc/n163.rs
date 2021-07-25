@@ -118,7 +118,7 @@ impl Namco163AudioChannel {
 
 impl AudioChannelState for Namco163AudioChannel {
     fn name(&self) -> String {
-        return format!("WAVE {}", ((self.channel_address - 0x40) / 8) + 1);
+        return format!("NAMCO {}", 8 - ((self.channel_address - 0x40) / 8));
     }
 
     fn chip(&self) -> String {
@@ -178,6 +178,7 @@ pub struct Namco163Audio {
     pub channel_delay_counter: u8,
     pub current_channel: usize,
     pub current_output: f64,
+    pub maximum_channels_enabled: usize,
 }
 
 impl Namco163Audio {
@@ -188,6 +189,7 @@ impl Namco163Audio {
             channel_delay_counter: 0,
             current_channel: 0,
             current_output: 0.0,
+            maximum_channels_enabled: 1,
         };
         for i in 0 ..= 7 {
             chip.channels.push(Namco163AudioChannel::new(0x40 + (0x8 * (7 - i))));
@@ -216,6 +218,10 @@ impl Namco163Audio {
             self.current_channel += 1;
             if self.current_channel >= self.enabled_channels() {
                 self.current_channel = 0;
+            }
+
+            if self.enabled_channels() > self.maximum_channels_enabled {
+                self.maximum_channels_enabled = self.enabled_channels();
             }
 
             self.channel_delay_counter = 15;
@@ -474,7 +480,7 @@ impl Mapper for Namco163 {
 
     fn channels(&self) ->  Vec<& dyn AudioChannelState> {
         let mut channels: Vec<& dyn AudioChannelState> = Vec::new();
-        for i in 0 ..= 7 {
+        for i in 0 .. self.expansion_audio_chip.maximum_channels_enabled {
             channels.push(&self.expansion_audio_chip.channels[i]);
         }
         return channels;
