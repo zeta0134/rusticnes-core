@@ -610,8 +610,8 @@ impl ApuState {
             .unwrap();
 
         // turn our sample buffer into a simple file buffer for output
-        let mut buffer = [0u8; 4096 * 2];
-        for i in 0 .. 4096 {
+        let mut buffer = [0u8; 1024 * 2];
+        for i in 0 .. 1024 {
             let sample = self.output_buffer[i];
             buffer[i * 2]     = (((sample as u16) & 0xFF00) >> 8) as u8;
             buffer[i * 2 + 1] = (((sample as u16) & 0x00FF)     ) as u8;
