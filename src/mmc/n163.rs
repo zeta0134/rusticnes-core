@@ -177,7 +177,14 @@ impl AudioChannelState for Namco163AudioChannel {
 
 pub struct Namco163Audio {
     pub internal_ram: Vec<u8>,
-    pub channels: Vec<Namco163AudioChannel>,
+    pub channel1: Namco163AudioChannel,
+    pub channel2: Namco163AudioChannel,
+    pub channel3: Namco163AudioChannel,
+    pub channel4: Namco163AudioChannel,
+    pub channel5: Namco163AudioChannel,
+    pub channel6: Namco163AudioChannel,
+    pub channel7: Namco163AudioChannel,
+    pub channel8: Namco163AudioChannel,
     pub channel_delay_counter: u8,
     pub current_channel: usize,
     pub current_output: f64,
@@ -186,18 +193,21 @@ pub struct Namco163Audio {
 
 impl Namco163Audio {
     pub fn new() -> Namco163Audio {
-        let mut chip = Namco163Audio {
+        return Namco163Audio {
             internal_ram: vec![0u8; 0x80],
-            channels: Vec::new(),
+            channel1: Namco163AudioChannel::new(0x78),
+            channel2: Namco163AudioChannel::new(0x70),
+            channel3: Namco163AudioChannel::new(0x68),
+            channel4: Namco163AudioChannel::new(0x60),
+            channel5: Namco163AudioChannel::new(0x58),
+            channel6: Namco163AudioChannel::new(0x50),
+            channel7: Namco163AudioChannel::new(0x48),
+            channel8: Namco163AudioChannel::new(0x40),
             channel_delay_counter: 0,
             current_channel: 0,
             current_output: 0.0,
             maximum_channels_enabled: 1,
         };
-        for i in 0 ..= 7 {
-            chip.channels.push(Namco163AudioChannel::new(0x40 + (0x8 * (7 - i))));
-        }
-        return chip;
     }
 
     pub fn enabled_channels(&self) -> usize {
@@ -211,12 +221,23 @@ impl Namco163Audio {
         }
 
         if self.channel_delay_counter == 0 {
-            self.channels[self.current_channel].update(&mut self.internal_ram);
-            if self.channels[self.current_channel].debug_disable {
+            let active_channel = match self.current_channel {
+                0 => &mut self.channel1,
+                1 => &mut self.channel2,
+                2 => &mut self.channel3,
+                3 => &mut self.channel4,
+                4 => &mut self.channel5,
+                5 => &mut self.channel6,
+                6 => &mut self.channel7,
+                7 => &mut self.channel8,
+                _ => {&mut self.channel1} // unreachable, but rust doesn't know that
+            };
+            active_channel.update(&mut self.internal_ram);
+            if active_channel.debug_disable {
                 // Do debug muting here at the last second
                 self.current_output = 0.0;
             } else {
-                self.current_output = self.channels[self.current_channel].current_output;
+                self.current_output = active_channel.current_output;
             }
             self.current_channel += 1;
             if self.current_channel >= self.enabled_channels() {
@@ -232,9 +253,14 @@ impl Namco163Audio {
     }
 
     pub fn record_output(&mut self) {
-        for channel in &mut self.channels {
-            channel.record_current_output();
-        }
+        self.channel1.record_current_output();
+        self.channel2.record_current_output();
+        self.channel3.record_current_output();
+        self.channel4.record_current_output();
+        self.channel5.record_current_output();
+        self.channel6.record_current_output();
+        self.channel7.record_current_output();
+        self.channel8.record_current_output();
     }
 }
 
@@ -479,19 +505,33 @@ impl Mapper for Namco163 {
 
     fn channels(&self) ->  Vec<& dyn AudioChannelState> {
         let mut channels: Vec<& dyn AudioChannelState> = Vec::new();
-        for i in 0 .. self.expansion_audio_chip.maximum_channels_enabled {
-            channels.push(&self.expansion_audio_chip.channels[i]);
-        }
+        let enabled_channels = self.expansion_audio_chip.enabled_channels();
+        channels.push(&self.expansion_audio_chip.channel1);
+        channels.push(&self.expansion_audio_chip.channel2);
+        channels.push(&self.expansion_audio_chip.channel3);
+        channels.push(&self.expansion_audio_chip.channel4);
+        channels.push(&self.expansion_audio_chip.channel5);
+        channels.push(&self.expansion_audio_chip.channel6);
+        channels.push(&self.expansion_audio_chip.channel7);
+        channels.push(&self.expansion_audio_chip.channel8);
+        channels.truncate(enabled_channels);
         return channels;
     }
-    /*
+    
     fn channels_mut(&mut self) ->  Vec<&mut dyn AudioChannelState> {
         let mut channels: Vec<&mut dyn AudioChannelState> = Vec::new();
-        for i in (0 ..= 7).rev() {
-            channels.push(&mut (self.expansion_audio_chip.channels[i]));
-        }
+        let enabled_channels = self.expansion_audio_chip.enabled_channels();
+        channels.push(&mut self.expansion_audio_chip.channel1);
+        channels.push(&mut self.expansion_audio_chip.channel2);
+        channels.push(&mut self.expansion_audio_chip.channel3);
+        channels.push(&mut self.expansion_audio_chip.channel4);
+        channels.push(&mut self.expansion_audio_chip.channel5);
+        channels.push(&mut self.expansion_audio_chip.channel6);
+        channels.push(&mut self.expansion_audio_chip.channel7);
+        channels.push(&mut self.expansion_audio_chip.channel8);
+        channels.truncate(enabled_channels);
         return channels;
-    }*/
+    }
 
     fn irq_flag(&self) -> bool {
         return self.irq_pending;
