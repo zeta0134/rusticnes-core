@@ -7,12 +7,164 @@ use memoryblock::MemoryType;
 
 use mmc::mapper::*;
 
+pub struct Namco163AudioChannel {
+    pub debug_disable: bool,
+    pub channel_address: usize,
+    pub current_output: f64,
+    // cache these to return for debugging purposes
+    pub tracked_frequency: u32,
+    pub tracked_volume: u8,
+}
+
+const AUDIO_FREQ_LOW:     usize = 0;
+const AUDIO_PHASE_LOW:    usize = 1;
+const AUDIO_FREQ_MID:     usize = 2;
+const AUDIO_PHASE_MID:    usize = 3;
+const AUDIO_FREQ_HIGH:    usize = 4;
+const AUDIO_WAVE_LENGTH:  usize = 4;
+const AUDIO_PHASE_HIGH:   usize = 5;
+const AUDIO_WAVE_ADDRESS: usize = 6;
+const AUDIO_VOLUME:       usize = 7;
+
+fn audio_sample(audio_ram: &[u8], sample_index: u8) -> u8 {
+    let byte_index = sample_index / 2;
+    let sample_byte = audio_ram[byte_index as usize];
+    if sample_index & 0x1 == 0 {
+        return sample_byte & 0x0F;
+    } else {
+        return (sample_byte & 0xF0) >> 4;
+    }
+}
+
+impl Namco163AudioChannel {
+    pub fn new(channel_address: usize) -> Namco163AudioChannel {
+        return Namco163AudioChannel {
+            debug_disable: false,
+            channel_address: channel_address,
+            current_output: 0.0,
+            tracked_frequency: 0,
+            tracked_volume: 0,
+        }
+    }
+
+    pub fn phase(&self, audio_ram: &[u8]) -> u32 {
+        let phase_low = audio_ram[self.channel_address + AUDIO_PHASE_LOW] as u32;
+        let phase_mid = audio_ram[self.channel_address + AUDIO_PHASE_MID] as u32;
+        let phase_high = audio_ram[self.channel_address + AUDIO_PHASE_HIGH] as u32;
+        return (phase_high << 16) | (phase_mid << 8) | phase_low;
+    }
+
+    pub fn write_phase(&mut self, audio_ram: &mut [u8], phase: u32) {
+        let phase_low = (phase & 0xFF) as u8;
+        let phase_mid = ((phase & 0xFF00) >> 8) as u8;
+        let phase_high = ((phase & 0xFF0000) >> 16) as u8;
+        audio_ram[self.channel_address + AUDIO_PHASE_LOW] = phase_low;
+        audio_ram[self.channel_address + AUDIO_PHASE_MID] = phase_mid;
+        audio_ram[self.channel_address + AUDIO_PHASE_HIGH] = phase_high;
+    }
+
+    pub fn frequency(&self, audio_ram: &[u8]) -> u32 {
+        let freq_low = audio_ram[self.channel_address + AUDIO_FREQ_LOW] as u32;
+        let freq_mid = audio_ram[self.channel_address + AUDIO_FREQ_MID] as u32;
+        let freq_high = (audio_ram[self.channel_address + AUDIO_FREQ_HIGH] & 0b0000_0011) as u32;
+        return (freq_high << 16) | (freq_mid << 8) | freq_low;
+    }
+
+    pub fn length(&self, audio_ram: &[u8]) -> u32 {
+        let length_byte = (audio_ram[self.channel_address + AUDIO_WAVE_LENGTH] & 0b1111_1100) as u32;
+        return 256 - length_byte;
+    }
+
+    pub fn wave_address(&self, audio_ram: &[u8]) -> u8 {
+        return audio_ram[self.channel_address + AUDIO_WAVE_ADDRESS];
+    }
+
+    pub fn volume(&self, audio_ram: &[u8]) -> u8 {
+        return audio_ram[self.channel_address + AUDIO_VOLUME] & 0x0F;
+    }
+
+    pub fn update(&mut self, audio_ram: &mut [u8]) {
+        let current_phase = self.phase(audio_ram);
+        let frequency = self.frequency(audio_ram);
+        let length = self.length(audio_ram);
+        let sample_address = self.wave_address(audio_ram) as u32;
+        let volume = self.volume(audio_ram);
+
+        let new_phase = (current_phase + frequency) % (length << 16);
+        self.write_phase(audio_ram, new_phase);
+
+        let sample_index = (sample_address + (new_phase >> 16)) & 0xFF;
+        let sample = audio_sample(audio_ram, sample_index as u8) as f64;
+
+        // The final output sample is biased, such that +8 is centered
+        self.current_output = (sample - 8.0) * (volume as f64);
+
+        // for debug visualizations
+        let ntsc_clockrate: u32 = 1_789_773;
+        let enabled_channels = (((audio_ram[0x7F] & 0b0111_0000) >> 4) + 1) as u32;
+
+        self.tracked_frequency = (ntsc_clockrate * frequency) / (15 * 65536 * (length as u32) * enabled_channels);
+        self.tracked_volume = volume;
+    }
+}
+
+pub struct Namco163Audio {
+    pub internal_ram: Vec<u8>,
+    pub channels: Vec<Namco163AudioChannel>,
+    pub channel_delay_counter: u8,
+    pub current_channel: usize,
+    pub current_output: f64,
+}
+
+impl Namco163Audio {
+    pub fn new() -> Namco163Audio {
+        let mut chip = Namco163Audio {
+            internal_ram: vec![0u8; 0x80],
+            channels: Vec::new(),
+            channel_delay_counter: 0,
+            current_channel: 0,
+            current_output: 0.0,
+        };
+        for i in 0 ..= 7 {
+            chip.channels.push(Namco163AudioChannel::new(0x40 + (0x8 * (7 - i))));
+        }
+        return chip;
+    }
+
+    pub fn enabled_channels(&self) -> usize {
+        let channel_cmp = (self.internal_ram[0x7F] & 0b0111_0000) >> 4;
+        return (1 + channel_cmp) as usize;
+    }
+
+    pub fn clock(&mut self) {
+        if self.channel_delay_counter > 0 {
+            self.channel_delay_counter -= 1;
+        }
+
+        if self.channel_delay_counter == 0 {
+            self.channels[self.current_channel].update(&mut self.internal_ram);
+            if self.channels[self.current_channel].debug_disable {
+                // Do debug muting here at the last second
+                self.current_output = 0.0;
+            } else {
+                self.current_output = self.channels[self.current_channel].current_output;
+            }
+            self.current_channel += 1;
+            if self.current_channel >= self.enabled_channels() {
+                self.current_channel = 0;
+            }
+
+            self.channel_delay_counter = 15;
+        }
+    }
+}
+
 pub struct Namco163 {
     pub prg_rom: MemoryBlock,
     pub prg_ram: MemoryBlock,
     pub chr: MemoryBlock,
     pub vram: MemoryBlock,
-    pub internal_ram: Vec<u8>,
+    pub expansion_audio_chip: Namco163Audio,
 
     pub irq_enabled: bool,
     pub irq_pending: bool,
@@ -27,7 +179,6 @@ pub struct Namco163 {
     pub sound_enabled: bool,
     pub nt_ram_at_0000: bool,
     pub nt_ram_at_1000: bool,
-
 }
 
 impl Namco163 {
@@ -41,7 +192,7 @@ impl Namco163 {
             prg_ram: prg_ram_block.clone(),
             chr: chr_block.clone(),
             vram: MemoryBlock::new(&[0u8; 0x2000], MemoryType::Ram),
-            internal_ram: vec![0u8; 0x80],
+            expansion_audio_chip: Namco163Audio::new(),
 
             irq_enabled: false,
             irq_pending: false,
@@ -90,6 +241,10 @@ impl Namco163 {
             _ => false
         }
     }
+
+
+
+
 }
 
 impl Mapper for Namco163 {
@@ -100,7 +255,7 @@ impl Mapper for Namco163 {
     fn debug_read_cpu(&self, address: u16) -> Option<u8> {
         match address {
             0x4800 ..= 0x4FFF => {
-                Some(self.internal_ram[self.internal_ram_addr as usize])
+                Some(self.expansion_audio_chip.internal_ram[self.internal_ram_addr as usize])
             },
             0x5000 ..= 0x57FF => {
                 let irq_low = (self.irq_counter & 0x00FF) as u8;
@@ -175,7 +330,7 @@ impl Mapper for Namco163 {
         let masked_address = address & 0xF800;
         match masked_address {
             0x4800 => {
-                self.internal_ram[self.internal_ram_addr as usize] = data;
+                self.expansion_audio_chip.internal_ram[self.internal_ram_addr as usize] = data;
                 if self.internal_ram_auto_increment {
                     self.internal_ram_addr = (self.internal_ram_addr + 1) & 0x7F;
                 }
@@ -222,7 +377,7 @@ impl Mapper for Namco163 {
             }
             0xF800 => {
                 self.internal_ram_addr = data & 0x7F;
-                self.internal_ram_auto_increment = (data & 0b1000_0000) == 0;
+                self.internal_ram_auto_increment = (data & 0b1000_0000) != 0;
             }
             _ => {}
         }
@@ -235,6 +390,12 @@ impl Mapper for Namco163 {
                 self.irq_pending = true;
             }
         }
+        self.expansion_audio_chip.clock();
+    }
+
+    fn mix_expansion_audio(&self, nes_sample: f64) -> f64 {
+        let expansion_mix = self.expansion_audio_chip.current_output / 256.0; // for testing
+        return nes_sample + expansion_mix;
     }
 
     fn irq_flag(&self) -> bool {
