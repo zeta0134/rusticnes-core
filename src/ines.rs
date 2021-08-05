@@ -319,6 +319,14 @@ impl INesHeader {
             _ => 0
         }
     }
+
+    pub fn submapper_number(&self) -> u8 {
+        match self.version() {
+            1 => 0,
+            2 => (self.raw_bytes[INES2_MAPPER_SUB_MSB] & 0b1111_0000) >> 4,
+            _ => 0
+        }
+    }
 }
 
 #[derive(Clone)]
