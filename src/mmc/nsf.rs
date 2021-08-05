@@ -23,6 +23,7 @@ use mmc::mmc5::Mmc5PcmChannel;
 use mmc::fme7::YM2149F;
 
 use mmc::n163::Namco163Audio;
+use mmc::n163::n163_mixing_level;
 
 const PPUCTRL: u16 = 0x2000;
 const PPUMASK: u16 = 0x2001;
@@ -370,6 +371,7 @@ pub struct NsfMapper {
     n163_ram_addr: u8,
     n163_ram_auto_increment: bool,
     n163_expansion_audio_chip: Namco163Audio,
+    n163_mix: f64,
 }
 
 impl NsfMapper {
@@ -446,6 +448,7 @@ impl NsfMapper {
             n163_ram_addr: 0,
             n163_ram_auto_increment: false,
             n163_expansion_audio_chip: Namco163Audio::new(),
+            n163_mix: n163_mixing_level(0),
 
             prg_rom_banks: prg_rom_banks,
 
@@ -993,7 +996,16 @@ impl NsfMapper {
         if !self.n163_enabled {
             return 0.0;
         }
-        return self.n163_expansion_audio_chip.current_output / 256.0;
+
+        // APU pulse numbers from https://wiki.nesdev.com/w/index.php?title=APU_Mixer
+        let nes_pulse_full_volume = 95.88 / ((8128.0 / 15.0) + 100.0);
+        let n163_square_full_volume = 15.0 * 15.0; // loudest sample * loudest volume
+        
+        // Normalize the N163 volume against APU pulse, then multiply that by our
+        // desired relative mix:
+        let n163_weight = (nes_pulse_full_volume / n163_square_full_volume) * self.n163_mix;
+
+        return self.n163_expansion_audio_chip.current_output * n163_weight;
     }
 
     fn clock_n163(&mut self) {
