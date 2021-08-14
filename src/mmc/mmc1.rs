@@ -21,6 +21,7 @@ pub struct Mmc1 {
 
     pub prg_bank: usize,
     pub prg_ram_enabled: bool,
+    pub prg_ram_bank: usize,
 
     pub control: u8,
 
@@ -47,6 +48,7 @@ impl Mmc1 {
             chr_bank_1: 0,
             prg_bank: 0x00,
             prg_ram_enabled: true,
+            prg_ram_bank: 0,
             // Power-on in PRG mode 3, so the last bank is fixed and reset vectors are reliably available.
             // (Real hardware might not do this consistently?)
             control: 0x0C,
@@ -83,7 +85,7 @@ impl Mapper for Mmc1 {
         match address {
             // PRG RAM
             0x6000 ..= 0x7FFF => {
-                return self.prg_ram.wrapping_read((address - 0x6000) as usize);
+                self.prg_ram.banked_read(0x2000, self.prg_ram_bank, address as usize)
             },
             // PRG ROM - First 16k Page
             0x8000 ..= 0xBFFF => {
@@ -144,7 +146,7 @@ impl Mapper for Mmc1 {
             // PRG RAM
             0x6000 ..= 0x7FFF => {
                 if self.prg_ram_enabled {
-                    self.prg_ram.wrapping_write(address as usize, data);
+                    self.prg_ram.banked_write(0x2000, self.prg_ram_bank, address as usize, data);
                 }
             },
             // Control Registers
@@ -183,8 +185,14 @@ impl Mapper for Mmc1 {
                                     _ => println!("Bad mirroring mode!! {}", nametable_mode),
                                 }
                             },
-                            0xA000 ..= 0xBF00 => self.chr_bank_0 = self.shift_data as usize,
-                            0xC000 ..= 0xDF00 => self.chr_bank_1 = self.shift_data as usize,
+                            0xA000 ..= 0xBF00 => {
+                                self.chr_bank_0 = self.shift_data as usize;
+                                self.prg_ram_bank = ((self.shift_data & 0b0_1100) >> 2) as usize;
+                            },
+                            0xC000 ..= 0xDF00 => {
+                                self.chr_bank_1 = self.shift_data as usize;
+                                self.prg_ram_bank = ((self.shift_data & 0b0_1100) >> 2) as usize;
+                            },
                             0xE000 ..= 0xFF00 => {
                                 // The 5th bit disables RAM, so invert it here to decide when
                                 // RAM should be enabled.
