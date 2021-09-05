@@ -22,6 +22,7 @@ pub fn mirroring_mode_name(mode: Mirroring) -> &'static str {
 pub trait Mapper: Send {
     fn read_cpu(&mut self, address: u16) -> Option<u8> {return self.debug_read_cpu(address);}
     fn write_cpu(&mut self, address: u16, data: u8);
+    fn access_ppu(&mut self, _address: u16) {}
     fn read_ppu(&mut self, address: u16) -> Option<u8> {return self.debug_read_ppu(address);}
     fn write_ppu(&mut self, address: u16, data: u8);
     fn debug_read_cpu(&self, address: u16) -> Option<u8>;

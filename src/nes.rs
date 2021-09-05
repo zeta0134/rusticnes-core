@@ -131,6 +131,12 @@ impl NesState {
         while self.ppu.current_scanline != 242 {
             self.step();
         }
+        //println!("alignment: {}, parity: {}", self.ppu.current_scanline_cycle % 3, self.ppu.current_frame % 2);
+    }
+
+    pub fn nudge_ppu_alignment(&mut self) {
+        // Give the PPU a swift kick:
+        self.ppu.clock(&mut *self.mapper);
     }
 
     pub fn sram(&self) -> Vec<u8> {

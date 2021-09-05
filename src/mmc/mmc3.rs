@@ -93,8 +93,9 @@ impl Mmc3 {
         
         let last_filtered_a12 = self.filtered_a12;
 
-        if current_a12 == 1 {
+        if current_a12 == 1 {     
             self.filtered_a12 = 1;
+            self.low_a12_counter = 0;
         }
 
         let filtered_a12_rising_edge = (self.filtered_a12 == 1) && (last_filtered_a12 == 0);
@@ -107,14 +108,10 @@ impl Mmc3 {
     }
 
     fn snoop_cpu_m2(&mut self) {
-        if self.last_a12 == 1 {
-            self.low_a12_counter = 0;
-        } else {
-            if self.low_a12_counter < 255 {
-                self.low_a12_counter += 1;
-            }
+        if self.low_a12_counter < 255 && self.last_a12 == 0 {
+            self.low_a12_counter += 1;
         }
-        if self.low_a12_counter >= 4 {
+        if self.low_a12_counter >= 3 {            
             self.filtered_a12 = 0;
         }
     }
@@ -296,6 +293,10 @@ impl Mapper for Mmc3 {
         self.snoop_ppu_a12(address);
         return self._read_ppu(address);
     }
+
+    fn access_ppu(&mut self, address: u16) {
+        self.snoop_ppu_a12(address);
+    }    
 
     fn debug_read_ppu(&self, address: u16) -> Option<u8> {
         return self._read_ppu(address);

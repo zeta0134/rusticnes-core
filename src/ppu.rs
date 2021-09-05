@@ -250,6 +250,7 @@ impl PpuState {
         let masked_address = address & 0x3FFF;
         match masked_address {
             0x0000 ..= 0x3EFF => {
+                //println!("PPU: Read from 0x{:04X}, dot {} of scanline {}", masked_address, self.current_scanline_cycle, self.current_scanline);
                 self.open_bus = match mapper.read_ppu(masked_address) {
                     Some(byte) => byte,
                     None => self.open_bus
@@ -258,6 +259,14 @@ impl PpuState {
             }
             _ => {return self.debug_read_byte(mapper, address);}
         }
+
+    }
+
+    pub fn access_byte(&mut self, mapper: &mut dyn Mapper, address: u16) {
+        // process side effects here
+        let masked_address = address & 0x3FFF;
+        //println!("PPU: Access from 0x{:04X}, dot {} of scanline {}", masked_address, self.current_scanline_cycle, self.current_scanline);
+        mapper.access_ppu(masked_address)
     }
 
     pub fn write_byte(&mut self, mapper: &mut dyn Mapper, address: u16, data: u8) {
@@ -446,6 +455,24 @@ impl PpuState {
         self.current_vram_address |= (fine_y & 0b111) << 12;
     }
 
+    fn access_bg_tile_early(&mut self, mapper: &mut dyn Mapper) {
+        // "fetch" the first byte of CHR tile 0 early, and throw it away
+        // This simulates an oddity with the address bus
+        // that primarily affects MMC3 IRQ timings. Anything snooping A0-A13
+        // changes needs to see this address show up on cycle 0; a RD / WR is NOT
+        // performed, however
+
+        let mut pattern_address: u16 = 0x0000;
+        if (self.control & 0x10) != 0 {
+            pattern_address = 0x1000;
+        }
+
+        let tile_low_address = pattern_address + 
+            (self.tile_index as u16 * 16) + 
+             self.fine_y();
+        self.access_byte(mapper, tile_low_address);
+    }
+
     fn fetch_bg_tile(&mut self, mapper: &mut dyn Mapper, sub_cycle: u16) {
         let mut pattern_address: u16 = 0x0000;
         if (self.control & 0x10) != 0 {
@@ -616,14 +643,22 @@ impl PpuState {
                 if self.rendering_enabled() {
                     let tile_address = 0x2000 | (self.current_vram_address & 0x0FFF);
                     self.tile_index = self.read_byte(mapper, tile_address);
-
+                }
+            },
+            340 => {
+                if self.rendering_enabled() {
                     if self.current_frame & 0x1 != 0 {
                         // Skip ahead one cycle on odd frames. This jitter produces a cleaner image
                         // for NTSC signal generation.
-                        self.current_scanline_cycle = 340;
+
+                        // (note: the effect here is to skip to cycle 1 of scanline 0, since this
+                        // counter is immediately incremented)
+                        self.current_scanline_cycle = 0;
+                        self.current_scanline = 0;
+                        self.current_frame += 1;
                     }
                 }
-            },
+            }
             _ => ()
         }
     }
@@ -631,7 +666,10 @@ impl PpuState {
     fn render_scanline(&mut self, mapper: &mut dyn Mapper) {
         if self.rendering_enabled() {
             match self.current_scanline_cycle {
-                // cycle 0 is a dummy cycle, nothing happens
+                0 => {
+                    //println!("PPU Access: dot {} of scanline {} on frame {}", self.current_scanline_cycle, self.current_scanline, self.current_frame);
+                    self.access_bg_tile_early(mapper);
+                },
                 1 ..= 256 => {
                     self.draw_pixel(mapper);
                     self.shift_bg_registers();
