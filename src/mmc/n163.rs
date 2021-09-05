@@ -284,6 +284,26 @@ pub struct Namco163 {
     pub sound_enabled: bool,
     pub nt_ram_at_0000: bool,
     pub nt_ram_at_1000: bool,
+
+    pub audio_relative_mix: f64,
+}
+
+pub fn amplitude_from_db(db: f64) -> f64 {
+    return f64::powf(10.0, db / 20.0);
+}
+
+pub fn n163_mixing_level(submapper: u8) -> f64 {
+    // Reference: https://wiki.nesdev.com/w/index.php?title=Namco_163_audio#Mixing
+    let relative_db = match submapper {
+        1 => 0.0, // deprecated variant, no expansion audio
+        2 => 0.0, // non-deprecated variant, no expansion audio
+        // For each known cartridge, select the middle of the documented range
+        3 => (11.0 + 13.0) / 2.0, 
+        4 => (16.0 + 17.0) / 2.0,
+        5 => (18.0 + 19.5) / 2.0,
+        _ => 12.0 // unimplemented submapper or iNes 1.0, sensible default
+    };
+    return amplitude_from_db(relative_db);
 }
 
 impl Namco163 {
@@ -312,6 +332,8 @@ impl Namco163 {
             sound_enabled: false,
             nt_ram_at_0000: false,
             nt_ram_at_1000: false,
+
+            audio_relative_mix: n163_mixing_level(ines.header.submapper_number()),
         })
     }
 
@@ -495,8 +517,15 @@ impl Mapper for Namco163 {
     }
 
     fn mix_expansion_audio(&self, nes_sample: f64) -> f64 {
-        let expansion_mix = self.expansion_audio_chip.current_output / 256.0; // for testing
-        return nes_sample + expansion_mix;
+        // APU pulse numbers from https://wiki.nesdev.com/w/index.php?title=APU_Mixer
+        let nes_pulse_full_volume = 95.88 / ((8128.0 / 15.0) + 100.0);
+        let n163_square_full_volume = 15.0 * 15.0; // loudest sample * loudest volume
+        
+        // Normalize the N163 volume against APU pulse, then multiply that by our
+        // desired relative mix:
+        let n163_weight = (nes_pulse_full_volume / n163_square_full_volume) * self.audio_relative_mix;
+
+        return nes_sample + (self.expansion_audio_chip.current_output * n163_weight);
     }
 
     fn record_expansion_audio_output(&mut self, _nes_sample: f64) {
