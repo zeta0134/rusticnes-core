@@ -3,6 +3,7 @@ pub mod apu;
 pub mod asm;
 pub mod cartridge;
 pub mod cycle_cpu;
+pub mod tracked_events;
 pub mod ines;
 pub mod memory;
 pub mod memoryblock;

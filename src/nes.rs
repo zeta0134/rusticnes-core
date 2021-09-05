@@ -21,6 +21,7 @@ pub struct NesState {
     pub p2_data: u8,
     pub input_latch: bool,
     pub mapper: Box<dyn Mapper>,
+    pub last_frame: u32,
 }
 
 impl NesState {
@@ -38,6 +39,7 @@ impl NesState {
             p2_data: 0,
             input_latch: false,
             mapper: m,
+            last_frame: 0,
         }
     }
 
@@ -115,6 +117,10 @@ impl NesState {
             self.cycle();
             i += 1;
         }
+        if self.ppu.current_frame != self.last_frame {
+            self.memory.swap_event_buffers();
+            self.last_frame = self.ppu.current_frame;
+        }
     }
 
     pub fn run_until_hblank(&mut self) {
@@ -131,7 +137,7 @@ impl NesState {
         while self.ppu.current_scanline != 242 {
             self.step();
         }
-        //println!("alignment: {}, parity: {}", self.ppu.current_scanline_cycle % 3, self.ppu.current_frame % 2);
+        println!("Events collected: {}", self.memory.events_last_frame().len());
     }
 
     pub fn nudge_ppu_alignment(&mut self) {
