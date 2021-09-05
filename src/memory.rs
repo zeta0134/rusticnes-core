@@ -71,6 +71,14 @@ pub fn read_byte(nes: &mut NesState, address: u16) -> u8 {
                 // OAMDATA
                 4 => {
                     nes.ppu.latch = nes.ppu.oam[nes.ppu.oam_addr as usize];
+                    nes.event_tracker.track(TrackedEvent{
+                        scanline: nes.ppu.current_scanline,
+                        cycle: nes.ppu.current_scanline_cycle,
+                        event_type: EventType::CpuRead{
+                            address: address,
+                            data: nes.ppu.latch,
+                        }
+                    });
                 },
                 // PPUDATA
                 7 => {
@@ -95,6 +103,14 @@ pub fn read_byte(nes: &mut NesState, address: u16) -> u8 {
                     // address lines changing, so the mapper can react accordingly
                     let address = nes.ppu.current_vram_address;
                     nes.mapper.access_ppu(address);
+                    nes.event_tracker.track(TrackedEvent{
+                        scanline: nes.ppu.current_scanline,
+                        cycle: nes.ppu.current_scanline_cycle,
+                        event_type: EventType::CpuRead{
+                            address: address,
+                            data: nes.ppu.latch,
+                        }
+                    });
                 },
                 _ => {}
             }
