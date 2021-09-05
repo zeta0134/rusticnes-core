@@ -7,6 +7,7 @@ use memory;
 use memory::CpuMemory;
 use ppu::PpuState;
 use mmc::mapper::Mapper;
+use tracked_events::EventTracker;
 
 pub struct NesState {
     pub apu: ApuState,
@@ -22,6 +23,7 @@ pub struct NesState {
     pub input_latch: bool,
     pub mapper: Box<dyn Mapper>,
     pub last_frame: u32,
+    pub event_tracker: EventTracker,
 }
 
 impl NesState {
@@ -40,6 +42,7 @@ impl NesState {
             input_latch: false,
             mapper: m,
             last_frame: 0,
+            event_tracker: EventTracker::new(),
         }
     }
 
@@ -118,7 +121,7 @@ impl NesState {
             i += 1;
         }
         if self.ppu.current_frame != self.last_frame {
-            self.memory.swap_event_buffers();
+            self.event_tracker.swap_buffers();
             self.last_frame = self.ppu.current_frame;
         }
     }
@@ -137,7 +140,6 @@ impl NesState {
         while self.ppu.current_scanline != 242 {
             self.step();
         }
-        println!("Events collected: {}", self.memory.events_last_frame().len());
     }
 
     pub fn nudge_ppu_alignment(&mut self) {

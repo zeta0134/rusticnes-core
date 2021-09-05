@@ -1,17 +1,13 @@
 use nes::NesState;
 use tracked_events::TrackedEvent;
+use tracked_events::EventType;
 
 pub struct CpuMemory {
     pub iram_raw: Vec<u8>,
 
     pub recent_reads: Vec<u16>,
     pub recent_writes: Vec<u16>,
-    pub open_bus: u8,
-    pub tracked_events_a: Vec<TrackedEvent>,
-    pub size_a: usize,
-    pub tracked_events_b: Vec<TrackedEvent>,
-    pub size_b: usize,
-    pub a_active: bool,
+    pub open_bus: u8
 }
 
 impl CpuMemory {
@@ -21,53 +17,6 @@ impl CpuMemory {
             recent_reads: Vec::new(),
             recent_writes: Vec::new(),
             open_bus: 0,
-            // Way, way more events than we could *possibly* need, just to be safe
-            // Manually indexed, and never resized, to avoid allocations at runtime
-            tracked_events_a: vec![TrackedEvent::NullEvent; 262*341],
-            size_a: 0,
-            tracked_events_b: vec![TrackedEvent::NullEvent; 262*341],
-            size_b: 0,
-            a_active: true,
-        }
-    }
-
-    pub fn track_event(&mut self, event: TrackedEvent) {
-        match self.a_active {
-            true => {
-                self.tracked_events_a[self.size_a] = event;
-                self.size_a += 1;
-            },
-            false => {
-                self.tracked_events_b[self.size_b] = event;
-                self.size_b += 1;  
-            }
-        }
-    }
-
-    pub fn swap_event_buffers(&mut self) {
-        match self.a_active {
-            true => {
-                self.size_b = 0;
-                self.a_active = false;
-            },
-           false => {
-                self.size_a = 0;
-                self.a_active = true;
-            }
-        }
-    }
-
-    pub fn events_this_frame(&self) -> &[TrackedEvent] {
-        match self.a_active {
-            true => &self.tracked_events_a[..self.size_a],
-            false => &self.tracked_events_b[..self.size_b],
-        }
-    }
-
-    pub fn events_last_frame(&self) -> &[TrackedEvent] {
-        match self.a_active {
-            true => &self.tracked_events_b[..self.size_b],
-            false => &self.tracked_events_a[..self.size_a],
         }
     }
 }
@@ -109,11 +58,13 @@ pub fn read_byte(nes: &mut NesState, address: u16) -> u8 {
                     nes.ppu.write_toggle = false;
                     nes.ppu.latch = (nes.ppu.status & 0xE0) + (nes.ppu.latch & 0x1F);
                     nes.ppu.status = nes.ppu.status & 0x7F; // Clear VBlank bit
-                    nes.memory.track_event(TrackedEvent::CpuRead{
+                    nes.event_tracker.track(TrackedEvent{
                         scanline: nes.ppu.current_scanline,
                         cycle: nes.ppu.current_scanline_cycle,
-                        address: address,
-                        data: nes.ppu.latch,
+                        event_type: EventType::CpuRead{
+                            address: address,
+                            data: nes.ppu.latch,
+                        }
                     });
                     return nes.ppu.latch;
                 },
