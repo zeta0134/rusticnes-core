@@ -600,6 +600,14 @@ impl ApuState {
         self.current_cycle += 1;
     }
 
+    pub fn samples_queued(&self) -> usize {
+        let mut sample_count = self.staging_buffer.index();
+        if self.buffer_full {
+            sample_count += self.output_buffer.len();
+        }
+        return sample_count;
+    }
+
     pub fn dump_sample_buffer(&self) {
         let mut file =
             OpenOptions::new()
