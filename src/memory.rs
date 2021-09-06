@@ -198,6 +198,15 @@ pub fn write_byte(nes: &mut NesState, address: u16, data: u8) {
     match address {
         0x0000 ..= 0x1FFF => nes.memory.iram_raw[(address & 0x7FF) as usize] = data,
         0x2000 ..= 0x3FFF => {
+            // Track every PPU register written, unconditionally
+            nes.event_tracker.track(TrackedEvent{
+                scanline: nes.ppu.current_scanline,
+                cycle: nes.ppu.current_scanline_cycle,
+                event_type: EventType::CpuWrite{
+                    address: address,
+                    data: data,
+                }
+            });
             // PPU
             let ppu_reg = address & 0x7;
             nes.ppu.latch = data;
