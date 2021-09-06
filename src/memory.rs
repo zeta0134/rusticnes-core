@@ -56,13 +56,13 @@ pub fn read_byte(nes: &mut NesState, address: u16) -> u8 {
                     nes.ppu.write_toggle = false;
                     nes.ppu.latch = (nes.ppu.status & 0xE0) + (nes.ppu.latch & 0x1F);
                     nes.ppu.status = nes.ppu.status & 0x7F; // Clear VBlank bit
-                    nes.event_tracker.snoop_cpu_read(address, nes.ppu.latch);
+                    nes.event_tracker.snoop_cpu_read(nes.registers.pc, address, nes.ppu.latch);
                     return nes.ppu.latch;
                 },
                 // OAMDATA
                 4 => {
                     nes.ppu.latch = nes.ppu.oam[nes.ppu.oam_addr as usize];
-                    nes.event_tracker.snoop_cpu_read(address, nes.ppu.latch);
+                    nes.event_tracker.snoop_cpu_read(nes.registers.pc, address, nes.ppu.latch);
                 },
                 // PPUDATA
                 7 => {
@@ -87,14 +87,14 @@ pub fn read_byte(nes: &mut NesState, address: u16) -> u8 {
                     // address lines changing, so the mapper can react accordingly
                     let address = nes.ppu.current_vram_address;
                     nes.mapper.access_ppu(address);
-                    nes.event_tracker.snoop_cpu_read(address, nes.ppu.latch);
+                    nes.event_tracker.snoop_cpu_read(nes.registers.pc, address, nes.ppu.latch);
                 },
                 _ => {}
             }
         },
         0x4015 => {
             let apu_byte = nes.apu.read_register(address);
-            nes.event_tracker.snoop_cpu_read(address, apu_byte);
+            nes.event_tracker.snoop_cpu_read(nes.registers.pc, address, apu_byte);
             return apu_byte;
         },
         0x4016 => {
@@ -105,7 +105,7 @@ pub fn read_byte(nes: &mut NesState, address: u16) -> u8 {
             }
             let result = 0x40 | (nes.p1_data & 0x1);
             nes.p1_data = nes.p1_data >> 1;
-            nes.event_tracker.snoop_cpu_read(address, result);
+            nes.event_tracker.snoop_cpu_read(nes.registers.pc, address, result);
             return result;
         },
         0x4017 => {
@@ -116,7 +116,7 @@ pub fn read_byte(nes: &mut NesState, address: u16) -> u8 {
             }
             let result = 0x40 | (nes.p2_data & 0x1);
             nes.p2_data = nes.p2_data >> 1;
-            nes.event_tracker.snoop_cpu_read(address, result);
+            nes.event_tracker.snoop_cpu_read(nes.registers.pc, address, result);
             return result;
         },
         _ => {}
@@ -124,7 +124,7 @@ pub fn read_byte(nes: &mut NesState, address: u16) -> u8 {
 
     let byte = _read_byte(nes, address, mapped_byte);
     nes.memory.open_bus = byte;
-    nes.event_tracker.snoop_cpu_read(address, byte);
+    nes.event_tracker.snoop_cpu_read(nes.registers.pc, address, byte);
     return byte;
 }
 
@@ -176,7 +176,7 @@ fn _read_byte(nes: &NesState, address: u16, mapped_byte: u8) -> u8 {
 pub fn write_byte(nes: &mut NesState, address: u16, data: u8) {
     // Track every byte written, unconditionally
     // (filtering is done inside the tracker)
-    nes.event_tracker.snoop_cpu_write(address, data);
+    nes.event_tracker.snoop_cpu_write(nes.registers.pc, address, data);
 
     // The mapper *always* sees the write. Even to RAM, and even to internal registers.
     // Most mappers ignore writes to addresses below 0x6000. Some (notably MMC5) do not.

@@ -1,9 +1,9 @@
 #[derive(Clone, Copy)]
 pub enum EventType {
     NullEvent,
-    CpuRead{address: u16, data: u8},
-    CpuWrite{address: u16, data: u8},
-    CpuExecute{address: u16, data: u8},
+    CpuRead{program_counter: u16, address: u16, data: u8},
+    CpuWrite{program_counter: u16, address: u16, data: u8},
+    CpuExecute{program_counter: u16, data: u8},
 }
 
 #[derive(Clone, Copy)]
@@ -97,12 +97,13 @@ impl EventTracker {
         }
     }
 
-    pub fn snoop_cpu_read(&mut self, address: u16, data: u8) {
+    pub fn snoop_cpu_read(&mut self, program_counter: u16, address: u16, data: u8) {
         if (self.cpu_snoop_list[address as usize] & CPU_READ) != 0 {
             self.track(TrackedEvent{
                 scanline: self.current_scanline,
                 cycle: self.current_cycle,
                 event_type: EventType::CpuRead{
+                    program_counter: program_counter,
                     address: address,
                     data: data,
                 }
@@ -110,12 +111,13 @@ impl EventTracker {
         }
     }
 
-    pub fn snoop_cpu_write(&mut self, address: u16, data: u8) {
+    pub fn snoop_cpu_write(&mut self, program_counter: u16, address: u16, data: u8) {
         if (self.cpu_snoop_list[address as usize] & CPU_WRITE) != 0 {
             self.track(TrackedEvent{
                 scanline: self.current_scanline,
                 cycle: self.current_cycle,
                 event_type: EventType::CpuWrite{
+                    program_counter: program_counter,
                     address: address,
                     data: data,
                 }
@@ -123,13 +125,13 @@ impl EventTracker {
         }
     }
 
-    pub fn snoop_cpu_execute(&mut self, address: u16, data: u8) {
-        if (self.cpu_snoop_list[address as usize] & CPU_EXECUTE) != 0 {
+    pub fn snoop_cpu_execute(&mut self, program_counter: u16, data: u8) {
+        if (self.cpu_snoop_list[program_counter as usize] & CPU_EXECUTE) != 0 {
             self.track(TrackedEvent{
                 scanline: self.current_scanline,
                 cycle: self.current_cycle,
                 event_type: EventType::CpuExecute{
-                    address: address,
+                    program_counter: program_counter,
                     data: data,
                 }
             });
