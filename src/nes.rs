@@ -106,6 +106,8 @@ impl NesState {
         self.ppu.clock(&mut *self.mapper);
         self.ppu.clock(&mut *self.mapper);
         self.ppu.clock(&mut *self.mapper);
+        self.event_tracker.current_scanline = self.ppu.current_scanline;
+        self.event_tracker.current_cycle = self.ppu.current_scanline_cycle;
         self.apu.clock_apu(&mut *self.mapper);
         self.mapper.clock_cpu();
     }
@@ -145,6 +147,8 @@ impl NesState {
     pub fn nudge_ppu_alignment(&mut self) {
         // Give the PPU a swift kick:
         self.ppu.clock(&mut *self.mapper);
+        self.event_tracker.current_scanline = self.ppu.current_scanline;
+        self.event_tracker.current_cycle = self.ppu.current_scanline_cycle;
     }
 
     pub fn sram(&self) -> Vec<u8> {

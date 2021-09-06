@@ -3,13 +3,14 @@ pub enum EventType {
     NullEvent,
     CpuRead{address: u16, data: u8},
     CpuWrite{address: u16, data: u8},
+    CpuExecute{address: u16, data: u8},
 }
 
 #[derive(Clone, Copy)]
 pub struct TrackedEvent {
     pub scanline: u16,
     pub cycle: u16,
-    pub event_type: EventType
+    pub event_type: EventType,
 }
 
 pub struct EventTracker {
@@ -18,10 +19,30 @@ pub struct EventTracker {
     pub tracked_events_b: Vec<TrackedEvent>,
     pub size_b: usize,
     pub a_active: bool,
+    pub current_scanline: u16,
+    pub current_cycle: u16,
+    pub cpu_snoop_list: Vec<u8>,
 }
+
+const CPU_READ: u8    = 0b0000_0001;
+const CPU_WRITE: u8   = 0b0000_0010;
+const CPU_EXECUTE: u8 = 0b0000_0100;
 
 impl EventTracker {
     pub fn new() -> EventTracker {
+        let mut default_cpu_snoops = vec![0u8; 0x10000];
+
+        default_cpu_snoops[0x2000] = CPU_WRITE;
+        default_cpu_snoops[0x2001] = CPU_WRITE;
+        default_cpu_snoops[0x2002] = CPU_WRITE | CPU_READ;
+        default_cpu_snoops[0x2003] = CPU_WRITE;
+        default_cpu_snoops[0x2004] = CPU_WRITE | CPU_READ;
+        default_cpu_snoops[0x2005] = CPU_WRITE;
+        default_cpu_snoops[0x2006] = CPU_WRITE;
+        default_cpu_snoops[0x2007] = CPU_WRITE | CPU_READ;
+
+        default_cpu_snoops[0x2007] = CPU_WRITE | CPU_READ;        
+
         return EventTracker {
             // Way, way more events than we could *possibly* need, just to be safe
             // Manually indexed, and never resized, to avoid allocations at runtime
@@ -30,6 +51,9 @@ impl EventTracker {
             tracked_events_b: vec![TrackedEvent{scanline: 0xFFFF, cycle: 0xFFFF, event_type: EventType::NullEvent}; 262*341],
             size_b: 0,
             a_active: true,
+            current_scanline: 0,
+            current_cycle: 0,
+            cpu_snoop_list: default_cpu_snoops,
         }
     }
 
@@ -70,6 +94,45 @@ impl EventTracker {
         match self.a_active {
             true => &self.tracked_events_b[..self.size_b],
             false => &self.tracked_events_a[..self.size_a],
+        }
+    }
+
+    pub fn snoop_cpu_read(&mut self, address: u16, data: u8) {
+        if (self.cpu_snoop_list[address as usize] & CPU_READ) != 0 {
+            self.track(TrackedEvent{
+                scanline: self.current_scanline,
+                cycle: self.current_cycle,
+                event_type: EventType::CpuRead{
+                    address: address,
+                    data: data,
+                }
+            });
+        }
+    }
+
+    pub fn snoop_cpu_write(&mut self, address: u16, data: u8) {
+        if (self.cpu_snoop_list[address as usize] & CPU_WRITE) != 0 {
+            self.track(TrackedEvent{
+                scanline: self.current_scanline,
+                cycle: self.current_cycle,
+                event_type: EventType::CpuWrite{
+                    address: address,
+                    data: data,
+                }
+            });
+        }
+    }
+
+    pub fn snoop_cpu_execute(&mut self, address: u16, data: u8) {
+        if (self.cpu_snoop_list[address as usize] & CPU_EXECUTE) != 0 {
+            self.track(TrackedEvent{
+                scanline: self.current_scanline,
+                cycle: self.current_cycle,
+                event_type: EventType::CpuExecute{
+                    address: address,
+                    data: data,
+                }
+            });
         }
     }
 }
