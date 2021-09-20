@@ -1,4 +1,4 @@
-use apu::AudioChannelState;
+use crate::apu::AudioChannelState;
 
 #[derive(Copy, Clone, PartialEq)]
 pub enum Mirroring {

@@ -3,16 +3,16 @@
 // it here quite yet.
 // Reference capabilities: https://wiki.nesdev.com/w/index.php/MMC5
 
-use ines::INesCartridge;
-use memoryblock::MemoryBlock;
+use crate::ines::INesCartridge;
+use crate::memoryblock::MemoryBlock;
 
-use mmc::mapper::*;
-use apu::PulseChannelState;
+use crate::mmc::mapper::*;
+use crate::apu::PulseChannelState;
 
-use apu::AudioChannelState;
-use apu::RingBuffer;
-use apu::filters;
-use apu::filters::DspFilter;
+use crate::apu::AudioChannelState;
+use crate::apu::RingBuffer;
+use crate::apu::filters;
+use crate::apu::filters::DspFilter;
 
 #[derive(Copy, Clone, PartialEq)]
 pub enum PpuMode {

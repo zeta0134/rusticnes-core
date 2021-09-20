@@ -1,19 +1,19 @@
 // Namco 163 (and also 129), reference capabilities:
 // https://wiki.nesdev.com/w/index.php?title=INES_Mapper_019
 
-use ines::INesCartridge;
-use memoryblock::MemoryBlock;
-use memoryblock::MemoryType;
+use crate::ines::INesCartridge;
+use crate::memoryblock::MemoryBlock;
+use crate::memoryblock::MemoryType;
 
-use mmc::mapper::*;
+use crate::mmc::mapper::*;
 
-use apu::AudioChannelState;
-use apu::PlaybackRate;
-use apu::Volume;
-use apu::Timbre;
-use apu::RingBuffer;
-use apu::filters;
-use apu::filters::DspFilter;
+use crate::apu::AudioChannelState;
+use crate::apu::PlaybackRate;
+use crate::apu::Volume;
+use crate::apu::Timbre;
+use crate::apu::RingBuffer;
+use crate::apu::filters;
+use crate::apu::filters::DspFilter;
 
 pub struct Namco163AudioChannel {
     pub debug_disable: bool,

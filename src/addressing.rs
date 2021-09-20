@@ -1,7 +1,7 @@
-use cycle_cpu::Registers;
-use memory::read_byte;
-use memory::write_byte;
-use nes::NesState;
+use crate::cycle_cpu::Registers;
+use crate::memory::read_byte;
+use crate::memory::write_byte;
+use crate::nes::NesState;
 
 type ImpliedOpcode = fn(&mut Registers);
 type ReadOpcode = fn(&mut Registers, u8);

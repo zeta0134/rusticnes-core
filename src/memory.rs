@@ -1,4 +1,4 @@
-use nes::NesState;
+use crate::nes::NesState;
 
 pub struct CpuMemory {
     pub iram_raw: Vec<u8>,

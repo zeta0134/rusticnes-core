@@ -2,7 +2,7 @@
 // later be rewritten with cycle-accurate logic once we're past proof of concept
 // and prototype stages.
 
-use mmc::mapper::*;
+use crate::mmc::mapper::*;
 
 #[derive(Copy, Clone)]
 pub struct SpriteLatch {
