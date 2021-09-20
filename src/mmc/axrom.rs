@@ -1,11 +1,11 @@
 // AxROM, bank switchable PRG ROM, 8kb CHR RAM, basic single-screen mirroring.
 // Reference capabilities: https://wiki.nesdev.com/w/index.php/AxROM
 
-use ines::INesCartridge;
-use memoryblock::MemoryBlock;
+use crate::ines::INesCartridge;
+use crate::memoryblock::MemoryBlock;
 
-use mmc::mapper::*;
-use mmc::mirroring;
+use crate::mmc::mapper::*;
+use crate::mmc::mirroring;
 
 pub struct AxRom {
     pub prg_rom: MemoryBlock,

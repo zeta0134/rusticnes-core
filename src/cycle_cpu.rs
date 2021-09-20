@@ -3,12 +3,12 @@
 // http://www.llx.com/~nparker/a2/opcodes.html - For opcode decoding structure
 // http://nesdev.com/6502_cpu.txt - for information on cycle timings for each addressing mode
 
-use addressing;
-use memory::read_byte;
-use memory::write_byte;
-use nes::NesState;
-use opcodes;
-use unofficial_opcodes;
+use crate::addressing;
+use crate::memory::read_byte;
+use crate::memory::write_byte;
+use crate::nes::NesState;
+use crate::opcodes;
+use crate::unofficial_opcodes;
 
 #[derive(Copy, Clone)]
 pub struct Flags {

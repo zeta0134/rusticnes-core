@@ -1,4 +1,4 @@
-use mmc::mapper::Mapper;
+use crate::mmc::mapper::Mapper;
 
 use std::fs::OpenOptions;
 use std::io::prelude::*;

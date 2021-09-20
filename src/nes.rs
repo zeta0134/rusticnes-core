@@ -1,13 +1,13 @@
-use apu::ApuState;
-use cartridge;
-use cycle_cpu;
-use cycle_cpu::CpuState;
-use cycle_cpu::Registers;
-use memory;
-use memory::CpuMemory;
-use ppu::PpuState;
-use mmc::mapper::Mapper;
-use tracked_events::EventTracker;
+use crate::apu::ApuState;
+use crate::cartridge;
+use crate::cycle_cpu;
+use crate::cycle_cpu::CpuState;
+use crate::cycle_cpu::Registers;
+use crate::memory;
+use crate::memory::CpuMemory;
+use crate::ppu::PpuState;
+use crate::mmc::mapper::Mapper;
+use crate::tracked_events::EventTracker;
 
 pub struct NesState {
     pub apu: ApuState,

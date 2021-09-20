@@ -1,11 +1,11 @@
 // A very simple Mapper with no esoteric features or bank switching.
 // Reference capabilities: https://wiki.nesdev.com/w/index.php/NROM
 
-use ines::INesCartridge;
-use memoryblock::MemoryBlock;
+use crate::ines::INesCartridge;
+use crate::memoryblock::MemoryBlock;
 
-use mmc::mapper::*;
-use mmc::mirroring;
+use crate::mmc::mapper::*;
+use crate::mmc::mirroring;
 
 pub struct Action53 {
     prg_rom: MemoryBlock,

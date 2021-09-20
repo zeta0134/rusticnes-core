@@ -1,4 +1,4 @@
-use mmc::mapper::Mapper;
+use crate::mmc::mapper::Mapper;
 use super::audio_channel::AudioChannelState;
 use super::ring_buffer::RingBuffer;
 use super::filters;

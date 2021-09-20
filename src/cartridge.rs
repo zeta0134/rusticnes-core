@@ -1,23 +1,23 @@
-use mmc::mapper::*;
-use mmc::action53::Action53;
-use mmc::axrom::AxRom;
-use mmc::bnrom::BnRom;
-use mmc::cnrom::CnRom;
-use mmc::fme7::Fme7;
-use mmc::gxrom::GxRom;
-use mmc::ines31::INes31;
-use mmc::mmc1::Mmc1;
-use mmc::mmc3::Mmc3;
-use mmc::mmc5::Mmc5;
-use mmc::n163::Namco163;
-use mmc::nrom::Nrom;
-use mmc::nsf::NsfMapper;
-use mmc::pxrom::PxRom;
-use mmc::uxrom::UxRom;
-use mmc::vrc6::Vrc6;
+use crate::mmc::mapper::*;
+use crate::mmc::action53::Action53;
+use crate::mmc::axrom::AxRom;
+use crate::mmc::bnrom::BnRom;
+use crate::mmc::cnrom::CnRom;
+use crate::mmc::fme7::Fme7;
+use crate::mmc::gxrom::GxRom;
+use crate::mmc::ines31::INes31;
+use crate::mmc::mmc1::Mmc1;
+use crate::mmc::mmc3::Mmc3;
+use crate::mmc::mmc5::Mmc5;
+use crate::mmc::n163::Namco163;
+use crate::mmc::nrom::Nrom;
+use crate::mmc::nsf::NsfMapper;
+use crate::mmc::pxrom::PxRom;
+use crate::mmc::uxrom::UxRom;
+use crate::mmc::vrc6::Vrc6;
 
-use ines::INesCartridge;
-use nsf::NsfFile;
+use crate::ines::INesCartridge;
+use crate::nsf::NsfFile;
 
 use std::io::Read;
 

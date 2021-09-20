@@ -1,11 +1,11 @@
 // UxROM, simple bank switchable PRG ROM with the last page fixed
 // Reference capabilities: https://wiki.nesdev.com/w/index.php/UxROM
 
-use ines::INesCartridge;
-use memoryblock::MemoryBlock;
+use crate::ines::INesCartridge;
+use crate::memoryblock::MemoryBlock;
 
-use mmc::mapper::*;
-use mmc::mirroring;
+use crate::mmc::mapper::*;
+use crate::mmc::mirroring;
 
 pub struct UxRom {
     pub prg_rom: MemoryBlock,

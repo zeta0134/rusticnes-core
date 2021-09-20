@@ -3,11 +3,11 @@
 // dependency free for my own sanity.
 // Reference capabilities: https://wiki.nesdev.com/w/index.php/BNROM
 
-use ines::INesCartridge;
-use memoryblock::MemoryBlock;
+use crate::ines::INesCartridge;
+use crate::memoryblock::MemoryBlock;
 
-use mmc::mapper::*;
-use mmc::mirroring;
+use crate::mmc::mapper::*;
+use crate::mmc::mirroring;
 
 pub struct BnRom {
     pub prg_rom: MemoryBlock,
