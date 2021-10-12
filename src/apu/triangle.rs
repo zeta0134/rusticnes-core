@@ -1,3 +1,5 @@
+use std::convert::TryInto;
+
 use super::length_counter::LengthCounterState;
 use super::audio_channel::AudioChannelState;
 use super::audio_channel::PlaybackRate;
@@ -99,6 +101,32 @@ impl TriangleChannelState {
                                      15,14,13,12,11,10,9,8,7,6,5,4,3,2,1,0];
             return triangle_sequence[self.sequence_counter as usize];
         }
+    }
+
+    pub fn save_state(&self, data: &mut Vec<u8>) {
+        self.length_counter.save_state(data);
+        data.push(self.control_flag as u8);
+        data.push(self.linear_reload_flag as u8);
+        data.push(self.linear_counter_initial);
+        data.push(self.linear_counter_current);
+        data.push(self.sequence_counter);
+        data.extend(&self.period_initial.to_le_bytes());
+        data.extend(&self.period_current.to_le_bytes());
+        data.push(self.length);
+        data.extend(&self.cpu_clock_rate.to_le_bytes());
+    }
+
+    pub fn load_state(&mut self, data: &mut Vec<u8>) {
+        self.cpu_clock_rate = u64::from_le_bytes(data.split_off(data.len() - 8).try_into().unwrap());
+        self.length = data.pop().unwrap();
+        self.period_current = u16::from_le_bytes(data.split_off(data.len() - 2).try_into().unwrap());
+        self.period_initial = u16::from_le_bytes(data.split_off(data.len() - 2).try_into().unwrap());
+        self.sequence_counter = data.pop().unwrap();
+        self.linear_counter_current = data.pop().unwrap();
+        self.linear_counter_initial = data.pop().unwrap();
+        self.linear_reload_flag = data.pop().unwrap() != 0;
+        self.control_flag = data.pop().unwrap() != 0;
+        self.length_counter.load_state(data);
     }
 }
 

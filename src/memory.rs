@@ -17,6 +17,16 @@ impl CpuMemory {
             open_bus: 0,
         }
     }
+
+    pub fn save_state(&self, data: &mut Vec<u8>) {
+        data.extend(&self.iram_raw);
+        data.push(self.open_bus);
+    }
+
+    pub fn load_state(&mut self, data: &mut Vec<u8>) {
+        self.open_bus = data.pop().unwrap();
+        self.iram_raw = data.split_off(data.len() - self.iram_raw.len());
+    }
 }
 
 pub fn debug_read_byte(nes: &NesState, address: u16) -> u8 {

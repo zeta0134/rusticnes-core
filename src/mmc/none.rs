@@ -32,5 +32,5 @@ impl Mapper for NoneMapper {
 
     fn write_ppu(&mut self, _: u16, _: u8) {
         //Do nothing
-    }    
+    }
 }

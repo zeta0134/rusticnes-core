@@ -1,3 +1,5 @@
+use std::convert::TryInto;
+
 use crate::mmc::mapper::Mapper;
 use super::audio_channel::AudioChannelState;
 use super::ring_buffer::RingBuffer;
@@ -148,6 +150,46 @@ impl DmcState {
 
     pub fn output(&self) -> i16 {
         return self.output_level as i16;
+    }
+
+    pub fn save_state(&self, data: &mut Vec<u8>) {
+        data.push(self.looping as u8);
+        data.extend(&self.period_initial.to_le_bytes());
+        data.extend(&self.period_current.to_le_bytes());
+        data.push(self.output_level);
+        data.extend(&self.starting_address.to_le_bytes());
+        data.extend(&self.sample_length.to_le_bytes());
+        data.extend(&self.current_address.to_le_bytes());
+        data.push(self.sample_buffer);
+        data.push(self.shift_register);
+        data.push(self.sample_buffer_empty as u8);
+        data.push(self.bits_remaining);
+        data.extend(&self.bytes_remaining.to_le_bytes());
+        data.push(self.silence_flag as u8);
+        data.push(self.interrupt_enabled as u8);
+        data.push(self.interrupt_flag as u8);
+        data.push(self.rdy_line as u8);
+        data.push(self.rdy_delay);
+    }
+
+    pub fn load_state(&mut self, data: &mut Vec<u8>) {
+        self.rdy_delay = data.pop().unwrap();
+        self.rdy_line = data.pop().unwrap() != 0;
+        self.interrupt_flag = data.pop().unwrap() != 0;
+        self.interrupt_enabled = data.pop().unwrap() != 0;
+        self.silence_flag = data.pop().unwrap() != 0;
+        self.bytes_remaining = u16::from_le_bytes(data.split_off(data.len() - 2).try_into().unwrap());
+        self.bits_remaining = data.pop().unwrap();
+        self.sample_buffer_empty = data.pop().unwrap() != 0;
+        self.shift_register = data.pop().unwrap();
+        self.sample_buffer = data.pop().unwrap();
+        self.current_address = u16::from_le_bytes(data.split_off(data.len() - 2).try_into().unwrap());
+        self.sample_length = u16::from_le_bytes(data.split_off(data.len() - 2).try_into().unwrap());
+        self.starting_address = u16::from_le_bytes(data.split_off(data.len() - 2).try_into().unwrap());
+        self.output_level = data.pop().unwrap();
+        self.period_current = u16::from_le_bytes(data.split_off(data.len() - 2).try_into().unwrap());
+        self.period_initial = u16::from_le_bytes(data.split_off(data.len() - 2).try_into().unwrap());
+        self.looping = data.pop().unwrap() != 0;
     }
 }
 
