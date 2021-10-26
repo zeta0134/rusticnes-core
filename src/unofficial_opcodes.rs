@@ -5,6 +5,8 @@ use nes::NesState;
 use memory::read_byte;
 use memory::write_byte;
 
+use crate::mmc::mapper::Mapper;
+
 // Note: Opcode names follow the undefined opcodes tabke here:
 // https://wiki.nesdev.com/w/index.php/CPU_unofficial_opcodes
 
@@ -68,19 +70,19 @@ pub fn isc(registers: &mut Registers, data: u8) -> u8 {
 // point. These are weird enough to break the opcode structure, and so get custom functions.
 
 // UNSTABLE. Performs A & X & H, where H is usually the high byte of the target address + 1.
-pub fn ahx_indirect_indexed_y(nes: &mut NesState) {
+pub fn ahx_indirect_indexed_y(nes: &mut NesState, mapper: &mut dyn Mapper) {
   match nes.cpu.tick {
-    2 => addressing::read_data1(nes),
+    2 => addressing::read_data1(nes, mapper),
     3 => {
       // Read low byte of indirect address
       let pointer_low = nes.cpu.data1 as u16;
-      nes.cpu.temp_address = read_byte(nes, pointer_low) as u16;
+      nes.cpu.temp_address = read_byte(nes, mapper, pointer_low) as u16;
       nes.cpu.data1 = nes.cpu.data1.wrapping_add(1);
     },
     4 => {
       // Read high byte of indirect address
       let pointer_high = nes.cpu.data1 as u16;
-      nes.cpu.temp_address = ((read_byte(nes, pointer_high) as u16) << 8) | nes.cpu.temp_address;
+      nes.cpu.temp_address = ((read_byte(nes, mapper, pointer_high) as u16) << 8) | nes.cpu.temp_address;
     },
     5 => {
       // Add Y to LOW BYTE of the effective address
@@ -88,7 +90,7 @@ pub fn ahx_indirect_indexed_y(nes: &mut NesState) {
       nes.cpu.temp_address = (nes.cpu.temp_address & 0xFF00) | (low_byte & 0xFF);
       let temp_address = nes.cpu.temp_address;
       // Dummy read from the new address before it is fixed
-      let _ = read_byte(nes, temp_address);
+      let _ = read_byte(nes, mapper, temp_address);
       // Save the result of our weird modification here:
       nes.cpu.data1 = nes.registers.a & nes.registers.x & (nes.cpu.temp_address.wrapping_add(0x100) >> 8) as u8;
       if low_byte > 0xFF {
@@ -100,24 +102,24 @@ pub fn ahx_indirect_indexed_y(nes: &mut NesState) {
     6 => {
       let data = nes.cpu.data1;
       let address = nes.cpu.temp_address;
-      write_byte(nes, address, data);
+      write_byte(nes, mapper, address, data);
       nes.cpu.tick = 0;
     },
     _ => {}
   }
 }
 
-pub fn ahx_absolute_indexed_y(nes: &mut NesState) {
+pub fn ahx_absolute_indexed_y(nes: &mut NesState, mapper: &mut dyn Mapper) {
   match nes.cpu.tick {
-    2 => addressing::read_address_low(nes),
-    3 => addressing::read_address_high(nes),
+    2 => addressing::read_address_low(nes, mapper),
+    3 => addressing::read_address_high(nes, mapper),
     4 => {
       // Add Y to LOW BYTE of the effective address
       let low_byte = (nes.cpu.temp_address & 0xFF) + (nes.registers.y as u16);
       nes.cpu.temp_address = (nes.cpu.temp_address & 0xFF00) | (low_byte & 0xFF);
       let temp_address = nes.cpu.temp_address;
       // Dummy read from the new address before it is fixed
-      let _ = read_byte(nes, temp_address);
+      let _ = read_byte(nes, mapper, temp_address);
       // Save the result of our weird modification here:
       nes.cpu.data1 = nes.registers.a & nes.registers.x & (nes.cpu.temp_address.wrapping_add(0x100) >> 8) as u8;
       if low_byte > 0xFF {
@@ -128,17 +130,17 @@ pub fn ahx_absolute_indexed_y(nes: &mut NesState) {
     5 => {
       let data = nes.cpu.data1;
       let address = nes.cpu.temp_address;
-      write_byte(nes, address, data);
+      write_byte(nes, mapper, address, data);
       nes.cpu.tick = 0;
     },
     _ => {}
   }
 }
 
-pub fn tas(nes: &mut NesState) {
+pub fn tas(nes: &mut NesState, mapper: &mut dyn Mapper) {
   match nes.cpu.tick {
-    2 => addressing::read_address_low(nes),
-    3 => addressing::read_address_high(nes),
+    2 => addressing::read_address_low(nes, mapper),
+    3 => addressing::read_address_high(nes, mapper),
     4 => {
       // Add X to LOW BYTE of the effective address
       // Accuracy note: technically this occurs in cycle 4, but as it has no effect on emulation, I've
@@ -147,7 +149,7 @@ pub fn tas(nes: &mut NesState) {
       nes.cpu.temp_address = (nes.cpu.temp_address & 0xFF00) | (low_byte & 0xFF);
       let temp_address = nes.cpu.temp_address;
       // Dummy read from the new address before it is fixed
-      let _ = read_byte(nes, temp_address);
+      let _ = read_byte(nes, mapper, temp_address);
 
       // First, set S = A & X
       nes.registers.s = nes.registers.a & nes.registers.x;
@@ -164,7 +166,7 @@ pub fn tas(nes: &mut NesState) {
     5 => {
       let data = nes.cpu.data1;
       let address = nes.cpu.temp_address;
-      write_byte(nes, address, data);
+      write_byte(nes, mapper, address, data);
       nes.cpu.tick = 0;
     },
     _ => {}
@@ -224,17 +226,17 @@ pub fn axs(registers: &mut Registers, data: u8) {
   registers.flags.negative = registers.x & 0x80 != 0;
 }
 
-pub fn shx(nes: &mut NesState) {
+pub fn shx(nes: &mut NesState, mapper: &mut dyn Mapper) {
   match nes.cpu.tick {
-    2 => addressing::read_address_low(nes),
-    3 => addressing::read_address_high(nes),
+    2 => addressing::read_address_low(nes, mapper),
+    3 => addressing::read_address_high(nes, mapper),
     4 => {
       // Add X to LOW BYTE of the effective address
       let low_byte = (nes.cpu.temp_address & 0xFF) + (nes.registers.y as u16);
       nes.cpu.temp_address = (nes.cpu.temp_address & 0xFF00) | (low_byte & 0xFF);
       let temp_address = nes.cpu.temp_address;
       // Dummy read from the new address before it is fixed
-      let _ = read_byte(nes, temp_address);
+      let _ = read_byte(nes, mapper, temp_address);
       // Save the result of our weird modification here:
       nes.cpu.data1 = nes.registers.x & (nes.cpu.temp_address.wrapping_add(0x100) >> 8) as u8;
       if low_byte > 0xFF {
@@ -245,24 +247,24 @@ pub fn shx(nes: &mut NesState) {
     5 => {
       let data = nes.cpu.data1;
       let address = nes.cpu.temp_address;
-      write_byte(nes, address, data);
+      write_byte(nes, mapper, address, data);
       nes.cpu.tick = 0;
     },
     _ => {}
   }
 }
 
-pub fn shy(nes: &mut NesState) {
+pub fn shy(nes: &mut NesState, mapper: &mut dyn Mapper) {
   match nes.cpu.tick {
-    2 => addressing::read_address_low(nes),
-    3 => addressing::read_address_high(nes),
+    2 => addressing::read_address_low(nes, mapper),
+    3 => addressing::read_address_high(nes, mapper),
     4 => {
       // Add X to LOW BYTE of the effective address
       let low_byte = (nes.cpu.temp_address & 0xFF) + (nes.registers.x as u16);
       nes.cpu.temp_address = (nes.cpu.temp_address & 0xFF00) | (low_byte & 0xFF);
       let temp_address = nes.cpu.temp_address;
       // Dummy read from the new address before it is fixed
-      let _ = read_byte(nes, temp_address);
+      let _ = read_byte(nes, mapper, temp_address);
       // Save the result of our weird modification here:
       nes.cpu.data1 = nes.registers.y & (nes.cpu.temp_address.wrapping_add(0x100) >> 8) as u8;
       if low_byte > 0xFF {
@@ -273,7 +275,7 @@ pub fn shy(nes: &mut NesState) {
     5 => {
       let data = nes.cpu.data1;
       let address = nes.cpu.temp_address;
-      write_byte(nes, address, data);
+      write_byte(nes, mapper, address, data);
       nes.cpu.tick = 0;
     },
     _ => {}

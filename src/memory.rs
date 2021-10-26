@@ -1,5 +1,7 @@
 use nes::NesState;
 
+use crate::{mmc::mapper::Mapper};
+
 pub struct CpuMemory {
     pub iram_raw: Vec<u8>,
 
@@ -19,7 +21,7 @@ impl CpuMemory {
     }
 }
 
-pub fn debug_read_byte(nes: &NesState, address: u16) -> u8 {
+pub fn debug_read_byte(nes: &NesState, mapper: &dyn Mapper, address: u16) -> u8 {
     // Handle a few special cases for debug reads
     match address {
         0x2000 ..= 0x3FFF => {
@@ -28,7 +30,7 @@ pub fn debug_read_byte(nes: &NesState, address: u16) -> u8 {
                 7 => {
                     let ppu_addr = nes.ppu.current_vram_address;
                     // Note: does not simulate the data / palette fetch quirk.
-                    return nes.ppu.debug_read_byte(& *nes.mapper, ppu_addr);
+                    return nes.ppu.debug_read_byte(&*mapper, ppu_addr);
                 },
                 _ => {}
             }
@@ -39,12 +41,12 @@ pub fn debug_read_byte(nes: &NesState, address: u16) -> u8 {
         _ => {}
     }
 
-    let mapped_byte = nes.mapper.debug_read_cpu(address).unwrap_or(nes.memory.open_bus);
+    let mapped_byte = mapper.debug_read_cpu(address).unwrap_or(nes.memory.open_bus);
     return _read_byte(nes, address, mapped_byte);
 }
 
-pub fn read_byte(nes: &mut NesState, address: u16) -> u8 {
-    let mapped_byte = nes.mapper.read_cpu(address).unwrap_or(nes.memory.open_bus);
+pub fn read_byte(nes: &mut NesState, mapper: &mut dyn Mapper, address: u16) -> u8 {
+    let mapped_byte = mapper.read_cpu(address).unwrap_or(nes.memory.open_bus);
 
     // This is a live read, handle any side effects
     match address {
@@ -67,7 +69,7 @@ pub fn read_byte(nes: &mut NesState, address: u16) -> u8 {
                 // PPUDATA
                 7 => {
                     let ppu_addr = nes.ppu.current_vram_address;
-                    nes.ppu.latch = nes.ppu.read_latched_byte(&mut *nes.mapper, ppu_addr);
+                    nes.ppu.latch = nes.ppu.read_latched_byte(&mut *mapper, ppu_addr);
                     if nes.ppu.rendering_enabled() && 
                     (nes.ppu.current_scanline == 261 ||
                      nes.ppu.current_scanline <= 239) {
@@ -86,7 +88,7 @@ pub fn read_byte(nes: &mut NesState, address: u16) -> u8 {
                     // Perform a dummy access immediately, to simulte the behavior of the PPU
                     // address lines changing, so the mapper can react accordingly
                     let address = nes.ppu.current_vram_address;
-                    nes.mapper.access_ppu(address);
+                    mapper.access_ppu(address);
                     nes.event_tracker.snoop_cpu_read(nes.registers.pc, address, nes.ppu.latch);
                 },
                 _ => {}
@@ -173,14 +175,14 @@ fn _read_byte(nes: &NesState, address: u16, mapped_byte: u8) -> u8 {
     }
 }
 
-pub fn write_byte(nes: &mut NesState, address: u16, data: u8) {
+pub fn write_byte(nes: &mut NesState, mapper: &mut dyn Mapper, address: u16, data: u8) {
     // Track every byte written, unconditionally
     // (filtering is done inside the tracker)
     nes.event_tracker.snoop_cpu_write(nes.registers.pc, address, data);
 
     // The mapper *always* sees the write. Even to RAM, and even to internal registers.
     // Most mappers ignore writes to addresses below 0x6000. Some (notably MMC5) do not.
-    nes.mapper.write_cpu(address, data);
+    mapper.write_cpu(address, data);
     match address {
         0x0000 ..= 0x1FFF => nes.memory.iram_raw[(address & 0x7FF) as usize] = data,
         0x2000 ..= 0x3FFF => {
@@ -243,7 +245,7 @@ pub fn write_byte(nes: &mut NesState, address: u16, data: u8) {
                         // Perform a dummy access immediately, to simulte the behavior of the PPU
                         // address lines changing, so the mapper can react accordingly
                         let address = nes.ppu.current_vram_address;
-                        nes.mapper.access_ppu(address);
+                        mapper.access_ppu(address);
                     } else {
                         nes.ppu.temporary_vram_address &= 0b0000_0000_1111_1111;
                         // Note: This is missing bit 14 on purpose! This is cleared by the real PPU during
@@ -271,12 +273,12 @@ pub fn write_byte(nes: &mut NesState, address: u16, data: u8) {
                         }
                         nes.ppu.current_vram_address &= 0b0111_1111_1111_1111;
                     }
-                    nes.ppu.write_byte(&mut *nes.mapper, ppu_addr, data);
+                    nes.ppu.write_byte(&mut *mapper, ppu_addr, data);
 
                     // Perform a dummy access immediately, to simulte the behavior of the PPU
                     // address lines changing, so the mapper can react accordingly
                     let address = nes.ppu.current_vram_address;
-                    nes.mapper.access_ppu(address);
+                    mapper.access_ppu(address);
                 },
                 _ => ()
             }

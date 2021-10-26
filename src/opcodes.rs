@@ -4,17 +4,19 @@ use nes::NesState;
 use memory::read_byte;
 use memory::write_byte;
 
+use crate::mmc::mapper::Mapper;
+
 // Memory Utilities
-pub fn push(nes: &mut NesState, data: u8) {
+pub fn push(nes: &mut NesState, mapper: &mut dyn Mapper, data: u8) {
     let address = (nes.registers.s as u16) + 0x0100;
-    write_byte(nes, address, data);
+    write_byte(nes, mapper, address, data);
     nes.registers.s = nes.registers.s.wrapping_sub(1);
 }
 
-pub fn pop(nes: &mut NesState) -> u8 {
+pub fn pop(nes: &mut NesState, mapper: &mut dyn Mapper) -> u8 {
     nes.registers.s = nes.registers.s.wrapping_add(1);
     let address = (nes.registers.s as u16) + 0x0100;
-    return read_byte(nes, address);
+    return read_byte(nes, mapper, address);
 }
 
 // Flag Utilities
@@ -302,14 +304,14 @@ pub fn nop_modify(_: &mut Registers, data: u8) -> u8 {
 }
 
 // Branch
-pub fn branch(nes: &mut NesState) {
+pub fn branch(nes: &mut NesState, mapper: &mut dyn Mapper) {
   // Note: the documentation for branch timing, located at http://nesdev.com/6502_cpu.txt includes
   // the first cycle of the next instruction. Thus, when bailing here, we set nes.cpu.tick to 1
   // instead of zero, so we don't execute the fetch step a second time when we're done.
   match nes.cpu.tick {
     2 => {
       let pc = nes.registers.pc;
-      nes.cpu.data1 = read_byte(nes, pc);
+      nes.cpu.data1 = read_byte(nes, mapper, pc);
       nes.registers.pc = nes.registers.pc.wrapping_add(1);
 
       // Determine if branch is to be taken
@@ -330,7 +332,7 @@ pub fn branch(nes: &mut NesState) {
     3 => {
       // Fetch opcode of next instruction (and throw it away)
       let pc = nes.registers.pc;
-      let _ = read_byte(nes, pc);
+      let _ = read_byte(nes, mapper, pc);
 
       // Add the relative offset to PC, but store ONLY the low byte
       let result = nes.registers.pc.wrapping_add((nes.cpu.data1 as i8) as u16);
@@ -348,7 +350,7 @@ pub fn branch(nes: &mut NesState) {
     4 => {
       // Fetch opcode of next instruction, from the wrong address (and throw it away)
       let pc = nes.registers.pc;
-      let _ = read_byte(nes, pc);
+      let _ = read_byte(nes, mapper, pc);
 
       // Apply fix to upper byte of PC
       nes.registers.pc = (nes.registers.pc & 0xFF) | ((nes.cpu.data2 as u16) << 8);
@@ -363,26 +365,26 @@ pub fn branch(nes: &mut NesState) {
 
 // This isn't strictly an opcode, but it's very similar to the BRK instruction below,
 // and is the routine the processer runs when an interrupt occurs. Close enough.
-pub fn service_interrupt(nes: &mut NesState) {
+pub fn service_interrupt(nes: &mut NesState, mapper: &mut dyn Mapper) {
   match nes.cpu.tick {
     1 => {
       let pc = nes.registers.pc;
-      let _ = read_byte(nes, pc);
+      let _ = read_byte(nes, mapper, pc);
       nes.cpu.opcode = 0x00; // Force next opcode to BRK
     },
     2 => {
       // Fetch data byte from memory (and discard it)
       let pc = nes.registers.pc;
-      nes.cpu.data1 = read_byte(nes, pc);
+      nes.cpu.data1 = read_byte(nes, mapper, pc);
       nes.cpu.upcoming_write = true;
     },
     3 => {
       let pc_high = ((nes.registers.pc & 0xFF00) >> 8) as u8;
-      push(nes, pc_high);
+      push(nes, mapper, pc_high);
     },
     4 => {
       let pc_low =  (nes.registers.pc & 0x00FF) as u8;
-      push(nes, pc_low);
+      push(nes, mapper, pc_low);
     },
     5 => {
       // At this point, NMI always takes priority, otherwise we run
@@ -394,20 +396,20 @@ pub fn service_interrupt(nes: &mut NesState) {
         nes.cpu.temp_address = 0xFFFE;
       }
       let status_byte = nes.registers.status_as_byte(false);
-      push(nes, status_byte);
+      push(nes, mapper, status_byte);
       nes.cpu.upcoming_write = false;
     },
     6 => {
       // Read PCL from interrupt vector
       let interrupt_vector = nes.cpu.temp_address;
-      nes.registers.pc = (nes.registers.pc & 0xFF00) | read_byte(nes, interrupt_vector) as u16;
+      nes.registers.pc = (nes.registers.pc & 0xFF00) | read_byte(nes, mapper, interrupt_vector) as u16;
       // Disable IRQ handling (to be re-enabled by software, usually during RTI)
       nes.registers.flags.interrupts_disabled = true;
     },
     7 => {
       // Read PCH from interrupt vector
       let interrupt_vector = nes.cpu.temp_address;
-      nes.registers.pc = (nes.registers.pc & 0x00FF) | ((read_byte(nes, interrupt_vector + 1) as u16) << 8);
+      nes.registers.pc = (nes.registers.pc & 0x00FF) | ((read_byte(nes, mapper, interrupt_vector + 1) as u16) << 8);
       // All done!
       nes.cpu.tick = 0;
       nes.cpu.service_routine_active = false;
@@ -416,16 +418,16 @@ pub fn service_interrupt(nes: &mut NesState) {
   }
 }
 
-pub fn brk(nes: &mut NesState) {
+pub fn brk(nes: &mut NesState, mapper: &mut dyn Mapper) {
   // BRK's first cycle is the same as any ordinary instruction.
   match nes.cpu.tick {
     2 => {
       let pc = nes.registers.pc;
-      let _ = read_byte(nes, pc);
+      let _ = read_byte(nes, mapper, pc);
       nes.registers.pc = nes.registers.pc.wrapping_add(1);
       nes.cpu.upcoming_write = true;
     },
-    3 ..= 4 => service_interrupt(nes),
+    3 ..= 4 => service_interrupt(nes, mapper),
     5 => {
       // At this point, NMI always takes priority, otherwise we run
       // an IRQ. This is the source of the BRK hijack quirk / bug.
@@ -437,19 +439,19 @@ pub fn brk(nes: &mut NesState) {
       }
       // Here we set the B flag to signal a BRK, even if we end up servicing an NMI instead.
       let status_byte = nes.registers.status_as_byte(true);
-      push(nes, status_byte);
+      push(nes, mapper, status_byte);
       nes.cpu.upcoming_write = false;
     },
-    6 ..= 7 => service_interrupt(nes),
+    6 ..= 7 => service_interrupt(nes, mapper),
     _ => ()
   }
 }
 
-pub fn jmp_absolute(nes: &mut NesState) {
+pub fn jmp_absolute(nes: &mut NesState, mapper: &mut dyn Mapper) {
   match nes.cpu.tick {
-    2 => addressing::read_address_low(nes),
+    2 => addressing::read_address_low(nes, mapper),
     3 => {
-      addressing::read_address_high(nes);
+      addressing::read_address_high(nes, mapper);
       nes.registers.pc = nes.cpu.temp_address;
       nes.cpu.tick = 0;
     },
@@ -457,19 +459,19 @@ pub fn jmp_absolute(nes: &mut NesState) {
   }
 }
 
-pub fn jmp_indirect(nes: &mut NesState) {
+pub fn jmp_indirect(nes: &mut NesState, mapper: &mut dyn Mapper) {
   match nes.cpu.tick {
-    2 => addressing::read_address_low(nes),
-    3 => addressing::read_address_high(nes),
+    2 => addressing::read_address_low(nes, mapper),
+    3 => addressing::read_address_high(nes, mapper),
     4 => {
       let temp_address = nes.cpu.temp_address;
-      nes.cpu.data1 = read_byte(nes, temp_address);
+      nes.cpu.data1 = read_byte(nes, mapper, temp_address);
     },
     5 => {
       // Add 1 to temp address's low byte only (don't cross page boundary)
       let mut temp_address = nes.cpu.temp_address;
       temp_address = (temp_address & 0xFF00) | ((temp_address + 1) & 0x00FF);
-      nes.cpu.data2 = read_byte(nes, temp_address);
+      nes.cpu.data2 = read_byte(nes, mapper, temp_address);
       // Set PC to the combined address and exit
       nes.registers.pc = ((nes.cpu.data2 as u16) << 8) | (nes.cpu.data1 as u16);
       nes.cpu.tick = 0;
@@ -479,20 +481,20 @@ pub fn jmp_indirect(nes: &mut NesState) {
   }
 }
 
-pub fn jsr(nes: &mut NesState) {
+pub fn jsr(nes: &mut NesState, mapper: &mut dyn Mapper) {
   match nes.cpu.tick {
-    2 => addressing::read_address_low(nes),
+    2 => addressing::read_address_low(nes, mapper),
     3 => {/* Internal Operation */},
     4 => {
       let pch = ((nes.registers.pc & 0xFF00) >> 8) as u8;
-      push(nes, pch);
+      push(nes, mapper, pch);
     },
     5 => {
       let pcl = (nes.registers.pc & 0x00FF) as u8;
-      push(nes, pcl);
+      push(nes, mapper, pcl);
     },
     6 => {
-      addressing::read_address_high(nes);
+      addressing::read_address_high(nes, mapper);
       nes.registers.pc = nes.cpu.temp_address;
       nes.cpu.tick = 0;
     },
@@ -500,21 +502,21 @@ pub fn jsr(nes: &mut NesState) {
   };
 }
 
-pub fn rti(nes: &mut NesState) {
+pub fn rti(nes: &mut NesState, mapper: &mut dyn Mapper) {
   match nes.cpu.tick {
-    2 => addressing::dummy_data1(nes),
+    2 => addressing::dummy_data1(nes, mapper),
     3 => {/* Would increment S here */},
     4 => {
-      let s = pop(nes);
+      let s = pop(nes, mapper);
       nes.registers.set_status_from_byte(s);
     },
     5 => {
       // Read PCL
-      nes.cpu.data1 = pop(nes);
+      nes.cpu.data1 = pop(nes, mapper);
     },
     6 => {
       // Read PCH
-      let pch = pop(nes) as u16;
+      let pch = pop(nes, mapper) as u16;
       let pcl = nes.cpu.data1 as u16;
       nes.registers.pc = (pch << 8) | pcl;
       nes.cpu.tick = 0;
@@ -523,16 +525,16 @@ pub fn rti(nes: &mut NesState) {
   };
 }
 
-pub fn rts(nes: &mut NesState) {
+pub fn rts(nes: &mut NesState, mapper: &mut dyn Mapper) {
   match nes.cpu.tick {
-    2 => addressing::dummy_data1(nes),
+    2 => addressing::dummy_data1(nes, mapper),
     3 => {/* Would incremeent S here */},
     4 => {
       // Read PCL
-      nes.cpu.data1 = pop(nes);
+      nes.cpu.data1 = pop(nes, mapper);
     },
     5 => {
-      let pch = pop(nes) as u16;
+      let pch = pop(nes, mapper) as u16;
       let pcl = nes.cpu.data1 as u16;
       nes.registers.pc = (pch << 8) | pcl;
     },
@@ -545,15 +547,15 @@ pub fn rts(nes: &mut NesState) {
 }
 
 // Opcodes which access the stack
-pub fn pha(nes: &mut NesState) {
+pub fn pha(nes: &mut NesState, mapper: &mut dyn Mapper) {
   match nes.cpu.tick {
     2 => {
-      addressing::dummy_data1(nes);
+      addressing::dummy_data1(nes, mapper);
       nes.cpu.upcoming_write = true;
     },
     3 => {
       let a = nes.registers.a;
-      push(nes, a);
+      push(nes, mapper, a);
       nes.cpu.tick = 0;
       nes.cpu.upcoming_write = false;
     },
@@ -561,15 +563,15 @@ pub fn pha(nes: &mut NesState) {
   }
 }
 
-pub fn php(nes: &mut NesState) {
+pub fn php(nes: &mut NesState, mapper: &mut dyn Mapper) {
   match nes.cpu.tick {
     2 => {
-      addressing::dummy_data1(nes);
+      addressing::dummy_data1(nes, mapper);
       nes.cpu.upcoming_write = true;
     },
     3 => {
       let status = nes.registers.status_as_byte(true);
-      push(nes, status);
+      push(nes, mapper, status);
       nes.cpu.tick = 0;
       nes.cpu.upcoming_write = false;
     },
@@ -577,12 +579,12 @@ pub fn php(nes: &mut NesState) {
   }
 }
 
-pub fn pla(nes: &mut NesState) {
+pub fn pla(nes: &mut NesState, mapper: &mut dyn Mapper) {
   match nes.cpu.tick {
-    2 => addressing::dummy_data1(nes),
+    2 => addressing::dummy_data1(nes, mapper),
     3 => {/* Increment S */},
     4 => {
-      let a = pop(nes);
+      let a = pop(nes, mapper);
       nes.registers.a = a;
       nes.registers.flags.zero = nes.registers.a == 0;
       nes.registers.flags.negative = nes.registers.a & 0x80 != 0;
@@ -592,12 +594,12 @@ pub fn pla(nes: &mut NesState) {
   }
 }
 
-pub fn plp(nes: &mut NesState) {
+pub fn plp(nes: &mut NesState, mapper: &mut dyn Mapper) {
   match nes.cpu.tick {
-    2 => addressing::dummy_data1(nes),
+    2 => addressing::dummy_data1(nes, mapper),
     3 => {/* Increment S */},
     4 => {
-      let s = pop(nes);
+      let s = pop(nes, mapper);
       nes.registers.set_status_from_byte(s);
       nes.cpu.tick = 0;
     },
