@@ -13,7 +13,7 @@ pub struct Nrom {
     chr: MemoryBlock,
 
     mirroring: Mirroring,
-    vram: Vec<u8>,
+    vram: [u8; 0x1000],
 }
 
 impl Nrom {
@@ -27,7 +27,7 @@ impl Nrom {
             prg_ram: prg_ram_block.clone(),
             chr: chr_block.clone(),
             mirroring: ines.header.mirroring(),
-            vram: vec![0u8; 0x1000],
+            vram: [0_u8; 0x1000],
         });
     }
 }

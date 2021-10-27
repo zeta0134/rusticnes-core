@@ -19,7 +19,7 @@ pub struct PxRom {
     pub chr_1_fd_bank: usize,
     pub chr_1_fe_bank: usize,
     pub prg_bank: usize,
-    pub vram: Vec<u8>,
+    pub vram: [u8; 0x1000],
 }
 
 impl PxRom {
@@ -40,7 +40,7 @@ impl PxRom {
             chr_1_fd_bank: 0,
             chr_1_fe_bank: 0,
             prg_bank: 0,
-            vram: vec![0u8; 0x1000],
+            vram: [0_u8; 0x1000],
         })
     }
 }

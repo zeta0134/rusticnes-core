@@ -341,13 +341,13 @@ pub struct NsfMapper {
     p1_held: u8,
     p1_pressed: u8,
 
-    prg_rom_banks: Vec<usize>,
+    prg_rom_banks: [usize; 8],
     playback_accumulator: f64,
     playback_period: f64,
     playback_counter: u8,
 
     mirroring: Mirroring,
-    vram: Vec<u8>,
+    vram: [u8; 0x1000],
 
     vrc6_enabled: bool,
     vrc6_pulse1: Vrc6PulseChannel,
@@ -361,7 +361,7 @@ pub struct NsfMapper {
     mmc5_pulse_2: PulseChannelState,
     mmc5_audio_sequencer_counter: u16,
     mmc5_pcm_channel: Mmc5PcmChannel,
-    mmc5_exram: Vec<u8>,
+    mmc5_exram: [u8; 0x400],
 
     s5b_enabled: bool,
     s5b_audio_command_select: u8,
@@ -395,7 +395,7 @@ impl NsfMapper {
             padded_rom.extend(prg_rom);
             padded_rom.resize(0x8000, 0);
             prg_rom = padded_rom;
-            prg_rom_banks = vec![0, 1, 2, 3, 4, 5, 6, 7];
+            prg_rom_banks = [0, 1, 2, 3, 4, 5, 6, 7];
         }
 
         let ntsc_clockrate = 1786860.0;
@@ -438,7 +438,7 @@ impl NsfMapper {
             mmc5_pulse_2: PulseChannelState::new("Pulse 2", "MMC5", 1_789_773, false),
             mmc5_audio_sequencer_counter: 0,
             mmc5_pcm_channel: Mmc5PcmChannel::new(),
-            mmc5_exram: vec![0u8; 0x400],
+            mmc5_exram: [0_u8; 0x400],
 
             s5b_enabled: nsf.header.s5b(),
             s5b_audio_command_select: 0,
@@ -450,10 +450,10 @@ impl NsfMapper {
             n163_expansion_audio_chip: Namco163Audio::new(),
             n163_mix: n163_mixing_level(0),
 
-            prg_rom_banks: prg_rom_banks,
+            prg_rom_banks,
 
             mirroring: Mirroring::FourScreen,
-            vram: vec![0u8; 0x1000],
+            vram: [0_u8; 0x1000],
         };
 
         mapper.vrc6_write(0x9003, 0x00); // some NSF files expect VRC6 to already be enabled, so do that
@@ -1206,7 +1206,7 @@ impl Mapper for NsfMapper {
             PLAYER_RESET_BANKS => {
                 self.prg_rom_banks = self.header.initial_banks();
                 if !self.header.is_bank_switched() {
-                    self.prg_rom_banks = vec![0, 1, 2, 3, 4, 5, 6, 7];
+                    self.prg_rom_banks = [0, 1, 2, 3, 4, 5, 6, 7];
                 }
             },
             0x5FF8 => {self.prg_rom_banks[0] = data as usize},

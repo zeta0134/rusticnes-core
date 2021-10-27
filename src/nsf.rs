@@ -101,8 +101,8 @@ impl NsfHeader {
         return self._word(NSF_PAL_PLAY_SPEED);
     }
 
-    pub fn initial_banks(&self) -> Vec<usize> {
-        return vec![
+    pub fn initial_banks(&self) -> [usize; 8] {
+        return [
             self.raw_bytes[NSF_BANK_INIT + 0] as usize,
             self.raw_bytes[NSF_BANK_INIT + 1] as usize,
             self.raw_bytes[NSF_BANK_INIT + 2] as usize,

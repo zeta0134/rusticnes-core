@@ -21,7 +21,7 @@ pub struct EventTracker {
     pub a_active: bool,
     pub current_scanline: u16,
     pub current_cycle: u16,
-    pub cpu_snoop_list: Vec<u8>,
+    pub cpu_snoop_list: [u8; 0x10000],
 }
 
 const CPU_READ: u8    = 0b0000_0001;
@@ -30,7 +30,7 @@ const CPU_EXECUTE: u8 = 0b0000_0100;
 
 impl EventTracker {
     pub fn new() -> EventTracker {
-        let mut default_cpu_snoops = vec![0u8; 0x10000];
+        let mut default_cpu_snoops = [0_u8; 0x10000];
 
         default_cpu_snoops[0x2000] = CPU_WRITE;
         default_cpu_snoops[0x2001] = CPU_WRITE;

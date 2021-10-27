@@ -13,7 +13,7 @@ pub struct GxRom {
     pub mirroring: Mirroring,
     pub prg_bank: usize,
     pub chr_bank: usize,
-    pub vram: Vec<u8>,
+    pub vram: [u8; 0x1000],
 }
 
 impl GxRom {
@@ -27,7 +27,7 @@ impl GxRom {
             mirroring: ines.header.mirroring(),
             prg_bank: 0x00,
             chr_bank: 0x00,
-            vram: vec![0u8; 0x1000],
+            vram: [0_u8; 0x1000],
         });
     }
 }

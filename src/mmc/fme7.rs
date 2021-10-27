@@ -18,11 +18,11 @@ pub struct Fme7 {
     pub prg_ram: MemoryBlock,
     pub chr_rom: MemoryBlock,
     pub command: u8,
-    pub chr_banks: Vec<usize>,
-    pub prg_banks: Vec<usize>,
+    pub chr_banks: [usize; 8],
+    pub prg_banks: [usize; 4],
     pub prg_ram_enabled: bool,
     pub prg_ram_selected: bool,
-    pub vram: Vec<u8>,
+    pub vram: [u8; 0x1000],
     pub mirroring: Mirroring,
     pub irq_enabled: bool,
     pub irq_counter_enabled: bool,
@@ -43,11 +43,11 @@ impl Fme7 {
             chr_rom: chr_block.clone(),
             prg_ram: prg_ram_block.clone(),
             command: 0,
-            chr_banks: vec![0usize; 8],
-            prg_banks: vec![0usize; 4],
+            chr_banks: [0_usize; 8],
+            prg_banks: [0_usize; 4],
             prg_ram_enabled: false,
             prg_ram_selected: false,
-            vram: vec![0u8; 0x1000],
+            vram: [0_u8; 0x1000],
             mirroring: Mirroring::Vertical,
             irq_enabled: false,
             irq_counter_enabled: false,
@@ -502,7 +502,7 @@ pub struct YM2149F {
     pub noise: NoiseGenerator,
     pub envelope: EnvelopeGenerator,
     pub clock_divider_counter: u8,
-    pub volume_lut: Vec<f64>,
+    pub volume_lut: [f64; 32],
 }
 
 impl YM2149F {
@@ -518,8 +518,8 @@ impl YM2149F {
         }
     }
 
-    pub fn generate_volume_lut() -> Vec<f64> {
-        let mut lut = vec![0f64; 32];
+    pub fn generate_volume_lut() -> [f64; 32] {
+        let mut lut = [0_f64; 32];
         lut[0] = 0.0;
         lut[1] = 0.0; // First two entries emit silence
         // The table should cap out at 1.0

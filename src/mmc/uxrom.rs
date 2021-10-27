@@ -12,7 +12,7 @@ pub struct UxRom {
     pub chr: MemoryBlock,
     pub mirroring: Mirroring,
     pub prg_bank: usize,
-    pub vram: Vec<u8>,
+    pub vram: [u8; 0x1000],
 }
 
 impl UxRom {
@@ -25,7 +25,7 @@ impl UxRom {
             chr: chr_block.clone(),
             mirroring: ines.header.mirroring(),
             prg_bank: 0x00,
-            vram: vec![0u8; 0x1000],
+            vram: [0_u8; 0x1000],
         })
     }
 }

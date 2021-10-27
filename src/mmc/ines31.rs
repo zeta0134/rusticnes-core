@@ -12,8 +12,8 @@ pub struct INes31 {
     pub prg_rom: MemoryBlock,
     pub chr: MemoryBlock,
     pub mirroring: Mirroring,
-    pub vram: Vec<u8>,
-    pub prg_banks: Vec<usize>,
+    pub vram: [u8; 0x1000],
+    pub prg_banks: [usize; 8],
 }
 
 impl INes31 {
@@ -25,8 +25,8 @@ impl INes31 {
             prg_rom: prg_rom_block.clone(),
             chr: chr_block.clone(),
             mirroring: ines.header.mirroring(),
-            vram: vec![0u8; 0x1000],
-            prg_banks: vec![255usize; 8],
+            vram: [0_u8; 0x1000],
+            prg_banks: [255_usize; 8],
         })
     }
 }

@@ -1,7 +1,7 @@
 use nes::NesState;
 
 pub struct CpuMemory {
-    pub iram_raw: Vec<u8>,
+    pub iram_raw: [u8; 0x800],
 
     pub recent_reads: Vec<u16>,
     pub recent_writes: Vec<u16>,
@@ -11,7 +11,7 @@ pub struct CpuMemory {
 impl CpuMemory {
     pub fn new() -> CpuMemory {
         return CpuMemory {
-            iram_raw: vec!(0u8; 0x800),
+            iram_raw: [0_u8; 0x800],
             recent_reads: Vec::new(),
             recent_writes: Vec::new(),
             open_bus: 0,

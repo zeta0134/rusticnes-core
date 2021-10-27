@@ -11,7 +11,7 @@ pub struct Mmc1 {
     pub prg_rom: MemoryBlock,
     pub prg_ram: MemoryBlock,
     pub chr: MemoryBlock,
-    pub vram: Vec<u8>,
+    pub vram: [u8; 0x1000],
 
     pub shift_counter: u8,
     pub shift_data: u8,
@@ -39,7 +39,7 @@ impl Mmc1 {
             prg_rom: prg_rom_block.clone(),
             prg_ram: prg_ram_block.clone(),
             chr: chr_block.clone(),
-            vram: vec![0u8; 0x1000],            
+            vram: [0_u8; 0x1000],
             // Note: On real MMC1-based hardware, many of these values are random on startup, so
             // the defaults presented below are arbitrary.
             shift_counter: 0,

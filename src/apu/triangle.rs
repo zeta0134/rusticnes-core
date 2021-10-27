@@ -9,7 +9,6 @@ pub struct TriangleChannelState {
     pub name: String,
     pub chip: String,
     pub debug_disable: bool,
-    pub debug_buffer: Vec<i16>,
     pub output_buffer: RingBuffer,
     pub length_counter: LengthCounterState,
 
@@ -32,7 +31,6 @@ impl TriangleChannelState {
             name: String::from(channel_name),
             chip: String::from(chip_name),
             debug_disable: false,
-            debug_buffer: vec!(0i16; 4096),
             output_buffer: RingBuffer::new(32768),
             length_counter: LengthCounterState::new(),
             control_flag: false,

@@ -14,7 +14,7 @@ pub struct BnRom {
     pub chr: MemoryBlock,
     pub mirroring: Mirroring,
     pub prg_bank: usize,
-    pub vram: Vec<u8>,
+    pub vram: [u8; 0x1000],
 }
 
 impl BnRom {
@@ -27,7 +27,7 @@ impl BnRom {
             chr: chr_block.clone(),
             mirroring: ines.header.mirroring(),
             prg_bank: 0x07,
-            vram: vec![0u8; 0x1000],
+            vram: [0_u8; 0x1000],
         });
     }
 }

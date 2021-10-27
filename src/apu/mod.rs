@@ -57,12 +57,12 @@ pub struct ApuState {
     pub next_sample_at: u64,
 
     // Lookup tables for emulating the mixer
-    pub pulse_table: Vec<f64>,
-    pub tnd_table: Vec<f64>,
+    pub pulse_table: [f64; 31],
+    pub tnd_table: [f64; 16*16*128],
 
     pub hq_buffer_full: bool,
     pub hq_staging_buffer: RingBuffer,
-    pub hq_output_buffer: Vec<i16>,
+    pub hq_output_buffer: [i16; 32768],
 
     // filter chain (todo: make this a tad more flexible)
     // also todo: make sure these are recreated when changing sample rate
@@ -77,8 +77,8 @@ pub struct ApuState {
     pub filter_chain: FilterChain,
 }
 
-fn generate_pulse_table() -> Vec<f64> {
-    let mut pulse_table = vec!(0f64; 31);
+fn generate_pulse_table() -> [f64; 31] {
+    let mut pulse_table = [0_f64; 31];
     for n in 0 .. 31 {
         pulse_table[n] = 95.52 / (8128.0 / (n as f64) + 100.0);
     }
@@ -89,8 +89,8 @@ fn full_tnd_index(t: usize, n: usize, d: usize) -> usize {
     return (d * 16 * 16) + (n * 16) + t;
 }
 
-fn generate_tnd_table() -> Vec<f64> {
-    let mut tnd_table = vec!(0f64; 16*16*128);
+fn generate_tnd_table() -> [f64; 16*16*128] {
+    let mut tnd_table = [0_f64; 16*16*128];
     for tri in 0 .. 16 {
         for noise in 0 .. 16 {
             for dmc in 0 .. 128 {
@@ -145,7 +145,7 @@ impl ApuState {
             tnd_table: generate_tnd_table(),
             hq_buffer_full: false,
             hq_staging_buffer: RingBuffer::new(32768),
-            hq_output_buffer: vec!(0i16; 32768),
+            hq_output_buffer: [0_i16; 32768],
 
             famicom_hp_37hz: filters::HighPassIIR::new(1786860.0, 37.0),
             nes_hp_90hz: filters::HighPassIIR::new(1786860.0, 90.0),

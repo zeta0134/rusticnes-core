@@ -77,11 +77,11 @@ impl SpriteLatch {
 
 pub struct PpuState {
     // PPU Memory (incl. cart CHR ROM for now)
-    pub internal_vram: Vec<u8>,
-    pub oam: Vec<u8>,
-    pub secondary_oam: Vec<SpriteLatch>,
+    pub internal_vram: [u8; 0x1000],
+    pub oam: [u8; 0x100],
+    pub secondary_oam: [SpriteLatch; 8],
     pub secondary_oam_index: usize,
-    pub palette: Vec<u8>,
+    pub palette: [u8; 32],
 
     // Memory Mapped Registers
     // PPU Registers
@@ -105,11 +105,11 @@ pub struct PpuState {
     pub current_scanline_cycle: u16,    
 
     // Framebuffer
-    pub screen: Vec<u16>,
-    pub sprite_color: Vec<u8>,
-    pub sprite_index: Vec<u8>,
-    pub sprite_bg_priority: Vec<bool>,
-    pub sprite_zero: Vec<bool>,
+    pub screen: [u16; 256 * 240],
+    pub sprite_color: [u8; 256],
+    pub sprite_index: [u8; 256],
+    pub sprite_bg_priority: [bool; 256],
+    pub sprite_zero: [bool; 256],
 
     pub write_toggle: bool,
 
@@ -134,12 +134,12 @@ pub struct PpuState {
     pub recent_writes: Vec<u16>,
 }
 
-fn debug_default_palette() -> Vec<u8> {
+fn debug_default_palette() -> [u8; 32] {
     // Completely arbitrary color selection here, a real NES's boot palette
     // is somewhat random, determined by analog effects and RAM decay.
     // My own NES produces this ugly cyan on failed loads, so that's what
     // we get here.
-    return vec![
+    return [
         // BG, cool tones (note that 0c becomes global background color by default)
         0x0c, 0x0c, 0x1c, 0x2c,
         0x01, 0x11, 0x21, 0x31,
@@ -156,19 +156,19 @@ fn debug_default_palette() -> Vec<u8> {
 impl PpuState {
     pub fn new() -> PpuState {
         return PpuState {
-            internal_vram: vec!(0u8; 0x1000),  // 4k for four-screen mirroring, most games only use upper 2k
-            oam: vec!(0u8; 0x100),
-            secondary_oam: vec!(SpriteLatch::new(); 8),
+            internal_vram: [0_u8; 0x1000],  // 4k for four-screen mirroring, most games only use upper 2k
+            oam: [0_u8; 0x100],
+            secondary_oam: [SpriteLatch::new(); 8],
             secondary_oam_index: 0,
             palette: debug_default_palette(),
             current_frame: 0,
             current_scanline: 0,
             current_scanline_cycle: 0,
-            screen: vec!(0u16; 256 * 240),
-            sprite_color: vec!(0u8; 256),
-            sprite_index: vec!(0u8; 256),
-            sprite_bg_priority: vec!(false; 256),
-            sprite_zero: vec!(false; 256),
+            screen: [0_u16; 256 * 240],
+            sprite_color: [0_u8; 256],
+            sprite_index: [0_u8; 256],
+            sprite_bg_priority: [false; 256],
+            sprite_zero: [false; 256],
     
             control: 0,
             mask: 0,

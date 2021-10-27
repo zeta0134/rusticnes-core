@@ -12,7 +12,7 @@ pub struct CnRom {
     pub chr: MemoryBlock,
     pub mirroring: Mirroring,
     pub chr_bank: usize,
-    pub vram: Vec<u8>,
+    pub vram: [u8; 0x1000],
 }
 
 impl CnRom {
@@ -25,7 +25,7 @@ impl CnRom {
             chr: chr_block.clone(),
             mirroring: ines.header.mirroring(),
             chr_bank: 0x00,
-            vram: vec![0u8; 0x1000],
+            vram: [0_u8; 0x1000],
         });
     }
 }

@@ -176,7 +176,7 @@ impl AudioChannelState for Namco163AudioChannel {
 }
 
 pub struct Namco163Audio {
-    pub internal_ram: Vec<u8>,
+    pub internal_ram: [u8; 0x80],
     pub channel1: Namco163AudioChannel,
     pub channel2: Namco163AudioChannel,
     pub channel3: Namco163AudioChannel,
@@ -194,7 +194,7 @@ pub struct Namco163Audio {
 impl Namco163Audio {
     pub fn new() -> Namco163Audio {
         return Namco163Audio {
-            internal_ram: vec![0u8; 0x80],
+            internal_ram: [0_u8; 0x80],
             channel1: Namco163AudioChannel::new(0x78),
             channel2: Namco163AudioChannel::new(0x70),
             channel3: Namco163AudioChannel::new(0x68),
@@ -275,9 +275,9 @@ pub struct Namco163 {
     pub irq_pending: bool,
     pub irq_counter: u16, // 15bit, actually
 
-    pub chr_banks: Vec<u8>,
-    pub nt_banks: Vec<u8>,
-    pub prg_banks: Vec<u8>,
+    pub chr_banks: [u8; 8],
+    pub nt_banks: [u8; 4],
+    pub prg_banks: [u8; 3],
 
     pub internal_ram_addr: u8,
     pub internal_ram_auto_increment: bool,
@@ -323,9 +323,9 @@ impl Namco163 {
             irq_pending: false,
             irq_counter: 0,
 
-            chr_banks: vec![0u8; 8],
-            nt_banks: vec![0u8; 4],
-            prg_banks: vec![0u8; 3],
+            chr_banks: [0_u8; 8],
+            nt_banks: [0_u8; 4],
+            prg_banks: [0_u8; 3],
 
             internal_ram_addr: 0, // upper nybble mismatch, will disable PRG RAM at boot
             internal_ram_auto_increment: false,
