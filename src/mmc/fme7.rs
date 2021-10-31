@@ -593,6 +593,10 @@ impl YM2149F {
         self.channel_a.record_sample((self.channel_output(&self.channel_a)) as i16);
         self.channel_b.record_sample((self.channel_output(&self.channel_b)) as i16);
         self.channel_c.record_sample((self.channel_output(&self.channel_c)) as i16);
+        //self.channel_a.record_sample((self.volume_lut[self.channel_output(&self.channel_a)] * 255.0) as i16);
+        //self.channel_b.record_sample((self.volume_lut[self.channel_output(&self.channel_b)] * 255.0) as i16);
+        //self.channel_c.record_sample((self.volume_lut[self.channel_output(&self.channel_c)] * 255.0) as i16);
+
     }
 
     pub fn execute_command(&mut self, command: u8, data: u8) {

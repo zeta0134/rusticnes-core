@@ -36,6 +36,8 @@ pub struct ApuState {
     pub frame_sequencer_mode: u8,
     pub frame_sequencer: u16,
     pub frame_reset_delay: u8,
+    pub quarter_frame_counter: u32,
+    pub half_frame_counter: u32,
 
     pub frame_interrupt: bool,
     pub disable_interrupt: bool,
@@ -122,6 +124,8 @@ impl ApuState {
             frame_sequencer_mode: 0,
             frame_sequencer: 0,
             frame_reset_delay: 0,
+            quarter_frame_counter: 0,
+            half_frame_counter: 0,
             frame_interrupt: false,
             disable_interrupt: false,
             pulse_1: PulseChannelState::new("Pulse 1", "2A03", 1_789_773, true),
@@ -502,6 +506,7 @@ impl ApuState {
         self.pulse_2.envelope.clock();
         self.triangle.update_linear_counter();
         self.noise.envelope.clock();
+        self.quarter_frame_counter += 1;
     }
 
     pub fn clock_half_frame(&mut self) {
@@ -512,6 +517,7 @@ impl ApuState {
         self.pulse_2.length_counter.clock();
         self.triangle.length_counter.clock();
         self.noise.length_counter.clock();
+        self.half_frame_counter += 1;
     }
 
     pub fn clock_apu(&mut self, mapper: &mut dyn Mapper) {
@@ -708,3 +714,4 @@ impl AudioChannelState for ApuState {
     fn unmute(&mut self) {        
     }
 }
+
