@@ -3,14 +3,17 @@
 
 use ines::INesCartridge;
 use memoryblock::MemoryBlock;
+use memoryblock::FixedMemoryBlock;
 
 use mmc::mapper::*;
 use mmc::mirroring;
 
+use crate::memoryblock::MemoryType;
+
 pub struct Mmc3 {
-    pub prg_rom: MemoryBlock,
-    pub prg_ram: MemoryBlock,
-    pub chr: MemoryBlock,
+    pub prg_rom: FixedMemoryBlock<262144>,
+    pub prg_ram: FixedMemoryBlock<8192>,
+    pub chr: FixedMemoryBlock<131072>,
     pub vram: [u8; 0x2000],
 
     pub chr2_bank_0: usize,
@@ -44,16 +47,33 @@ pub struct Mmc3 {
     pub mirroring: Mirroring,
 }
 
+
+fn to_fixed<const N: usize>(m: MemoryBlock) -> FixedMemoryBlock<N> {
+    let memory_type = if m.is_readonly() {
+        MemoryType::Rom
+    } else if m.is_volatile() {
+        MemoryType::NvRam
+    } else {
+        MemoryType::Ram
+    };
+
+    use std::convert::TryInto;
+    let data = m.bytes.try_into().unwrap();    
+    
+    FixedMemoryBlock::new(data, memory_type)
+}
+
 impl Mmc3 {
     pub fn from_ines(ines: INesCartridge) -> Result<Mmc3, String> {
         let prg_rom_block = ines.prg_rom_block();
         let prg_ram_block = ines.prg_ram_block()?;
         let chr_block = ines.chr_block()?;
+        //println!("{:?}, {:?}, {:?}", prg_rom_block.len(), prg_ram_block.len(), chr_block.len());
 
         return Ok(Mmc3 {
-            prg_rom: prg_rom_block.clone(),
-            prg_ram: prg_ram_block.clone(),
-            chr: chr_block.clone(),
+            prg_rom: to_fixed(prg_rom_block),
+            prg_ram: to_fixed(prg_ram_block),
+            chr: to_fixed(chr_block),
             vram: [0_u8; 0x2000],
             // Note: On real MMC3-based hardware, many of these values are random on startup, so
             // the defaults presented below are arbitrary.

@@ -5,7 +5,7 @@
 /// chips, wrapping behavior, mirroring, bank switching, etc.
 #[derive(Clone)]
 pub struct MemoryBlock {
-    bytes: Vec<u8>,
+    pub bytes: Vec<u8>,
     readonly: bool,
     volatile: bool
 }
@@ -86,3 +86,83 @@ impl MemoryBlock {
     }
 }
 
+
+pub struct FixedMemoryBlock<const N: usize> {
+    bytes: [u8; N],
+    readonly: bool,
+    volatile: bool
+}
+
+impl<const N: usize> FixedMemoryBlock<N> {
+    pub fn new(data: [u8; N], memory_type: MemoryType) -> Self {
+        return Self {
+            bytes: data,
+            readonly: memory_type == MemoryType::Rom,
+            volatile: memory_type != MemoryType::NvRam,
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        return N;
+    }
+
+    pub fn is_volatile(&self) -> bool {
+        return self.volatile;
+    }
+
+    pub fn is_readonly(&self) -> bool {
+        return self.readonly;
+    }
+    
+    #[inline(always)]
+    pub fn bounded_read(&self, address: usize) -> Option<u8> {
+        if address >= N {
+            return None;
+        }
+        return Some(self.bytes[address]);
+    }
+
+    #[inline(always)]
+    pub fn bounded_write(&mut self, address: usize, data: u8) {
+        if self.readonly || address >= N  {
+            return;
+        }
+        self.bytes[address] = data;
+    }
+
+    #[inline(always)]
+    pub fn wrapping_read(&self, address: usize) -> Option<u8> {
+        if N == 0 {
+            return None;
+        }
+        return Some(self.bytes[address % N]);
+    }
+
+    #[inline(always)]
+    pub fn wrapping_write(&mut self, address: usize, data: u8) {
+        if self.readonly || N == 0 {
+            return;
+        }
+        self.bytes[address % N] = data;
+    }
+
+    #[inline(always)]
+    pub fn banked_read(&self, bank_size: usize, bank_index: usize, offset: usize) -> Option<u8> {
+        let effective_address = (bank_size * bank_index) + (offset % bank_size);
+        return self.wrapping_read(effective_address);
+    }
+
+    #[inline(always)]
+    pub fn banked_write(&mut self, bank_size: usize, bank_index: usize, offset: usize, data: u8) {
+        let effective_address = (bank_size * bank_index) + (offset % bank_size);
+        self.wrapping_write(effective_address, data);
+    }
+
+    pub fn as_vec(&self) -> &Vec<u8> {
+        todo!();
+    }
+
+    pub fn as_mut_vec(&mut self) -> &mut Vec<u8> {
+        todo!()
+    }
+}

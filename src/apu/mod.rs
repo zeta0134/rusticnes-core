@@ -62,7 +62,7 @@ pub struct ApuState {
 
     pub hq_buffer_full: bool,
     pub hq_staging_buffer: RingBuffer,
-    pub hq_output_buffer: [i16; 32768],
+    pub hq_output_buffer: Vec<i16>,
 
     // filter chain (todo: make this a tad more flexible)
     // also todo: make sure these are recreated when changing sample rate
@@ -145,7 +145,7 @@ impl ApuState {
             tnd_table: generate_tnd_table(),
             hq_buffer_full: false,
             hq_staging_buffer: RingBuffer::new(32768),
-            hq_output_buffer: [0_i16; 32768],
+            hq_output_buffer: vec![0_i16; 32768],
 
             famicom_hp_37hz: filters::HighPassIIR::new(1786860.0, 37.0),
             nes_hp_90hz: filters::HighPassIIR::new(1786860.0, 90.0),
