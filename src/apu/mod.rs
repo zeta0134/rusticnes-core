@@ -72,7 +72,7 @@ pub struct ApuState {
     pub nes_hp_440hz: filters::HighPassIIR,
     pub nes_lp_14khz: filters::LowPassIIR,
 
-    pub lp_pre_decimate: filters::LowPassFIR,
+    pub lp_pre_decimate: filters::LowPassIIR,
 
     pub filter_chain: FilterChain,
 }
@@ -152,7 +152,7 @@ impl ApuState {
             nes_hp_440hz: filters::HighPassIIR::new(1786860.0, 440.0),
             nes_lp_14khz: filters::LowPassIIR::new(1786860.0, 14000.0),
 
-            lp_pre_decimate: filters::LowPassFIR::new(1786860.0, 44100.0 * 0.45, 160), // just under half the sample rate
+            lp_pre_decimate: filters::LowPassIIR::new(1786860.0, 44100.0 * 0.45), // just under half the sample rate
 
             filter_chain: FilterChain::FamiCom,
         }
@@ -166,7 +166,7 @@ impl ApuState {
 
     pub fn set_sample_rate(&mut self, sample_rate: u64) {
         self.sample_rate = sample_rate;
-        self.lp_pre_decimate = filters::LowPassFIR::new(self.cpu_clock_rate as f64, (sample_rate as f64) * 0.45, 160);
+        self.lp_pre_decimate = filters::LowPassIIR::new(self.cpu_clock_rate as f64, (sample_rate as f64) * 0.45);
         let output_buffer_size = recommended_buffer_size(44100);
         self.set_buffer_size(output_buffer_size);
     }
