@@ -29,4 +29,8 @@ impl RingBuffer {
     pub fn index(&self) -> usize {
         return self.index;
     }
+
+    pub fn reset(&mut self) {
+        self.index = 0;
+    }
 }

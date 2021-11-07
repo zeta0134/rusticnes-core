@@ -655,6 +655,18 @@ impl ApuState {
         let _ = file.write_all(&buffer);
     }
 
+    pub fn consume_samples(&mut self) -> Vec<i16> {
+        let mut output_buffer = vec!(0i16; 0);
+        if self.buffer_full {
+            output_buffer.extend(&self.output_buffer);
+            self.buffer_full = false;
+        }
+        let staging_index = self.staging_buffer.index();
+        output_buffer.extend(&self.staging_buffer.buffer()[0 .. staging_index]);
+        self.staging_buffer.reset();
+        return output_buffer;
+    }
+
     pub fn irq_signal(&self) -> bool {
         return self.frame_interrupt || self.dmc.interrupt_flag;
     }
@@ -675,7 +687,7 @@ impl ApuState {
         if channel_index < channels.len() {
             channels[channel_index].unmute();
         }
-    }    
+    }
 }
 
 // The APU itself counts as a channel, loosely, mostly for debugging purposes. Its output is a
