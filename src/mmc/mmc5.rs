@@ -11,6 +11,8 @@ use apu::PulseChannelState;
 
 use apu::AudioChannelState;
 use apu::RingBuffer;
+use apu::filters;
+use apu::filters::DspFilter;
 
 #[derive(Copy, Clone, PartialEq)]
 pub enum PpuMode {
@@ -26,6 +28,8 @@ pub struct Mmc5PcmChannel {
     pub irq_pending: bool,
     pub muted: bool,
     pub output_buffer: RingBuffer,
+    pub edge_buffer: RingBuffer,
+    pub debug_filter: filters::HighPassIIR,
 }
 
 impl Mmc5PcmChannel {
@@ -37,6 +41,8 @@ impl Mmc5PcmChannel {
             irq_pending: false,
             muted: false,
             output_buffer: RingBuffer::new(32768),
+            edge_buffer: RingBuffer::new(32768),
+            debug_filter: filters::HighPassIIR::new(44100.0, 37.0),
         }
     }
 }
@@ -54,16 +60,26 @@ impl AudioChannelState for Mmc5PcmChannel {
         return &self.output_buffer;
     }
 
+    fn edge_buffer(&self) -> &RingBuffer {
+        return &self.edge_buffer;
+    }
+
     fn record_current_output(&mut self) {
-        self.output_buffer.push(self.level as i16);
+        self.debug_filter.consume(self.level as f64);
+        self.output_buffer.push((self.debug_filter.output() * -4.0) as i16);
+        // MMC5 PCM doesn't have any detectable edges, the samples
+        // are all CPU provided and entirely arbitrary. Consider every
+        // sample to be an edge, so we always show the most recent slice
+        // of the buffer.
+        self.edge_buffer.push(true as i16);
     }
 
     fn min_sample(&self) -> i16 {
-        return 0;
+        return -1024;
     }
 
     fn max_sample(&self) -> i16 {
-        return 255;
+        return 1024;
     }
 
     fn muted(&self) -> bool {
