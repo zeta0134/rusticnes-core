@@ -160,6 +160,10 @@ impl AudioChannelState for DmcState {
         return self.chip.clone();
     }
 
+    fn edge_buffer(&self) -> &RingBuffer {
+        return &self.edge_buffer;
+    }
+
     fn sample_buffer(&self) -> &RingBuffer {
         return &self.output_buffer;
     }
