@@ -12,6 +12,8 @@ use apu::PlaybackRate;
 use apu::Volume;
 use apu::Timbre;
 use apu::RingBuffer;
+use apu::filters;
+use apu::filters::DspFilter;
 
 pub struct Fme7 {
     pub prg_rom: MemoryBlock,
@@ -227,6 +229,7 @@ pub struct ToneGenerator {
     pub period_compare: u16,
     pub period_current: u16,
     pub output: u8,
+    pub last_edge: bool,
 }
 
 impl ToneGenerator {
@@ -235,6 +238,7 @@ impl ToneGenerator {
             period_compare: 0,
             period_current: 0,
             output: 0,
+            last_edge: false,
         }
     }
 
@@ -243,6 +247,9 @@ impl ToneGenerator {
         if self.period_current >= self.period_compare {
             self.period_current = 0;
             self.output = self.output ^ 0b1;
+            if self.output != 0 {
+                self.last_edge = true;
+            }
         }
     }
 
@@ -396,6 +403,8 @@ impl EnvelopeGenerator {
 pub struct YmChannel {
     pub name: String,
     pub output_buffer: RingBuffer,
+    pub edge_buffer: RingBuffer,
+    pub debug_filter: filters::HighPassIIR,
     pub muted: bool,
 
     pub tone: ToneGenerator,
@@ -412,6 +421,8 @@ impl YmChannel {
         return YmChannel {
             name: String::from(channel_name),
             output_buffer: RingBuffer::new(32768),
+            edge_buffer: RingBuffer::new(32768),
+            debug_filter: filters::HighPassIIR::new(44100.0, 37.0),
             muted: false,
             tone: ToneGenerator::new(),
             tone_enabled: false,
@@ -425,6 +436,8 @@ impl YmChannel {
 
     pub fn record_sample(&mut self, sample: i16) {
         self.output_buffer.push(sample);
+        self.edge_buffer.push(self.tone.last_edge as i16);
+        self.tone.last_edge = false;
     }
 }
 
@@ -437,6 +450,10 @@ impl AudioChannelState for YmChannel {
         return "YM2149F".to_string();
     }
 
+    fn edge_buffer(&self) -> &RingBuffer {
+        return &self.edge_buffer;
+    }
+
     fn sample_buffer(&self) -> &RingBuffer {
         return &self.output_buffer;
     }
@@ -446,11 +463,11 @@ impl AudioChannelState for YmChannel {
     }
 
     fn min_sample(&self) -> i16 {
-        return 0;
+        return -128;
     }
 
     fn max_sample(&self) -> i16 {
-        return 31;
+        return 128;
     }
 
     fn muted(&self) -> bool {
@@ -590,13 +607,12 @@ impl YM2149F {
     }
 
     pub fn record_output(&mut self) {
-        self.channel_a.record_sample((self.channel_output(&self.channel_a)) as i16);
-        self.channel_b.record_sample((self.channel_output(&self.channel_b)) as i16);
-        self.channel_c.record_sample((self.channel_output(&self.channel_c)) as i16);
-        //self.channel_a.record_sample((self.volume_lut[self.channel_output(&self.channel_a)] * 255.0) as i16);
-        //self.channel_b.record_sample((self.volume_lut[self.channel_output(&self.channel_b)] * 255.0) as i16);
-        //self.channel_c.record_sample((self.volume_lut[self.channel_output(&self.channel_c)] * 255.0) as i16);
-
+        self.channel_a.debug_filter.consume(self.channel_output(&self.channel_a) as f64);
+        self.channel_a.record_sample((self.channel_a.debug_filter.output() * -4.0) as i16);
+        self.channel_b.debug_filter.consume(self.channel_output(&self.channel_b) as f64);
+        self.channel_b.record_sample((self.channel_b.debug_filter.output() * -4.0) as i16);
+        self.channel_c.debug_filter.consume(self.channel_output(&self.channel_c) as f64);
+        self.channel_c.record_sample((self.channel_c.debug_filter.output() * -4.0) as i16);
     }
 
     pub fn execute_command(&mut self, command: u8, data: u8) {
