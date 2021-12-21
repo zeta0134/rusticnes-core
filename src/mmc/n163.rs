@@ -12,6 +12,8 @@ use apu::PlaybackRate;
 use apu::Volume;
 use apu::Timbre;
 use apu::RingBuffer;
+use apu::filters;
+use apu::filters::DspFilter;
 
 pub struct Namco163AudioChannel {
     pub debug_disable: bool,
@@ -22,6 +24,9 @@ pub struct Namco163AudioChannel {
     pub tracked_volume: u8,
     pub tracked_address: u8,
     pub output_buffer: RingBuffer,
+    pub edge_buffer: RingBuffer,
+    pub last_edge: bool,
+    pub debug_filter: filters::HighPassIIR,
 }
 
 const AUDIO_FREQ_LOW:     usize = 0;
@@ -54,6 +59,9 @@ impl Namco163AudioChannel {
             tracked_volume: 0,
             tracked_address: 0,
             output_buffer: RingBuffer::new(32768),
+            edge_buffer: RingBuffer::new(32768),
+            last_edge: false,
+            debug_filter: filters::HighPassIIR::new(44100.0, 37.0),
         }
     }
 
@@ -102,6 +110,9 @@ impl Namco163AudioChannel {
 
         let new_phase = (current_phase + frequency) % (length << 16);
         self.write_phase(audio_ram, new_phase);
+        if new_phase < current_phase {
+            self.last_edge = true;
+        }
 
         let sample_index = (sample_address + (new_phase >> 16)) & 0xFF;
         let sample = audio_sample(audio_ram, sample_index as u8) as f64;
@@ -132,16 +143,23 @@ impl AudioChannelState for Namco163AudioChannel {
         return &self.output_buffer;
     }
 
+    fn edge_buffer(&self) -> &RingBuffer {
+        return &self.edge_buffer;
+    }
+
     fn record_current_output(&mut self) {
-        self.output_buffer.push(self.current_output as i16);
+        self.debug_filter.consume(self.current_output as f64);
+        self.output_buffer.push((self.debug_filter.output() * -4.0) as i16);
+        self.edge_buffer.push(self.last_edge as i16);
+        self.last_edge = false;
     }
 
     fn min_sample(&self) -> i16 {
-        return -128;
+        return -512;
     }
 
     fn max_sample(&self) -> i16 {
-        return 127;
+        return 512;
     }
 
     fn muted(&self) -> bool {
