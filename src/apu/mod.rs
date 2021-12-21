@@ -49,6 +49,7 @@ pub struct ApuState {
     pub dmc: DmcState,
 
     pub staging_buffer: RingBuffer,
+    pub edge_buffer: RingBuffer,
     pub output_buffer: Vec<i16>,
     pub buffer_full: bool,
     pub sample_rate: u64,
@@ -134,6 +135,7 @@ impl ApuState {
             noise: NoiseChannelState::new("Noise", "2A03"),
             dmc: DmcState::new("DMC", "2A03"),
             staging_buffer: RingBuffer::new(output_buffer_size),
+            edge_buffer: RingBuffer::new(output_buffer_size),
             output_buffer: vec!(0i16; output_buffer_size),
             buffer_full: false,
             sample_rate: default_samplerate,
@@ -587,6 +589,7 @@ impl ApuState {
             let composite_sample = (self.lp_pre_decimate.output() * 32767.0) as i16;
 
             self.staging_buffer.push(composite_sample);
+            self.edge_buffer.push(true as i16);
 
             // Write debug buffers from these, regardless of enable / disable status
             self.pulse_1.record_current_output();
@@ -700,6 +703,10 @@ impl AudioChannelState for ApuState {
 
     fn chip(&self) -> String {
         return "APU".to_string();
+    }
+
+    fn edge_buffer(&self) -> &RingBuffer {
+        return &self.edge_buffer;
     }
 
     fn sample_buffer(&self) -> &RingBuffer {

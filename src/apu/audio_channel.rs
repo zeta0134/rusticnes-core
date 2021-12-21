@@ -29,7 +29,7 @@ pub trait AudioChannelState {
     fn sample_buffer(&self) -> &RingBuffer;
     // TODO: Remove this default implementation, once edge buffer
     // is properly supported in all channel types
-    fn edge_buffer(&self) -> &RingBuffer {return self.sample_buffer();}
+    fn edge_buffer(&self) -> &RingBuffer;
     fn min_sample(&self) -> i16 {return i16::MIN;}
     fn max_sample(&self) -> i16 {return i16::MAX;}
     fn record_current_output(&mut self);
