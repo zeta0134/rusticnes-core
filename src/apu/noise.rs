@@ -5,13 +5,17 @@ use super::audio_channel::PlaybackRate;
 use super::audio_channel::Volume;
 use super::audio_channel::Timbre;
 use super::ring_buffer::RingBuffer;
+use super::filters;
+use super::filters::DspFilter;
 
 pub struct NoiseChannelState {
     pub name: String,
     pub chip: String,
     pub debug_disable: bool,
-    pub debug_buffer: Vec<i16>,
     pub output_buffer: RingBuffer,
+    pub edge_buffer: RingBuffer,
+    pub last_edge: bool,
+    pub debug_filter: filters::HighPassIIR,
     pub length: u8,
     pub length_halt_flag: bool,
 
@@ -32,8 +36,10 @@ impl NoiseChannelState {
             name: String::from(channel_name),
             chip: String::from(chip_name),
             debug_disable: false,
-            debug_buffer: vec!(0i16; 4096),
             output_buffer: RingBuffer::new(32768),
+            edge_buffer: RingBuffer::new(32768),
+            last_edge: false,
+            debug_filter: filters::HighPassIIR::new(44100.0, 37.0),
             length: 0,
             length_halt_flag: false,
 
@@ -60,6 +66,7 @@ impl NoiseChannelState {
             }
             self.shift_register = self.shift_register >> 1;
             self.shift_register |= feedback << 14;
+            self.last_edge = true;
         } else {
             self.period_current -= 1;
         }
@@ -89,16 +96,23 @@ impl AudioChannelState for NoiseChannelState {
         return &self.output_buffer;
     }
 
+    fn edge_buffer(&self) -> &RingBuffer {
+        return &self.edge_buffer;
+    }
+
     fn record_current_output(&mut self) {
-        self.output_buffer.push(self.output());
+        self.debug_filter.consume(self.output() as f64);
+        self.output_buffer.push((self.debug_filter.output() * -4.0) as i16);
+        self.edge_buffer.push(self.last_edge as i16);
+        self.last_edge = false;
     }
 
     fn min_sample(&self) -> i16 {
-        return 0;
+        return -60;
     }
 
     fn max_sample(&self) -> i16 {
-        return 15;
+        return 60;
     }
 
     fn muted(&self) -> bool {

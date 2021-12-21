@@ -12,6 +12,8 @@ use apu::PlaybackRate;
 use apu::Volume;
 use apu::Timbre;
 use apu::RingBuffer;
+use apu::filters;
+use apu::filters::DspFilter;
 
 pub struct Vrc6PulseChannel {
     pub name: String,
@@ -26,6 +28,9 @@ pub struct Vrc6PulseChannel {
     pub scale_256: bool,
     pub scale_16: bool,
     pub output_buffer: RingBuffer,
+    pub edge_buffer: RingBuffer,
+    pub last_edge: bool,
+    pub debug_filter: filters::HighPassIIR,
 }
 
 impl Vrc6PulseChannel {
@@ -43,12 +48,16 @@ impl Vrc6PulseChannel {
             scale_256: false,
             scale_16: false,
             output_buffer: RingBuffer::new(32768),
+            edge_buffer: RingBuffer::new(32768),
+            last_edge: false,
+            debug_filter: filters::HighPassIIR::new(44100.0, 37.0),
         };
     }
 
     pub fn _clock_duty_generator(&mut self) {
         if self.duty_counter == 0 {
             self.duty_counter = 15;
+            self.last_edge = true;
         } else {
             self.duty_counter -= 1;
         }
@@ -129,16 +138,23 @@ impl AudioChannelState for Vrc6PulseChannel {
         return &self.output_buffer;
     }
 
+    fn edge_buffer(&self) -> &RingBuffer {
+        return &self.edge_buffer;
+    }
+
     fn record_current_output(&mut self) {
-        self.output_buffer.push(self.output() as i16);
+        self.debug_filter.consume(self.output() as f64);
+        self.output_buffer.push((self.debug_filter.output() * -4.0) as i16);
+        self.edge_buffer.push(self.last_edge as i16);
+        self.last_edge = false;
     }
 
     fn min_sample(&self) -> i16 {
-        return 0;
+        return -60;
     }
 
     fn max_sample(&self) -> i16 {
-        return 15;
+        return 60;
     }
 
     fn muted(&self) -> bool {
@@ -187,6 +203,9 @@ pub struct Vrc6SawtoothChannel {
     pub scale_256: bool,
     pub scale_16: bool,
     pub output_buffer: RingBuffer,
+    pub edge_buffer: RingBuffer,
+    pub last_edge: bool,
+    pub debug_filter: filters::HighPassIIR,
 }
 
 impl Vrc6SawtoothChannel {
@@ -203,6 +222,9 @@ impl Vrc6SawtoothChannel {
             scale_256: false,
             scale_16: false,
             output_buffer: RingBuffer::new(32768),
+            edge_buffer: RingBuffer::new(32768),
+            last_edge: false,
+            debug_filter: filters::HighPassIIR::new(44100.0, 37.0),
         };
     }
 
@@ -211,6 +233,7 @@ impl Vrc6SawtoothChannel {
         if self.accumulator_step >= 14 {
             self.accumulator_step = 0;
             self.accumulator = 0;
+            self.last_edge = true;
         } else {
             // Only take action on EVEN steps:
             if (self.accumulator_step & 0b1) == 0 {
@@ -285,16 +308,23 @@ impl AudioChannelState for Vrc6SawtoothChannel {
         return &self.output_buffer;
     }
 
+    fn edge_buffer(&self) -> &RingBuffer {
+        return &self.edge_buffer;
+    }
+
     fn record_current_output(&mut self) {
-        self.output_buffer.push(self.output() as i16);
+        self.debug_filter.consume(self.output() as f64);
+        self.output_buffer.push((self.debug_filter.output() * -4.0) as i16);
+        self.edge_buffer.push(self.last_edge as i16);
+        self.last_edge = false;
     }
 
     fn min_sample(&self) -> i16 {
-        return 0;
+        return -60;
     }
 
     fn max_sample(&self) -> i16 {
-        return 15;
+        return 60;
     }
 
     fn muted(&self) -> bool {

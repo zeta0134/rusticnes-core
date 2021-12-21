@@ -411,6 +411,7 @@ impl ApuState {
                 if dmc_enable && self.dmc.bytes_remaining == 0 {
                     self.dmc.current_address = self.dmc.starting_address;
                     self.dmc.bytes_remaining = self.dmc.sample_length;
+                    self.dmc.last_edge = true;
                 }
                 self.dmc.interrupt_flag = false;
             }

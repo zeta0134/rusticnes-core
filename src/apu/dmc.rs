@@ -1,13 +1,17 @@
 use mmc::mapper::Mapper;
 use super::audio_channel::AudioChannelState;
 use super::ring_buffer::RingBuffer;
+use super::filters;
+use super::filters::DspFilter;
 
 pub struct DmcState {
     pub name: String,
     pub chip: String,
     pub debug_disable: bool,
-    pub debug_buffer: Vec<i16>,
     pub output_buffer: RingBuffer,
+    pub edge_buffer: RingBuffer,
+    pub last_edge: bool,
+    pub debug_filter: filters::HighPassIIR,
 
     pub looping: bool,
     pub period_initial: u16,
@@ -36,8 +40,10 @@ impl DmcState {
             name: String::from(channel_name),
             chip: String::from(chip_name),
             debug_disable: false,
-            debug_buffer: vec!(0i16; 4096),
             output_buffer: RingBuffer::new(32768),
+            edge_buffer: RingBuffer::new(32768),
+            last_edge: false,
+            debug_filter: filters::HighPassIIR::new(44100.0, 37.0),
 
             looping: false,
             period_initial: 428,
@@ -77,6 +83,7 @@ impl DmcState {
             if self.looping {
                 self.current_address = self.starting_address;
                 self.bytes_remaining = self.sample_length;
+                self.last_edge = true;
             } else {
                 if self.interrupt_enabled {
                     self.interrupt_flag = true;
@@ -158,15 +165,18 @@ impl AudioChannelState for DmcState {
     }
 
     fn record_current_output(&mut self) {
-        self.output_buffer.push(self.output());
+        self.debug_filter.consume(self.output() as f64);
+        self.output_buffer.push((self.debug_filter.output() * -4.0) as i16);
+        self.edge_buffer.push(self.last_edge as i16);
+        self.last_edge = false;
     }
 
     fn min_sample(&self) -> i16 {
-        return 0;
+        return -512;
     }
 
     fn max_sample(&self) -> i16 {
-        return 127;
+        return 512;
     }
 
     fn muted(&self) -> bool {
@@ -196,6 +206,6 @@ impl AudioChannelState for DmcState {
             index += 1;
             index = index % buffer.len();
         }
-        return (max - min) as f64 / 64.0;
+        return (max - min) as f64 / 256.0;
     }
 }
