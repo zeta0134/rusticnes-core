@@ -155,11 +155,11 @@ impl AudioChannelState for Namco163AudioChannel {
     }
 
     fn min_sample(&self) -> i16 {
-        return -512;
+        return -1024;
     }
 
     fn max_sample(&self) -> i16 {
-        return 512;
+        return 1024;
     }
 
     fn muted(&self) -> bool {
