@@ -18,9 +18,9 @@ use apu::filters::DspFilter;
 pub struct Namco163AudioChannel {
     pub debug_disable: bool,
     pub channel_address: usize,
-    pub current_output: f64,
+    pub current_output: f32,
     // cache these to return for debugging purposes
-    pub tracked_frequency: f64,
+    pub tracked_frequency: f32,
     pub tracked_volume: u8,
     pub tracked_address: u8,
     pub output_buffer: RingBuffer,
@@ -115,16 +115,16 @@ impl Namco163AudioChannel {
         }
 
         let sample_index = (sample_address + (new_phase >> 16)) & 0xFF;
-        let sample = audio_sample(audio_ram, sample_index as u8) as f64;
+        let sample = audio_sample(audio_ram, sample_index as u8) as f32;
 
         // The final output sample is biased, such that +8 is centered
-        self.current_output = (sample - 8.0) * (volume as f64);
+        self.current_output = (sample - 8.0) * (volume as f32);
 
         // for debug visualizations
-        let ntsc_clockrate: f64 = 1_789_773.0;
+        let ntsc_clockrate: f32 = 1_789_773.0;
         let enabled_channels = (((audio_ram[0x7F] & 0b0111_0000) >> 4) + 1) as u32;
 
-        self.tracked_frequency = (ntsc_clockrate * (frequency as f64)) / (15.0 * 65536.0 * (length as f64) * (enabled_channels as f64));
+        self.tracked_frequency = (ntsc_clockrate * (frequency as f32)) / (15.0 * 65536.0 * (length as f32) * (enabled_channels as f32));
         self.tracked_volume = volume;
         self.tracked_address = sample_address as u8;
     }
@@ -148,7 +148,7 @@ impl AudioChannelState for Namco163AudioChannel {
     }
 
     fn record_current_output(&mut self) {
-        self.debug_filter.consume(self.current_output as f64);
+        self.debug_filter.consume(self.current_output);
         self.output_buffer.push((self.debug_filter.output() * -4.0) as i16);
         self.edge_buffer.push(self.last_edge as i16);
         self.last_edge = false;
@@ -205,7 +205,7 @@ pub struct Namco163Audio {
     pub channel8: Namco163AudioChannel,
     pub channel_delay_counter: u8,
     pub current_channel: usize,
-    pub current_output: f64,
+    pub current_output: f32,
     pub maximum_channels_enabled: usize,
 }
 
@@ -303,14 +303,14 @@ pub struct Namco163 {
     pub nt_ram_at_0000: bool,
     pub nt_ram_at_1000: bool,
 
-    pub audio_relative_mix: f64,
+    pub audio_relative_mix: f32,
 }
 
-pub fn amplitude_from_db(db: f64) -> f64 {
-    return f64::powf(10.0, db / 20.0);
+pub fn amplitude_from_db(db: f32) -> f32 {
+    return f32::powf(10.0, db / 20.0);
 }
 
-pub fn n163_mixing_level(submapper: u8) -> f64 {
+pub fn n163_mixing_level(submapper: u8) -> f32 {
     // Reference: https://wiki.nesdev.com/w/index.php?title=Namco_163_audio#Mixing
     let relative_db = match submapper {
         1 => 0.0, // deprecated variant, no expansion audio
@@ -534,7 +534,7 @@ impl Mapper for Namco163 {
         self.expansion_audio_chip.clock();
     }
 
-    fn mix_expansion_audio(&self, nes_sample: f64) -> f64 {
+    fn mix_expansion_audio(&self, nes_sample: f32) -> f32 {
         // APU pulse numbers from https://wiki.nesdev.com/w/index.php?title=APU_Mixer
         let nes_pulse_full_volume = 95.88 / ((8128.0 / 15.0) + 100.0);
         let n163_square_full_volume = 15.0 * 15.0; // loudest sample * loudest volume
@@ -546,7 +546,7 @@ impl Mapper for Namco163 {
         return nes_sample + (self.expansion_audio_chip.current_output * n163_weight);
     }
 
-    fn record_expansion_audio_output(&mut self, _nes_sample: f64) {
+    fn record_expansion_audio_output(&mut self, _nes_sample: f32) {
         self.expansion_audio_chip.record_output();
     }
 

@@ -34,8 +34,8 @@ pub trait Mapper: Send {
     fn load_sram(&mut self, _: Vec<u8>) {}
     fn irq_flag(&self) -> bool {return false;}
     fn clock_cpu(&mut self) {}
-    fn mix_expansion_audio(&self, nes_sample: f64) -> f64 {return nes_sample;}
+    fn mix_expansion_audio(&self, nes_sample: f32) -> f32 {return nes_sample;}
     fn channels(&self) ->  Vec<& dyn AudioChannelState> {return Vec::new();}
     fn channels_mut(&mut self) ->  Vec<&mut dyn AudioChannelState> {return Vec::new();}
-    fn record_expansion_audio_output(&mut self, _nes_sample: f64) {}
+    fn record_expansion_audio_output(&mut self, _nes_sample: f32) {}
 }

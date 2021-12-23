@@ -101,7 +101,7 @@ impl AudioChannelState for NoiseChannelState {
     }
 
     fn record_current_output(&mut self) {
-        self.debug_filter.consume(self.output() as f64);
+        self.debug_filter.consume(self.output() as f32);
         self.output_buffer.push((self.debug_filter.output() * -4.0) as i16);
         self.edge_buffer.push(self.last_edge as i16);
         self.last_edge = false;

@@ -169,7 +169,7 @@ impl AudioChannelState for DmcState {
     }
 
     fn record_current_output(&mut self) {
-        self.debug_filter.consume(self.output() as f64);
+        self.debug_filter.consume(self.output() as f32);
         self.output_buffer.push((self.debug_filter.output() * -4.0) as i16);
         self.edge_buffer.push(self.last_edge as i16);
         self.last_edge = false;
@@ -199,7 +199,7 @@ impl AudioChannelState for DmcState {
         return true;
     }
 
-    fn amplitude(&self) -> f64 {
+    fn amplitude(&self) -> f32 {
         let buffer = self.output_buffer.buffer();
         let mut index = (self.output_buffer.index() - 256) % buffer.len();
         let mut max = buffer[index];
@@ -210,6 +210,6 @@ impl AudioChannelState for DmcState {
             index += 1;
             index = index % buffer.len();
         }
-        return (max - min) as f64 / 256.0;
+        return (max - min) as f32 / 256.0;
     }
 }

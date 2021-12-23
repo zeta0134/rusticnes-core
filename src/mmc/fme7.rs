@@ -200,7 +200,7 @@ impl Mapper for Fme7 {
         return self.irq_enabled && self.irq_pending;
     }
 
-    fn mix_expansion_audio(&self, nes_sample: f64) -> f64 {
+    fn mix_expansion_audio(&self, nes_sample: f32) -> f32 {
         return (self.expansion_audio_chip.output() - 0.5) * 1.06 - nes_sample;
     }
 
@@ -220,7 +220,7 @@ impl Mapper for Fme7 {
         return channels;
     }
 
-    fn record_expansion_audio_output(&mut self, _nes_sample: f64) {
+    fn record_expansion_audio_output(&mut self, _nes_sample: f32) {
         self.expansion_audio_chip.record_output();
     }
 }
@@ -413,7 +413,7 @@ pub struct YmChannel {
     pub envelope_enabled: bool,
     pub static_volume: u8,
     pub effective_volume: usize,
-    pub effective_amplitude: f64,
+    pub effective_amplitude: f32,
 }
 
 impl YmChannel {
@@ -489,7 +489,7 @@ impl AudioChannelState for YmChannel {
     }
 
     fn rate(&self) -> PlaybackRate {
-        let frequency = 1_789_773.0 / (32.0 * (self.tone.period_compare as f64));
+        let frequency = 1_789_773.0 / (32.0 * (self.tone.period_compare as f32));
         return PlaybackRate::FundamentalFrequency {frequency: frequency};
     }
 
@@ -501,11 +501,11 @@ impl AudioChannelState for YmChannel {
         return None;
     }
 
-    fn amplitude(&self) -> f64 {
+    fn amplitude(&self) -> f32 {
         if self.playing() {
             // Per: https://forums.nesdev.com/viewtopic.php?f=2&t=17745&sid=158b0a9e442a815411f7b453b093474a&start=15#p225103
             // "...its pre-compression output for a single channel only really goes up to maybe 8 db louder than an APU square can go"
-            let db_boost = 10f64.powf(8.0 * 0.05);
+            let db_boost = 10f32.powf(8.0 * 0.05);
             return self.effective_amplitude * db_boost;
         }
         return 0.0;
@@ -519,7 +519,7 @@ pub struct YM2149F {
     pub noise: NoiseGenerator,
     pub envelope: EnvelopeGenerator,
     pub clock_divider_counter: u8,
-    pub volume_lut: Vec<f64>,
+    pub volume_lut: Vec<f32>,
 }
 
 impl YM2149F {
@@ -535,8 +535,8 @@ impl YM2149F {
         }
     }
 
-    pub fn generate_volume_lut() -> Vec<f64> {
-        let mut lut = vec![0f64; 32];
+    pub fn generate_volume_lut() -> Vec<f32> {
+        let mut lut = vec![0f32; 32];
         lut[0] = 0.0;
         lut[1] = 0.0; // First two entries emit silence
         // The table should cap out at 1.0
@@ -545,7 +545,7 @@ impl YM2149F {
         for i in (2 ..= 31).rev() {
             lut[i] = output;
             // ...decrease by 1.5 dB every step
-            output /= 10f64.powf(1.5 * 0.05);
+            output /= 10f32.powf(1.5 * 0.05);
         }
         return lut;
     }
@@ -599,7 +599,7 @@ impl YM2149F {
         return 0;
     }
 
-    pub fn output(&self) -> f64 {
+    pub fn output(&self) -> f32 {
         let channel_a = if self.channel_a.muted() {0.0} else {self.volume_lut[self.channel_output(&self.channel_a)]};
         let channel_b = if self.channel_b.muted() {0.0} else {self.volume_lut[self.channel_output(&self.channel_b)]};
         let channel_c = if self.channel_c.muted() {0.0} else {self.volume_lut[self.channel_output(&self.channel_c)]};
@@ -607,11 +607,11 @@ impl YM2149F {
     }
 
     pub fn record_output(&mut self) {
-        self.channel_a.debug_filter.consume(self.channel_output(&self.channel_a) as f64);
+        self.channel_a.debug_filter.consume(self.channel_output(&self.channel_a) as f32);
         self.channel_a.record_sample((self.channel_a.debug_filter.output() * -4.0) as i16);
-        self.channel_b.debug_filter.consume(self.channel_output(&self.channel_b) as f64);
+        self.channel_b.debug_filter.consume(self.channel_output(&self.channel_b) as f32);
         self.channel_b.record_sample((self.channel_b.debug_filter.output() * -4.0) as i16);
-        self.channel_c.debug_filter.consume(self.channel_output(&self.channel_c) as f64);
+        self.channel_c.debug_filter.consume(self.channel_output(&self.channel_c) as f32);
         self.channel_c.record_sample((self.channel_c.debug_filter.output() * -4.0) as i16);
     }
 

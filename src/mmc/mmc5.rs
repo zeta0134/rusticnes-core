@@ -65,7 +65,7 @@ impl AudioChannelState for Mmc5PcmChannel {
     }
 
     fn record_current_output(&mut self) {
-        self.debug_filter.consume(self.level as f64);
+        self.debug_filter.consume(self.level as f32);
         self.output_buffer.push((self.debug_filter.output() * -4.0) as i16);
         // MMC5 PCM doesn't have any detectable edges, the samples
         // are all CPU provided and entirely arbitrary. Consider every
@@ -99,7 +99,7 @@ impl AudioChannelState for Mmc5PcmChannel {
         return true;
     }
 
-    fn amplitude(&self) -> f64 {
+    fn amplitude(&self) -> f32 {
         let buffer = self.output_buffer.buffer();
         let mut index = (self.output_buffer.index() - 256) % buffer.len();
         let mut max = buffer[index];
@@ -110,7 +110,7 @@ impl AudioChannelState for Mmc5PcmChannel {
             index += 1;
             index = index % buffer.len();
         }
-        return (max - min) as f64 / 64.0;
+        return (max - min) as f32 / 64.0;
     }
 }
 
@@ -856,10 +856,10 @@ impl Mapper for Mmc5 {
         }
     }
 
-    fn mix_expansion_audio(&self, nes_sample: f64) -> f64 {
-        let pulse_1_output = (self.pulse_1.output() as f64 / 15.0) - 0.5;
-        let pulse_2_output = (self.pulse_2.output() as f64 / 15.0) - 0.5;
-        let mut pcm_output = (self.pcm_channel.level as f64 / 256.0) - 0.5;
+    fn mix_expansion_audio(&self, nes_sample: f32) -> f32 {
+        let pulse_1_output = (self.pulse_1.output() as f32 / 15.0) - 0.5;
+        let pulse_2_output = (self.pulse_2.output() as f32 / 15.0) - 0.5;
+        let mut pcm_output = (self.pcm_channel.level as f32 / 256.0) - 0.5;
         if self.pcm_channel.muted {
             pcm_output = 0.0;
         }
@@ -886,7 +886,7 @@ impl Mapper for Mmc5 {
         return channels;
     }
 
-    fn record_expansion_audio_output(&mut self, _nes_sample: f64) {
+    fn record_expansion_audio_output(&mut self, _nes_sample: f32) {
         self.pulse_1.record_current_output();
         self.pulse_2.record_current_output();
         self.pcm_channel.record_current_output();

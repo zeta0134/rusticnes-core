@@ -120,7 +120,7 @@ impl AudioChannelState for TriangleChannelState {
     }
 
     fn record_current_output(&mut self) {
-        self.debug_filter.consume(self.output() as f64);
+        self.debug_filter.consume(self.output() as f32);
         self.output_buffer.push((self.debug_filter.output() * -4.0) as i16);
         self.edge_buffer.push(self.last_edge as i16);
         self.last_edge = false;
@@ -154,7 +154,7 @@ impl AudioChannelState for TriangleChannelState {
     }
 
     fn rate(&self) -> PlaybackRate {
-        let frequency = self.cpu_clock_rate as f64 / (32.0 * (self.period_initial as f64 + 1.0));
+        let frequency = self.cpu_clock_rate as f32 / (32.0 * (self.period_initial as f32 + 1.0));
         return PlaybackRate::FundamentalFrequency {frequency: frequency};
     }
 
@@ -166,7 +166,7 @@ impl AudioChannelState for TriangleChannelState {
         return None;
     }
 
-    fn amplitude(&self) -> f64 {
+    fn amplitude(&self) -> f32 {
         if self.playing() {
             return 0.55;
         }

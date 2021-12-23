@@ -143,7 +143,7 @@ impl AudioChannelState for Vrc6PulseChannel {
     }
 
     fn record_current_output(&mut self) {
-        self.debug_filter.consume(self.output() as f64);
+        self.debug_filter.consume(self.output() as f32);
         self.output_buffer.push((self.debug_filter.output() * -4.0) as i16);
         self.edge_buffer.push(self.last_edge as i16);
         self.last_edge = false;
@@ -178,7 +178,7 @@ impl AudioChannelState for Vrc6PulseChannel {
     }
 
     fn rate(&self) -> PlaybackRate {
-        let frequency = 1_789_773.0 / (16.0 * (self.period_initial as f64 + 1.0));
+        let frequency = 1_789_773.0 / (16.0 * (self.period_initial as f32 + 1.0));
         return PlaybackRate::FundamentalFrequency {frequency: frequency};
     }
 
@@ -313,7 +313,7 @@ impl AudioChannelState for Vrc6SawtoothChannel {
     }
 
     fn record_current_output(&mut self) {
-        self.debug_filter.consume(self.output() as f64);
+        self.debug_filter.consume(self.output() as f32);
         self.output_buffer.push((self.debug_filter.output() * -4.0) as i16);
         self.edge_buffer.push(self.last_edge as i16);
         self.last_edge = false;
@@ -347,7 +347,7 @@ impl AudioChannelState for Vrc6SawtoothChannel {
     }
 
     fn rate(&self) -> PlaybackRate {
-        let frequency = 1_789_773.0 / (14.0 * (self.period_initial as f64 + 1.0));
+        let frequency = 1_789_773.0 / (14.0 * (self.period_initial as f32 + 1.0));
         return PlaybackRate::FundamentalFrequency {frequency: frequency};
     }
 
@@ -931,10 +931,10 @@ impl Mapper for Vrc6 {
         self.sawtooth.clock();
     }
 
-    fn mix_expansion_audio(&self, nes_sample: f64) -> f64 {
-        let pulse_1_output = if !self.pulse1.debug_disable {self.pulse1.output() as f64} else {0.0};
-        let pulse_2_output = if !self.pulse2.debug_disable {self.pulse2.output() as f64} else {0.0};
-        let sawtooth_output = if !self.sawtooth.debug_disable {self.sawtooth.output() as f64} else {0.0};
+    fn mix_expansion_audio(&self, nes_sample: f32) -> f32 {
+        let pulse_1_output = if !self.pulse1.debug_disable {self.pulse1.output() as f32} else {0.0};
+        let pulse_2_output = if !self.pulse2.debug_disable {self.pulse2.output() as f32} else {0.0};
+        let sawtooth_output = if !self.sawtooth.debug_disable {self.sawtooth.output() as f32} else {0.0};
         let vrc6_combined_sample = (pulse_1_output + pulse_2_output + sawtooth_output) / 61.0;
 
         let nes_pulse_full_volume = 95.88 / ((8128.0 / 15.0) + 100.0);
@@ -1110,7 +1110,7 @@ impl Mapper for Vrc6 {
         return channels;
     }
 
-    fn record_expansion_audio_output(&mut self, _nes_sample: f64) {
+    fn record_expansion_audio_output(&mut self, _nes_sample: f32) {
         self.pulse1.record_current_output();
         self.pulse2.record_current_output();
         self.sawtooth.record_current_output();

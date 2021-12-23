@@ -58,8 +58,8 @@ pub struct ApuState {
     pub next_sample_at: u64,
 
     // Lookup tables for emulating the mixer
-    pub pulse_table: Vec<f64>,
-    pub tnd_table: Vec<f64>,
+    pub pulse_table: Vec<f32>,
+    pub tnd_table: Vec<f32>,
 
     pub hq_buffer_full: bool,
     pub hq_staging_buffer: RingBuffer,
@@ -78,10 +78,10 @@ pub struct ApuState {
     pub filter_chain: FilterChain,
 }
 
-fn generate_pulse_table() -> Vec<f64> {
-    let mut pulse_table = vec!(0f64; 31);
+fn generate_pulse_table() -> Vec<f32> {
+    let mut pulse_table = vec!(0f32; 31);
     for n in 0 .. 31 {
-        pulse_table[n] = 95.52 / (8128.0 / (n as f64) + 100.0);
+        pulse_table[n] = 95.52 / (8128.0 / (n as f32) + 100.0);
     }
     return pulse_table;
 }
@@ -90,13 +90,13 @@ fn full_tnd_index(t: usize, n: usize, d: usize) -> usize {
     return (d * 16 * 16) + (n * 16) + t;
 }
 
-fn generate_tnd_table() -> Vec<f64> {
-    let mut tnd_table = vec!(0f64; 16*16*128);
+fn generate_tnd_table() -> Vec<f32> {
+    let mut tnd_table = vec!(0f32; 16*16*128);
     for tri in 0 .. 16 {
         for noise in 0 .. 16 {
             for dmc in 0 .. 128 {
                 let i = full_tnd_index(tri, noise, dmc);
-                tnd_table[i] = 159.79 / ((1.0 / ((tri as f64 / 8227.0) + (noise as f64 / 12241.0) + (dmc as f64 / 22638.0))) + 100.0);
+                tnd_table[i] = 159.79 / ((1.0 / ((tri as f32 / 8227.0) + (noise as f32 / 12241.0) + (dmc as f32 / 22638.0))) + 100.0);
             }
         }
     }
@@ -167,7 +167,7 @@ impl ApuState {
 
     pub fn set_sample_rate(&mut self, sample_rate: u64) {
         self.sample_rate = sample_rate;
-        self.lp_pre_decimate = filters::LowPassIIR::new(self.cpu_clock_rate as f64, (sample_rate as f64) * 0.45);
+        self.lp_pre_decimate = filters::LowPassIIR::new(self.cpu_clock_rate as f32, (sample_rate as f32) * 0.45);
         let output_buffer_size = recommended_buffer_size(44100);
         self.set_buffer_size(output_buffer_size);
     }
@@ -561,7 +561,7 @@ impl ApuState {
         let tnd_output = self.tnd_table[full_tnd_index(tri_output as usize, noise_output as usize, dmc_output as usize)];
 
         let current_2a03_sample = (pulse_output - 0.5) + (tnd_output - 0.5);
-        let current_dac_sample = mapper.mix_expansion_audio(current_2a03_sample);
+        let current_dac_sample = mapper.mix_expansion_audio(current_2a03_sample) as f32;
 
         // this is as raw as a sample gets, so write this out for hq debugging
         self.hq_staging_buffer.push((current_dac_sample * 32767.0) as i16);

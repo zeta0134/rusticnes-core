@@ -331,8 +331,8 @@ pub struct NsfMapper {
     current_cycles: u64,
     fade_cycles: u64,
     max_cycles: u64,
-    current_sample: f64, // used for silence detection
-    last_sample: f64,
+    current_sample: f32, // used for silence detection
+    last_sample: f32,
     silence_counter: u64,
     silence_threshold: u64,
     gui_row: u8,
@@ -342,8 +342,8 @@ pub struct NsfMapper {
     p1_pressed: u8,
 
     prg_rom_banks: Vec<usize>,
-    playback_accumulator: f64,
-    playback_period: f64,
+    playback_accumulator: f32,
+    playback_period: f32,
     playback_counter: u8,
 
     mirroring: Mirroring,
@@ -371,7 +371,7 @@ pub struct NsfMapper {
     n163_ram_addr: u8,
     n163_ram_auto_increment: bool,
     n163_expansion_audio_chip: Namco163Audio,
-    n163_mix: f64,
+    n163_mix: f32,
 }
 
 impl NsfMapper {
@@ -399,7 +399,7 @@ impl NsfMapper {
         }
 
         let ntsc_clockrate = 1786860.0;
-        let cycles_per_play = (nsf.header.ntsc_playback_speed() as f64) * ntsc_clockrate / 1000000.0;
+        let cycles_per_play = (nsf.header.ntsc_playback_speed() as f32) * ntsc_clockrate / 1000000.0;
         let mut font_chr = include_bytes!("../../assets/troll8x8.chr").to_vec();
         font_chr.resize(0x2000, 0);
 
@@ -489,7 +489,7 @@ impl NsfMapper {
         }
     }
 
-    pub fn progress_bar(&mut self, x: usize, y: usize, width: usize, progress: f64, out_of: f64) {
+    pub fn progress_bar(&mut self, x: usize, y: usize, width: usize, progress: f32, out_of: f32) {
         // ends
         self.set_tile(x, y, 0x79);
         self.set_tile(x + width - 1, y, 0x7A);
@@ -498,8 +498,8 @@ impl NsfMapper {
         let tile_width = width - 2;
         let effective_progress = progress / out_of; // ranging from 0 - 1
         for i in 0 .. tile_width {
-            let tile_min = (i as f64) / (tile_width as f64);
-            let tile_max = ((i + 1) as f64) / (tile_width as f64);
+            let tile_min = (i as f32) / (tile_width as f32);
+            let tile_max = ((i + 1) as f32) / (tile_width as f32);
             // simple cases: this tile is before / after the middle point
             if effective_progress <= tile_min {
                 self.set_tile(x + i + 1, y, 0x70);
@@ -507,7 +507,7 @@ impl NsfMapper {
                 self.set_tile(x + i + 1, y, 0x78);
             } else {
                 // complicated case: how far are we through this specific tile?
-                let tile_progress = (effective_progress - tile_min) * (tile_width as f64);
+                let tile_progress = (effective_progress - tile_min) * (tile_width as f32);
                 let index = ((tile_progress * 8.0) as u8).min(0x7).max(0x0) + 0x71;
                 self.set_tile(x + i + 1, y, index);
             }
@@ -570,16 +570,16 @@ impl NsfMapper {
             TrackAdvanceMode::Timer => {
                 let duration_display = format!("{} / {}", track_play_time, max_play_time);
                 self.draw_string(19, 27, duration_display.len(), duration_display.as_bytes().to_vec());
-                self.progress_bar(1, 27, 17, self.current_cycles as f64, self.max_cycles as f64);
+                self.progress_bar(1, 27, 17, self.current_cycles as f32, self.max_cycles as f32);
             },
             TrackAdvanceMode::Silence => {
                 let duration_display = format!("{}", track_play_time);
                 self.draw_string(26, 27, duration_display.len(), duration_display.as_bytes().to_vec());
                 // fudge this just slightly; chop off the first 1% or so, to avoid a flicker. (silence detection
                 // can be a bit noisy, ironically)
-                let one_percent = (self.silence_threshold as f64) * 0.01;
-                let fudged_counter = ((self.silence_counter  as f64) - one_percent).max(0.0);
-                let fudged_threshold = (self.silence_threshold  as f64) - one_percent;
+                let one_percent = (self.silence_threshold as f32) * 0.01;
+                let fudged_counter = ((self.silence_counter  as f32) - one_percent).max(0.0);
+                let fudged_threshold = (self.silence_threshold  as f32) - one_percent;
                 self.progress_bar(1, 27, 24, fudged_counter, fudged_threshold);
             },
             TrackAdvanceMode::Manual => {
@@ -689,13 +689,13 @@ impl NsfMapper {
         self.update_display();
     }
 
-    pub fn vrc6_output(&self) -> f64 {
+    pub fn vrc6_output(&self) -> f32 {
         if !self.vrc6_enabled {
             return 0.0;
         }
-        let pulse_1_output = if !self.vrc6_pulse1.debug_disable {self.vrc6_pulse1.output() as f64} else {0.0};
-        let pulse_2_output = if !self.vrc6_pulse2.debug_disable {self.vrc6_pulse2.output() as f64} else {0.0};
-        let sawtooth_output = if !self.vrc6_sawtooth.debug_disable {self.vrc6_sawtooth.output() as f64} else {0.0};
+        let pulse_1_output = if !self.vrc6_pulse1.debug_disable {self.vrc6_pulse1.output() as f32} else {0.0};
+        let pulse_2_output = if !self.vrc6_pulse2.debug_disable {self.vrc6_pulse2.output() as f32} else {0.0};
+        let sawtooth_output = if !self.vrc6_sawtooth.debug_disable {self.vrc6_sawtooth.output() as f32} else {0.0};
         let vrc6_combined_sample = (pulse_1_output + pulse_2_output + sawtooth_output) / 61.0;
 
         let nes_pulse_full_volume = 95.88 / ((8128.0 / 15.0) + 100.0);
@@ -902,13 +902,13 @@ impl NsfMapper {
         }
     }
 
-    fn mmc5_output(&self) -> f64 {
+    fn mmc5_output(&self) -> f32 {
         if !self.mmc5_enabled {
             return 0.0;
         }
-        let pulse_1_output = (self.mmc5_pulse_1.output() as f64 / 15.0) - 0.5;
-        let pulse_2_output = (self.mmc5_pulse_2.output() as f64 / 15.0) - 0.5;
-        let mut pcm_output = (self.mmc5_pcm_channel.level as f64 / 256.0) - 0.5;
+        let pulse_1_output = (self.mmc5_pulse_1.output() as f32 / 15.0) - 0.5;
+        let pulse_2_output = (self.mmc5_pulse_2.output() as f32 / 15.0) - 0.5;
+        let mut pcm_output = (self.mmc5_pcm_channel.level as f32 / 256.0) - 0.5;
         if self.mmc5_pcm_channel.muted {
             pcm_output = 0.0;
         }
@@ -933,7 +933,7 @@ impl NsfMapper {
         }
     }
 
-    fn s5b_output(&self) -> f64 {
+    fn s5b_output(&self) -> f32 {
         if !self.s5b_enabled {
             return 0.0;
         }
@@ -992,7 +992,7 @@ impl NsfMapper {
         }
     }
 
-    fn n163_output(&self) -> f64 {
+    fn n163_output(&self) -> f32 {
         if !self.n163_enabled {
             return 0.0;
         }
@@ -1015,7 +1015,7 @@ impl NsfMapper {
         self.n163_expansion_audio_chip.clock();
     }
 
-    fn fade_weight(&self) -> f64 {
+    fn fade_weight(&self) -> f32 {
         match self.advance_mode {
             TrackAdvanceMode::Timer => {
                 let fade_start = self.max_cycles - self.fade_cycles;
@@ -1023,7 +1023,7 @@ impl NsfMapper {
                     return 1.0
                 }
                 let cycles_into_fade = self.current_cycles - fade_start;
-                let fade_weight = (cycles_into_fade as f64) / (self.fade_cycles as f64);
+                let fade_weight = (cycles_into_fade as f32) / (self.fade_cycles as f32);
                 return 1.0 - fade_weight.max(0.0).min(1.0);
             },
             _ => return 1.0 // do not fade
@@ -1062,7 +1062,7 @@ impl Mapper for NsfMapper {
         }
     }
 
-    fn mix_expansion_audio(&self, nes_sample: f64) -> f64 {
+    fn mix_expansion_audio(&self, nes_sample: f32) -> f32 {
         let mixed_sample =  
             self.vrc6_output() +
             self.mmc5_output() +
@@ -1140,7 +1140,7 @@ impl Mapper for NsfMapper {
         return channels;
     }
 
-    fn record_expansion_audio_output(&mut self, nes_sample: f64) {
+    fn record_expansion_audio_output(&mut self, nes_sample: f32) {
         if self.vrc6_enabled {
             self.vrc6_pulse1.record_current_output();
             self.vrc6_pulse2.record_current_output();
