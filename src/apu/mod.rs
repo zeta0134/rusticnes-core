@@ -174,21 +174,21 @@ impl ApuState {
 
     pub fn channels(&self) -> Vec<& dyn AudioChannelState> {
         let mut channels: Vec<& dyn AudioChannelState> = Vec::new();
+        channels.push(&self.dmc);
+        channels.push(&self.noise);
+        channels.push(&self.triangle);
         channels.push(&self.pulse_1);
         channels.push(&self.pulse_2);
-        channels.push(&self.triangle);
-        channels.push(&self.noise);
-        channels.push(&self.dmc);
         return channels;
     }
 
     pub fn channels_mut(&mut self) -> Vec<&mut dyn AudioChannelState> {
         let mut channels: Vec<&mut  dyn AudioChannelState> = Vec::new();
+        channels.push(&mut self.dmc);
+        channels.push(&mut self.noise);
+        channels.push(&mut self.triangle);
         channels.push(&mut self.pulse_1);
         channels.push(&mut self.pulse_2);
-        channels.push(&mut self.triangle);
-        channels.push(&mut self.noise);
-        channels.push(&mut self.dmc);
         return channels;
     }
 
