@@ -2,7 +2,7 @@
 
 use std::f32::consts::PI;
 
-pub trait DspFilter {
+pub trait DspFilter: Send {
     fn consume(&mut self, sample: f32);
     fn output(&self) -> f32;
 }
