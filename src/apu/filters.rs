@@ -7,6 +7,28 @@ pub trait DspFilter {
     fn output(&self) -> f32;
 }
 
+pub struct IdentityFilter {
+    sample: f32
+}
+
+impl IdentityFilter {
+    pub fn new() -> IdentityFilter {
+        return IdentityFilter {
+            sample: 0.0
+        }
+    }
+}
+
+impl DspFilter for IdentityFilter {
+    fn consume(&mut self, new_input: f32) {
+        self.sample = new_input;
+    }
+
+    fn output(&self) -> f32 {
+        return self.sample;
+    }
+}
+
 pub struct HighPassIIR {
     alpha: f32,
     previous_output: f32,
@@ -135,5 +157,60 @@ impl DspFilter for LowPassFIR {
             output += self.kernel[i] * self.inputs[buffer_index];
         }
         return output;
+    }
+}
+
+// essentially a thin wrapper around a DspFilter, with some bonus data to track
+// state when used in a larger chain
+pub struct ChainedFilter {
+    wrapped_filter: Box<dyn DspFilter>,
+    sampling_period: f32,
+    period_counter: f32,
+}
+
+pub struct FilterChain {
+    filters: Vec<ChainedFilter>,
+}
+
+impl FilterChain {
+    pub fn new() -> FilterChain {
+        let identity = IdentityFilter::new();
+        return FilterChain {
+            filters: vec![ChainedFilter{
+                wrapped_filter: Box::new(identity),
+                sampling_period: 1.0,
+                period_counter: 0.0,
+            }],
+        }
+    }
+
+    pub fn add(&mut self, filter: Box<dyn DspFilter>, sample_rate: f32) {
+        self.filters.push(ChainedFilter {
+            wrapped_filter: filter,
+            sampling_period: (1.0 / sample_rate),
+            period_counter: 0.0
+        });
+    }
+
+    pub fn consume(&mut self, input_sample: f32, delta_time: f32) {
+        // Always advance the identity filter with the new current sample
+        self.filters[0].wrapped_filter.consume(input_sample);
+        // Now for every remaining filter in the chain, advance and sample the previous
+        // filter as required
+        for i in 1 .. self.filters.len() {
+            let previous = i - 1;
+            let current = i;
+            self.filters[current].period_counter += delta_time;
+            while self.filters[current].period_counter > self.filters[current].sampling_period {
+                self.filters[current].period_counter -= self.filters[current].sampling_period;
+                let previous_output = self.filters[previous].wrapped_filter.output();
+                self.filters[current].wrapped_filter.consume(previous_output);
+            }
+        }
+    }
+
+    pub fn output(self) -> f32 {
+        let final_filter = self.filters.last().unwrap();
+        return final_filter.wrapped_filter.output();
     }
 }
