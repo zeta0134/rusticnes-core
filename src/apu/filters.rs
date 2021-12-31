@@ -209,7 +209,7 @@ impl FilterChain {
         }
     }
 
-    pub fn output(self) -> f32 {
+    pub fn output(&self) -> f32 {
         let final_filter = self.filters.last().unwrap();
         return final_filter.wrapped_filter.output();
     }

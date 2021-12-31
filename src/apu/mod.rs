@@ -140,7 +140,6 @@ fn construct_filter_chain(clock_rate: f32, target_sample_rate: f32, filter_type:
             chain.add(Box::new(filters::LowPassIIR::new(intermediate_samplerate, 14000.0)), intermediate_samplerate);
         },
         FilterType::FamiCom => {
-            let mut chain = FilterChain::new();
             // The Famicom hardware instead ONLY specifies a first-order high-pass filter at 37 Hz, 
             // followed by the unknown (and varying) properties of the RF modulator and demodulator. 
             chain.add(Box::new(filters::HighPassIIR::new(intermediate_samplerate, 37.0)), intermediate_samplerate);
@@ -614,7 +613,7 @@ impl ApuState {
             self.hq_buffer_full = true;
         }
 
-        // apply filters
+        // apply filters OLD
         match self.filter_type {
             FilterType::Nes => {
                 self.nes_hp_90hz.consume(current_dac_sample);
@@ -628,8 +627,15 @@ impl ApuState {
             }
         }
 
-        if self.current_cycle >= self.next_sample_at {            
-            let composite_sample = (self.lp_pre_decimate.output() * 32767.0) as i16;
+        // apply filters NEW
+        self.filter_chain.consume(current_dac_sample, 1.0 / (self.cpu_clock_rate as f32));
+
+        if self.current_cycle >= self.next_sample_at { 
+            // decimate sample OLD           
+            //let composite_sample = (self.lp_pre_decimate.output() * 32767.0) as i16;
+
+            // decimate sample NEW
+            let composite_sample = (self.filter_chain.output() * 32767.0) as i16;
 
             self.staging_buffer.push(composite_sample);
             self.edge_buffer.push(true as i16);
