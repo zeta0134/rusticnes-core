@@ -117,10 +117,10 @@ fn construct_filter_chain(clock_rate: f32, target_sample_rate: f32, filter_type:
     // First, no matter what the hardware specifies, we'll do a lightweight downsample to around 8x
     // the target sample rate. This is to somewhat reduce the CPU cost of the rest of the chain
     let mut chain = FilterChain::new();
-    let intermediate_samplerate = target_sample_rate * 8.0;    
+    let intermediate_samplerate = target_sample_rate * 3.0;    
     // This IIR isn't especially sharp, but that's okay. We'll do a better filter later
     // to deal with any aliasing this leaves behind
-    chain.add(Box::new(filters::LowPassIIR::new(clock_rate, intermediate_samplerate)), clock_rate);
+    chain.add(Box::new(filters::LowPassIIR::new(clock_rate, target_sample_rate * 1.5)), clock_rate);
 
     match filter_type {
         FilterType::Nes => {
@@ -143,7 +143,7 @@ fn construct_filter_chain(clock_rate: f32, target_sample_rate: f32, filter_type:
     // Finally, perform a high-quality low pass, the result of which will be decimated to become the final output
     // TODO: 160 is huge! That was needed when going from 1.7 MHz -> 44.1 kHz; is it still needed when the source
     // is more like 88.2 kHz? Figure out if we can lower this, it's very expensive.
-    let window_size = 48;
+    let window_size = 16;
     let cutoff_frequency = target_sample_rate * 0.45;    
     chain.add(Box::new(filters::LowPassFIR::new(intermediate_samplerate, cutoff_frequency, window_size)), intermediate_samplerate);
 

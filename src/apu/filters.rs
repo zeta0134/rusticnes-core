@@ -135,7 +135,7 @@ impl LowPassFIR {
         let kernel = windowed_sinc_kernel(fc, window_size);
         let mut inputs = Vec::new();
         inputs.resize(window_size + 1, 0.0);
-
+        
         return LowPassFIR {
             kernel: kernel,
             inputs: inputs,
