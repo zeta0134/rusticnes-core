@@ -26,6 +26,7 @@ pub use self::triangle::TriangleChannelState;
 pub use self::filters::DspFilter;
 pub use self::filters::FilterChain;
 
+#[derive(Clone, Copy)]
 pub enum FilterType {
     Nes,
     FamiCom,
@@ -69,14 +70,7 @@ pub struct ApuState {
     // filter chain (todo: make this a tad more flexible)
     // also todo: make sure these are recreated when changing sample rate
 
-    // TODO: remove all of these
-    pub famicom_hp_37hz: filters::HighPassIIR,
-    pub nes_hp_90hz: filters::HighPassIIR,
-    pub nes_hp_440hz: filters::HighPassIIR,
-    pub nes_lp_14khz: filters::LowPassIIR,
-    pub lp_pre_decimate: filters::LowPassIIR,
     pub filter_type: FilterType,
-
     pub filter_chain: FilterChain,
 }
 
@@ -190,12 +184,6 @@ impl ApuState {
             hq_staging_buffer: RingBuffer::new(32768),
             hq_output_buffer: vec!(0i16; 32768),
 
-            famicom_hp_37hz: filters::HighPassIIR::new(1786860.0, 37.0),
-            nes_hp_90hz: filters::HighPassIIR::new(1786860.0, 90.0),
-            nes_hp_440hz: filters::HighPassIIR::new(1786860.0, 440.0),
-            nes_lp_14khz: filters::LowPassIIR::new(1786860.0, 14000.0),
-
-            lp_pre_decimate: filters::LowPassIIR::new(1786860.0, 44100.0 * 0.45),
             filter_type: FilterType::FamiCom,
 
             //filter_chain: construct_filter_chain(1786860.0, 44100.0, FilterType::FamiCom),
@@ -211,8 +199,8 @@ impl ApuState {
 
     pub fn set_sample_rate(&mut self, sample_rate: u64) {
         self.sample_rate = sample_rate;
-        self.lp_pre_decimate = filters::LowPassIIR::new(self.cpu_clock_rate as f32, (sample_rate as f32) * 0.45);
-        let output_buffer_size = recommended_buffer_size(44100);
+        self.filter_chain = construct_filter_chain(self.cpu_clock_rate as f32, sample_rate as f32, self.filter_type);
+        let output_buffer_size = recommended_buffer_size(sample_rate);
         self.set_buffer_size(output_buffer_size);
     }
 
@@ -614,28 +602,11 @@ impl ApuState {
             self.hq_buffer_full = true;
         }
 
-        // apply filters OLD
-        match self.filter_type {
-            FilterType::Nes => {
-                self.nes_hp_90hz.consume(current_dac_sample);
-                self.nes_hp_440hz.consume(self.nes_hp_90hz.output());
-                self.nes_lp_14khz.consume(self.nes_hp_440hz.output());
-                self.lp_pre_decimate.consume(self.nes_lp_14khz.output());
-            },
-            FilterType::FamiCom => {
-                self.famicom_hp_37hz.consume(current_dac_sample);
-                self.lp_pre_decimate.consume(self.famicom_hp_37hz.output());
-            }
-        }
-
         // apply filters NEW
         self.filter_chain.consume(current_dac_sample, 1.0 / (self.cpu_clock_rate as f32));
 
         if self.current_cycle >= self.next_sample_at { 
-            // decimate sample OLD           
-            //let composite_sample = (self.lp_pre_decimate.output() * 32767.0) as i16;
-
-            // decimate sample NEW
+            // decimate sample
             let composite_sample = (self.filter_chain.output() * 32767.0) as i16;
 
             self.staging_buffer.push(composite_sample);
