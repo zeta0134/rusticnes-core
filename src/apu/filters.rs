@@ -201,7 +201,7 @@ impl FilterChain {
             let previous = i - 1;
             let current = i;
             self.filters[current].period_counter += delta_time;
-            while self.filters[current].period_counter > self.filters[current].sampling_period {
+            while self.filters[current].period_counter >= self.filters[current].sampling_period {
                 self.filters[current].period_counter -= self.filters[current].sampling_period;
                 let previous_output = self.filters[previous].wrapped_filter.output();
                 self.filters[current].wrapped_filter.consume(previous_output);
