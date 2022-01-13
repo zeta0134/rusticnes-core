@@ -76,7 +76,7 @@ pub struct ApuState {
 
 fn generate_pulse_table() -> Vec<f32> {
     let mut pulse_table = vec!(0f32; 31);
-    for n in 0 .. 31 {
+    for n in 1 .. 31 {
         pulse_table[n] = 95.52 / (8128.0 / (n as f32) + 100.0);
     }
     return pulse_table;
@@ -91,8 +91,10 @@ fn generate_tnd_table() -> Vec<f32> {
     for tri in 0 .. 16 {
         for noise in 0 .. 16 {
             for dmc in 0 .. 128 {
-                let i = full_tnd_index(tri, noise, dmc);
-                tnd_table[i] = 159.79 / ((1.0 / ((tri as f32 / 8227.0) + (noise as f32 / 12241.0) + (dmc as f32 / 22638.0))) + 100.0);
+                if tri + noise + dmc > 0 {
+                    let i = full_tnd_index(tri, noise, dmc);
+                    tnd_table[i] = 159.79 / ((1.0 / ((tri as f32 / 8227.0) + (noise as f32 / 12241.0) + (dmc as f32 / 22638.0))) + 100.0);
+                }
             }
         }
     }
