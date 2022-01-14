@@ -320,11 +320,11 @@ impl AudioChannelState for Vrc6SawtoothChannel {
     }
 
     fn min_sample(&self) -> i16 {
-        return -60;
+        return -124;
     }
 
     fn max_sample(&self) -> i16 {
-        return 60;
+        return 124;
     }
 
     fn muted(&self) -> bool {
