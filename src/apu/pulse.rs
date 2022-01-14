@@ -46,7 +46,7 @@ impl PulseChannelState {
             output_buffer: RingBuffer::new(32768),
             edge_buffer: RingBuffer::new(32768),
             last_edge: false,
-            debug_filter: filters::HighPassIIR::new(44100.0, 37.0),
+            debug_filter: filters::HighPassIIR::new(44100.0, 300.0), // for visual flair, and also to remove DC offset
 
             envelope: VolumeEnvelopeState::new(),
             length_counter: LengthCounterState::new(),

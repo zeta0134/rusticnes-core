@@ -42,7 +42,7 @@ impl Mmc5PcmChannel {
             muted: false,
             output_buffer: RingBuffer::new(32768),
             edge_buffer: RingBuffer::new(32768),
-            debug_filter: filters::HighPassIIR::new(44100.0, 37.0),
+            debug_filter: filters::HighPassIIR::new(44100.0, 300.0),
         }
     }
 }

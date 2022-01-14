@@ -422,7 +422,7 @@ impl YmChannel {
             name: String::from(channel_name),
             output_buffer: RingBuffer::new(32768),
             edge_buffer: RingBuffer::new(32768),
-            debug_filter: filters::HighPassIIR::new(44100.0, 37.0),
+            debug_filter: filters::HighPassIIR::new(44100.0, 300.0),
             muted: false,
             tone: ToneGenerator::new(),
             tone_enabled: false,
