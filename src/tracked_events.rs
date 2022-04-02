@@ -32,6 +32,7 @@ impl EventTracker {
     pub fn new() -> EventTracker {
         let mut default_cpu_snoops = vec![0u8; 0x10000];
 
+        // PPU registers
         default_cpu_snoops[0x2000] = CPU_WRITE;
         default_cpu_snoops[0x2001] = CPU_WRITE;
         default_cpu_snoops[0x2002] = CPU_WRITE | CPU_READ;
@@ -41,7 +42,41 @@ impl EventTracker {
         default_cpu_snoops[0x2006] = CPU_WRITE;
         default_cpu_snoops[0x2007] = CPU_WRITE | CPU_READ;
 
-        default_cpu_snoops[0x2007] = CPU_WRITE | CPU_READ;        
+        // APU registers
+        // Pulse 1
+        default_cpu_snoops[0x4000] = CPU_WRITE;
+        default_cpu_snoops[0x4001] = CPU_WRITE;
+        default_cpu_snoops[0x4002] = CPU_WRITE;
+        default_cpu_snoops[0x4003] = CPU_WRITE;
+
+        // Pulse 2
+        default_cpu_snoops[0x4004] = CPU_WRITE;
+        default_cpu_snoops[0x4005] = CPU_WRITE;
+        default_cpu_snoops[0x4006] = CPU_WRITE;
+        default_cpu_snoops[0x4007] = CPU_WRITE;
+
+        // Triangle
+        default_cpu_snoops[0x4008] = CPU_WRITE;
+        default_cpu_snoops[0x400A] = CPU_WRITE;
+        default_cpu_snoops[0x400B] = CPU_WRITE;
+
+        // Noise
+        default_cpu_snoops[0x400C] = CPU_WRITE;
+        default_cpu_snoops[0x400E] = CPU_WRITE;
+        default_cpu_snoops[0x400F] = CPU_WRITE;
+
+        // DMC
+        default_cpu_snoops[0x4010] = CPU_WRITE;
+        default_cpu_snoops[0x4011] = CPU_WRITE;
+        default_cpu_snoops[0x4012] = CPU_WRITE;
+        default_cpu_snoops[0x4013] = CPU_WRITE;
+
+        // Misc
+        default_cpu_snoops[0x4014] = CPU_WRITE;
+        default_cpu_snoops[0x4015] = CPU_WRITE | CPU_READ;
+        default_cpu_snoops[0x4017] = CPU_WRITE;
+
+
 
         return EventTracker {
             // Way, way more events than we could *possibly* need, just to be safe
