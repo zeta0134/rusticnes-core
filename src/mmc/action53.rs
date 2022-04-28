@@ -11,8 +11,6 @@ pub struct Action53 {
     prg_rom: MemoryBlock,
     prg_ram: MemoryBlock,
     chr: MemoryBlock,
-
-    mirroring: Mirroring,
     vram: Vec<u8>,
 
     register_select: u8,
@@ -34,7 +32,6 @@ impl Action53 {
             prg_rom: prg_rom_block.clone(),
             prg_ram: prg_ram_block.clone(),
             chr: chr_block.clone(),
-            mirroring: ines.header.mirroring(),
             vram: vec![0u8; 0x1000],
             register_select: 0,
             mirroring_mode: 0,
@@ -85,14 +82,14 @@ impl Action53 {
 }
 
 impl Mapper for Action53 {
-    fn print_debug_status(&self) {
-        println!("======= Action53 =======");
-        println!("Mirroring Mode: {}", mirroring_mode_name(self.mirroring));
-        println!("====================");
-    }
-
     fn mirroring(&self) -> Mirroring {
-        return self.mirroring;
+        match self.mirroring_mode {
+            0 => Mirroring::OneScreenLower,
+            1 => Mirroring::OneScreenUpper,
+            2 => Mirroring::Vertical,
+            3 => Mirroring::Horizontal,
+            _ => Mirroring::Horizontal // unreachable
+        }
     }
     
     fn debug_read_cpu(&self, address: u16) -> Option<u8> {
@@ -143,9 +140,11 @@ impl Mapper for Action53 {
     fn debug_read_ppu(&self, address: u16) -> Option<u8> {
         match address {
             0x0000 ..= 0x1FFF => return self.chr.wrapping_read(address as usize),
-            0x2000 ..= 0x3FFF => return match self.mirroring {
+            0x2000 ..= 0x3FFF => return match self.mirroring() {
                 Mirroring::Horizontal => Some(self.vram[mirroring::horizontal_mirroring(address) as usize]),
                 Mirroring::Vertical   => Some(self.vram[mirroring::vertical_mirroring(address) as usize]),
+                Mirroring::OneScreenLower => Some(self.vram[mirroring::one_screen_lower(address) as usize]),
+                Mirroring::OneScreenUpper => Some(self.vram[mirroring::one_screen_upper(address) as usize]),
                 _ => None
             },
             _ => return None
@@ -155,9 +154,11 @@ impl Mapper for Action53 {
     fn write_ppu(&mut self, address: u16, data: u8) {
         match address {
             0x0000 ..= 0x1FFF => {self.chr.wrapping_write(address as usize, data);},
-            0x2000 ..= 0x3FFF => match self.mirroring {
+            0x2000 ..= 0x3FFF => match self.mirroring() {
                 Mirroring::Horizontal => self.vram[mirroring::horizontal_mirroring(address) as usize] = data,
                 Mirroring::Vertical   => self.vram[mirroring::vertical_mirroring(address) as usize] = data,
+                Mirroring::OneScreenLower => self.vram[mirroring::one_screen_lower(address) as usize] = data,
+                Mirroring::OneScreenUpper => self.vram[mirroring::one_screen_upper(address) as usize] = data,
                 _ => {}
             },
             _ => {}
