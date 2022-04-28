@@ -19,7 +19,7 @@ pub struct Action53 {
     prg_inner_bank: usize,
     prg_outer_bank: usize,
     prg_mode: u8,
-    prg_outer_bank_size: u8,
+    prg_outer_bank_size: usize,
 }
 
 impl Action53 {
@@ -47,10 +47,10 @@ impl Action53 {
         let cpu_a14 = ((cpu_address & 0b0100_0000_0000_0000) >> 14) as usize;
         let bits_a22_to_a14: usize = match self.prg_mode {
             0 | 1 => match self.prg_outer_bank_size {
-                0 => self.prg_outer_bank << 1 | cpu_a14,
-                1 => (self.prg_outer_bank & 0b1111_1110) << 1 | self.prg_inner_bank & 0b0000_0001 << 1 | cpu_a14,
-                2 => (self.prg_outer_bank & 0b1111_1100) << 1 | self.prg_inner_bank & 0b0000_0011 << 1 | cpu_a14,
-                3 => (self.prg_outer_bank & 0b1111_1000) << 1 | self.prg_inner_bank & 0b0000_0111 << 1 | cpu_a14,
+                0 => (self.prg_outer_bank << 1) | cpu_a14,
+                1 => ((self.prg_outer_bank & 0b1111_1110) << 1) | ((self.prg_inner_bank & 0b0000_0001) << 1) | cpu_a14,
+                2 => ((self.prg_outer_bank & 0b1111_1100) << 1) | ((self.prg_inner_bank & 0b0000_0011) << 1) | cpu_a14,
+                3 => ((self.prg_outer_bank & 0b1111_1000) << 1) | ((self.prg_inner_bank & 0b0000_0111) << 1) | cpu_a14,
                 _ => 0 // unreachable
             },
             2 => match cpu_a14 {
@@ -59,8 +59,8 @@ impl Action53 {
                 // $C000
                 1 => {
                     let outer_bitmask = (0b1_1111_1110 << self.prg_outer_bank_size) & 0b1_1111_1110;
-                    let inner_bitmask = 0b0000_0111_1 >> (3 - self.prg_outer_bank_size);
-                    (self.prg_outer_bank & outer_bitmask) | (self.prg_inner_bank | inner_bitmask)
+                    let inner_bitmask = 0b0_0000_1111 >> (3 - self.prg_outer_bank_size);
+                    ((self.prg_outer_bank << 1) & outer_bitmask) | (self.prg_inner_bank & inner_bitmask)
                 },
                 _ => 0 // unreachable
             },
@@ -68,8 +68,8 @@ impl Action53 {
                 // $8000
                 0 => {
                     let outer_bitmask = (0b1_1111_1110 << self.prg_outer_bank_size) & 0b1_1111_1110;
-                    let inner_bitmask = 0b0000_0111_1 >> (3 - self.prg_outer_bank_size);
-                    (self.prg_outer_bank & outer_bitmask) | (self.prg_inner_bank | inner_bitmask)
+                    let inner_bitmask = 0b0_0000_1111 >> (3 - self.prg_outer_bank_size);
+                    ((self.prg_outer_bank << 1) & outer_bitmask) | (self.prg_inner_bank & inner_bitmask)
                 }
                 // $C000
                 1 => self.prg_outer_bank << 1 | 1,
@@ -78,6 +78,10 @@ impl Action53 {
             _ => 0 // unreachable
         };
         return (bits_a22_to_a14 << 14) | ((cpu_address & 0b0011_1111_1111_1111) as usize);
+    }
+
+    fn chr_address(&self, ppu_address: u16) -> usize {
+        return (self.chr_ram_a13_a14 << 13) | ((ppu_address & 0b1_1111_1111_1111) as usize);
     }
 }
 
@@ -104,7 +108,7 @@ impl Mapper for Action53 {
 
     fn write_cpu(&mut self, address: u16, data: u8) {
         match address {
-            0x5000 ..= 0x5FFF => {self.register_select = (data & 0x81);},
+            0x5000 ..= 0x5FFF => {self.register_select = data & 0x81;},
             0x6000 ..= 0x7FFF => {self.prg_ram.wrapping_write((address - 0x6000) as usize, data);},
             0x8000 ..= 0xFFFF => {
                 match self.register_select {
@@ -125,7 +129,7 @@ impl Mapper for Action53 {
                     0x80 => {
                         self.mirroring_mode = data & 0b0000_0011;
                         self.prg_mode = (data & 0b0000_1100) >> 2;
-                        self.prg_outer_bank_size = (data & 0b0011_0000) >> 4;
+                        self.prg_outer_bank_size = ((data & 0b0011_0000) >> 4) as usize;
                     },
                     0x81 => {
                         self.prg_outer_bank = data as usize;
@@ -139,7 +143,7 @@ impl Mapper for Action53 {
 
     fn debug_read_ppu(&self, address: u16) -> Option<u8> {
         match address {
-            0x0000 ..= 0x1FFF => return self.chr.wrapping_read(address as usize),
+            0x0000 ..= 0x1FFF => {return self.chr.wrapping_read(self.chr_address(address))},
             0x2000 ..= 0x3FFF => return match self.mirroring() {
                 Mirroring::Horizontal => Some(self.vram[mirroring::horizontal_mirroring(address) as usize]),
                 Mirroring::Vertical   => Some(self.vram[mirroring::vertical_mirroring(address) as usize]),
@@ -153,7 +157,7 @@ impl Mapper for Action53 {
 
     fn write_ppu(&mut self, address: u16, data: u8) {
         match address {
-            0x0000 ..= 0x1FFF => {self.chr.wrapping_write(address as usize, data);},
+            0x0000 ..= 0x1FFF => {self.chr.wrapping_write(self.chr_address(address), data);},
             0x2000 ..= 0x3FFF => match self.mirroring() {
                 Mirroring::Horizontal => self.vram[mirroring::horizontal_mirroring(address) as usize] = data,
                 Mirroring::Vertical   => self.vram[mirroring::vertical_mirroring(address) as usize] = data,
