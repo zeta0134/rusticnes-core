@@ -113,14 +113,14 @@ fn recommended_buffer_size(sample_rate: u64) -> usize {
     return buffer_size as usize;
 }
 
-fn construct_filter_chain(clock_rate: f32, target_sample_rate: f32, filter_type: FilterType) -> FilterChain {
+fn construct_hq_filter_chain(clock_rate: f32, target_sample_rate: f32, filter_type: FilterType) -> FilterChain {
     // https://wiki.nesdev.org/w/index.php?title=APU_Mixer
 
     // First, no matter what the hardware specifies, we'll do a lightweight downsample to around 8x
     // the target sample rate. This is to somewhat reduce the CPU cost of the rest of the chain
     let mut chain = FilterChain::new();
-    let intermediate_samplerate = target_sample_rate * (4.0 + (std::f32::consts::PI / 32.0));
-    let intermediate_cutoff_frequency = target_sample_rate * 1.0;
+    let intermediate_samplerate = target_sample_rate * (2.0 + (std::f32::consts::PI / 32.0));
+    let intermediate_cutoff_frequency = target_sample_rate * 0.4;
     // This IIR isn't especially sharp, but that's okay. We'll do a better filter later
     // to deal with any aliasing this leaves behind
     chain.add(Box::new(filters::LowPassIIR::new(clock_rate, intermediate_cutoff_frequency)), clock_rate);
@@ -146,9 +146,39 @@ fn construct_filter_chain(clock_rate: f32, target_sample_rate: f32, filter_type:
     // Finally, perform a high-quality low pass, the result of which will be decimated to become the final output
     // TODO: 160 is huge! That was needed when going from 1.7 MHz -> 44.1 kHz; is it still needed when the source
     // is more like 88.2 kHz? Figure out if we can lower this, it's very expensive.
-    let window_size = 32;
+    let window_size = 16;
     let cutoff_frequency = target_sample_rate * 0.45;    
     chain.add(Box::new(filters::LowPassFIR::new(intermediate_samplerate, cutoff_frequency, window_size)), intermediate_samplerate);
+
+    return chain;
+}
+
+fn construct_fast_filter_chain(clock_rate: f32, target_sample_rate: f32, filter_type: FilterType) -> FilterChain {
+    // https://wiki.nesdev.org/w/index.php?title=APU_Mixer
+
+    // Quicker and more dirty. Will sound somewhat muffled.
+    let mut chain = FilterChain::new();
+    let cutoff_frequency = target_sample_rate * 0.40;
+
+    chain.add(Box::new(filters::LowPassIIR::new(clock_rate, cutoff_frequency)), clock_rate);
+
+    match filter_type {
+        FilterType::Nes => {
+            //The NES hardware follows the DACs with a surprisingly involved circuit that adds several low-pass and high-pass filters:
+
+            // A first-order high-pass filter at 90 Hz
+            chain.add(Box::new(filters::HighPassIIR::new(target_sample_rate, 90.0)), target_sample_rate);
+            //  Another first-order high-pass filter at 440 Hz
+            chain.add(Box::new(filters::HighPassIIR::new(target_sample_rate, 440.0)), target_sample_rate);
+            // A first-order low-pass filter at 14 kHz
+            chain.add(Box::new(filters::LowPassIIR::new(target_sample_rate, 14000.0)), target_sample_rate);
+        },
+        FilterType::FamiCom => {
+            // The Famicom hardware instead ONLY specifies a first-order high-pass filter at 37 Hz, 
+            // followed by the unknown (and varying) properties of the RF modulator and demodulator. 
+            chain.add(Box::new(filters::HighPassIIR::new(target_sample_rate, 37.0)), target_sample_rate);
+        }
+    }
 
     return chain;
 }
@@ -188,7 +218,7 @@ impl ApuState {
             hq_output_buffer: vec!(0i16; 32768),
 
             filter_type: FilterType::FamiCom,
-            filter_chain: construct_filter_chain(1789773.0, 44100.0, FilterType::FamiCom),
+            filter_chain: construct_fast_filter_chain(1789773.0, 44100.0, FilterType::FamiCom),
         }
     }
 
@@ -200,7 +230,7 @@ impl ApuState {
 
     pub fn set_sample_rate(&mut self, sample_rate: u64) {
         self.sample_rate = sample_rate;
-        self.filter_chain = construct_filter_chain(self.cpu_clock_rate as f32, sample_rate as f32, self.filter_type);
+        self.filter_chain = construct_fast_filter_chain(self.cpu_clock_rate as f32, sample_rate as f32, self.filter_type);
         let output_buffer_size = recommended_buffer_size(sample_rate);
         self.set_buffer_size(output_buffer_size);
     }
@@ -597,11 +627,11 @@ impl ApuState {
         let current_dac_sample = mapper.mix_expansion_audio(current_2a03_sample) as f32;
 
         // this is as raw as a sample gets, so write this out for hq debugging
-        self.hq_staging_buffer.push((current_dac_sample * 32767.0) as i16);
-        if self.hq_staging_buffer.index() == 0 {
-            self.hq_output_buffer.copy_from_slice(self.hq_staging_buffer.buffer());
-            self.hq_buffer_full = true;
-        }
+        //self.hq_staging_buffer.push((current_dac_sample * 32767.0) as i16);
+        //if self.hq_staging_buffer.index() == 0 {
+        //    self.hq_output_buffer.copy_from_slice(self.hq_staging_buffer.buffer());
+        //    self.hq_buffer_full = true;
+        //}
 
         // apply filters NEW
         self.filter_chain.consume(current_dac_sample, 1.0 / (self.cpu_clock_rate as f32));
