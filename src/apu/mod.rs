@@ -634,13 +634,6 @@ impl ApuState {
         let current_2a03_sample = (pulse_output - 0.5) + (tnd_output - 0.5);
         let current_dac_sample = mapper.mix_expansion_audio(current_2a03_sample) as f32;
 
-        // this is as raw as a sample gets, so write this out for hq debugging
-        //self.hq_staging_buffer.push((current_dac_sample * 32767.0) as i16);
-        //if self.hq_staging_buffer.index() == 0 {
-        //    self.hq_output_buffer.copy_from_slice(self.hq_staging_buffer.buffer());
-        //    self.hq_buffer_full = true;
-        //}
-
         // apply filters NEW
         self.filter_chain.consume(current_dac_sample, 1.0 / (self.cpu_clock_rate as f32));
 
