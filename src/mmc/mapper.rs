@@ -38,4 +38,5 @@ pub trait Mapper: Send {
     fn channels(&self) ->  Vec<& dyn AudioChannelState> {return Vec::new();}
     fn channels_mut(&mut self) ->  Vec<&mut dyn AudioChannelState> {return Vec::new();}
     fn record_expansion_audio_output(&mut self, _nes_sample: f32) {}
+    fn audio_multiplexing(&mut self, _emulate: bool) {}
 }

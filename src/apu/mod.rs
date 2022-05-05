@@ -211,8 +211,8 @@ impl ApuState {
             tnd_table: generate_tnd_table(),
 
             filter_type: FilterType::FamiCom,
-            filter_chain: construct_lq_filter_chain(1789773.0, 44100.0, FilterType::FamiCom),
-            filter_hq: false,
+            filter_chain: construct_hq_filter_chain(1789773.0, 44100.0, FilterType::FamiCom),
+            filter_hq: true,
         }
     }
 
