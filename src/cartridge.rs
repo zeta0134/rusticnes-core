@@ -1,4 +1,5 @@
 use mmc::mapper::*;
+use mmc::action53::Action53;
 use mmc::axrom::AxRom;
 use mmc::bnrom::BnRom;
 use mmc::cnrom::CnRom;
@@ -35,6 +36,7 @@ fn mapper_from_ines(ines: INesCartridge) -> Result<Box<dyn Mapper>, String> {
         19 => Box::new(Namco163::from_ines(ines)?),
         24 => Box::new(Vrc6::from_ines(ines)?),
         26 => Box::new(Vrc6::from_ines(ines)?),
+        28 => Box::new(Action53::from_ines(ines)?),
         31 => Box::new(INes31::from_ines(ines)?),
         34 => Box::new(BnRom::from_ines(ines)?),
         66 => Box::new(GxRom::from_ines(ines)?),
