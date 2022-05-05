@@ -63,15 +63,12 @@ pub struct ApuState {
     pub pulse_table: Vec<f32>,
     pub tnd_table: Vec<f32>,
 
-    pub hq_buffer_full: bool,
-    pub hq_staging_buffer: RingBuffer,
-    pub hq_output_buffer: Vec<i16>,
-
     // filter chain (todo: make this a tad more flexible)
     // also todo: make sure these are recreated when changing sample rate
 
     pub filter_type: FilterType,
     pub filter_chain: FilterChain,
+    pub filter_hq: bool,
 }
 
 fn generate_pulse_table() -> Vec<f32> {
@@ -147,13 +144,13 @@ fn construct_hq_filter_chain(clock_rate: f32, target_sample_rate: f32, filter_ty
     // TODO: 160 is huge! That was needed when going from 1.7 MHz -> 44.1 kHz; is it still needed when the source
     // is more like 88.2 kHz? Figure out if we can lower this, it's very expensive.
     let window_size = 16;
-    let cutoff_frequency = target_sample_rate * 0.45;    
+    let cutoff_frequency = target_sample_rate * 0.45;
     chain.add(Box::new(filters::LowPassFIR::new(intermediate_samplerate, cutoff_frequency, window_size)), intermediate_samplerate);
 
     return chain;
 }
 
-fn construct_fast_filter_chain(clock_rate: f32, target_sample_rate: f32, filter_type: FilterType) -> FilterChain {
+fn construct_lq_filter_chain(clock_rate: f32, target_sample_rate: f32, filter_type: FilterType) -> FilterChain {
     // https://wiki.nesdev.org/w/index.php?title=APU_Mixer
 
     // Quicker and more dirty. Will sound somewhat muffled.
@@ -207,18 +204,15 @@ impl ApuState {
             output_buffer: vec!(0i16; output_buffer_size),
             buffer_full: false,
             sample_rate: default_samplerate,
-            //cpu_clock_rate: 1_786_860,
             cpu_clock_rate: 1_789_773,
             generated_samples: 0,
             next_sample_at: 0,
             pulse_table: generate_pulse_table(),
             tnd_table: generate_tnd_table(),
-            hq_buffer_full: false,
-            hq_staging_buffer: RingBuffer::new(32768),
-            hq_output_buffer: vec!(0i16; 32768),
 
             filter_type: FilterType::FamiCom,
-            filter_chain: construct_fast_filter_chain(1789773.0, 44100.0, FilterType::FamiCom),
+            filter_chain: construct_lq_filter_chain(1789773.0, 44100.0, FilterType::FamiCom),
+            filter_hq: false,
         }
     }
 
@@ -230,9 +224,23 @@ impl ApuState {
 
     pub fn set_sample_rate(&mut self, sample_rate: u64) {
         self.sample_rate = sample_rate;
-        self.filter_chain = construct_fast_filter_chain(self.cpu_clock_rate as f32, sample_rate as f32, self.filter_type);
+        self.update_filter();
         let output_buffer_size = recommended_buffer_size(sample_rate);
         self.set_buffer_size(output_buffer_size);
+    }
+
+    pub fn set_filter(&mut self, filter_type: FilterType, hq: bool) {
+        self.filter_type = filter_type;
+        self.filter_hq = hq;
+        self.update_filter();
+    }
+
+    pub fn update_filter(&mut self) {
+        if self.filter_hq {
+            self.filter_chain = construct_hq_filter_chain(self.cpu_clock_rate as f32, self.sample_rate as f32, self.filter_type);
+        } else {
+            self.filter_chain = construct_lq_filter_chain(self.cpu_clock_rate as f32, self.sample_rate as f32, self.filter_type);
+        }
     }
 
     pub fn channels(&self) -> Vec<& dyn AudioChannelState> {
@@ -684,26 +692,6 @@ impl ApuState {
         let mut buffer = [0u8; 1024 * 2];
         for i in 0 .. 1024 {
             let sample = self.output_buffer[i];
-            buffer[i * 2]     = (((sample as u16) & 0xFF00) >> 8) as u8;
-            buffer[i * 2 + 1] = (((sample as u16) & 0x00FF)     ) as u8;
-        }
-
-        let _ = file.write_all(&buffer);
-    }
-
-    pub fn dump_hq_sample_buffer(&self) {
-        let mut file =
-            OpenOptions::new()
-            .write(true)
-            .create(true)
-            .append(true)
-            .open("hq_audiodump.raw")
-            .unwrap();
-
-        // turn our sample buffer into a simple file buffer for output
-        let mut buffer = [0u8; 32768 * 2];
-        for i in 0 .. 32768 {
-            let sample = self.hq_output_buffer[i];
             buffer[i * 2]     = (((sample as u16) & 0xFF00) >> 8) as u8;
             buffer[i * 2 + 1] = (((sample as u16) & 0x00FF)     ) as u8;
         }
