@@ -1037,6 +1037,14 @@ impl NsfMapper {
 }
 
 impl Mapper for NsfMapper {
+    fn nsf_set_track(&mut self, track_index: u8) {
+        self.current_track = track_index;
+    }
+
+    fn nsf_manual_mode(&mut self) {
+        self.advance_mode = TrackAdvanceMode::Manual;
+    }
+
     fn mirroring(&self) -> Mirroring {
         return self.mirroring;
     }
