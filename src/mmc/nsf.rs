@@ -1257,4 +1257,8 @@ impl Mapper for NsfMapper {
             _ => {}
         }
     }
+
+    fn audio_multiplexing(&mut self, emulate: bool) {
+        self.n163_expansion_audio_chip.emulate_multiplexing = emulate;
+    }
 }
