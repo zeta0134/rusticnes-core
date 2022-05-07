@@ -207,6 +207,7 @@ pub struct Namco163Audio {
     pub current_channel: usize,
     pub current_output: f32,
     pub maximum_channels_enabled: usize,
+    pub emulate_multiplexing: bool,
 }
 
 impl Namco163Audio {
@@ -225,12 +226,56 @@ impl Namco163Audio {
             current_channel: 0,
             current_output: 0.0,
             maximum_channels_enabled: 1,
+            emulate_multiplexing: true,
         };
     }
 
     pub fn enabled_channels(&self) -> usize {
         let channel_cmp = (self.internal_ram[0x7F] & 0b0111_0000) >> 4;
         return (1 + channel_cmp) as usize;
+    }
+
+    pub fn multiplexed_output(&self) -> f32 {
+        let active_channel = match self.current_channel {
+            0 => &self.channel1,
+            1 => &self.channel2,
+            2 => &self.channel3,
+            3 => &self.channel4,
+            4 => &self.channel5,
+            5 => &self.channel6,
+            6 => &self.channel7,
+            7 => &self.channel8,
+            _ => {&self.channel1} // unreachable, but rust doesn't know that
+        };
+        if active_channel.debug_disable {
+            // Do debug muting here at the last second
+            return 0.0;
+        } else {
+            return active_channel.current_output;
+        }
+    }
+
+    pub fn combined_output(&self) -> f32 {
+        let mut mixed_sample = 0.0;
+        for channel_index in 0 .. self.enabled_channels() {
+            let current_channel = match channel_index {
+                0 => &self.channel1,
+                1 => &self.channel2,
+                2 => &self.channel3,
+                3 => &self.channel4,
+                4 => &self.channel5,
+                5 => &self.channel6,
+                6 => &self.channel7,
+                7 => &self.channel8,
+                _ => {&self.channel1} // unreachable, but rust doesn't know that
+            };
+            if current_channel.debug_disable {
+                mixed_sample += 0.0; // no contribution
+            } else {
+                mixed_sample += current_channel.current_output;
+            }
+        }
+        return mixed_sample / (self.enabled_channels() as f32);
     }
 
     pub fn clock(&mut self) {
@@ -251,11 +296,11 @@ impl Namco163Audio {
                 _ => {&mut self.channel1} // unreachable, but rust doesn't know that
             };
             active_channel.update(&mut self.internal_ram);
-            if active_channel.debug_disable {
+            if self.emulate_multiplexing {
                 // Do debug muting here at the last second
-                self.current_output = 0.0;
+                self.current_output = self.multiplexed_output();
             } else {
-                self.current_output = active_channel.current_output;
+                self.current_output = self.combined_output();
             }
             self.current_channel += 1;
             if self.current_channel >= self.enabled_channels() {
@@ -594,5 +639,9 @@ impl Mapper for Namco163 {
 
     fn load_sram(&mut self, sram_data: Vec<u8>) {
         *self.prg_ram.as_mut_vec() = sram_data;
+    }
+
+    fn audio_multiplexing(&mut self, emulate: bool) {
+        self.expansion_audio_chip.emulate_multiplexing = emulate;
     }
 }
