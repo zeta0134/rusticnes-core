@@ -662,7 +662,7 @@ impl YM2149F {
                 self.envelope.period_compare = (self.envelope.period_compare & 0xFF00) + data as u16;
             },
             0xC => { 
-                self.envelope.period_compare = (self.envelope.period_compare & 0x00FF) + ((data as u16 & 0xF) << 8);
+                self.envelope.period_compare = (self.envelope.period_compare & 0x00FF) + ((data as u16 & 0xFF) << 8);
             },
             0xD => {
                 self.envelope.hold_flag =      (data & 0b0000_0001) != 0;
@@ -670,8 +670,6 @@ impl YM2149F {
                 self.envelope.attack_flag =    (data & 0b0000_0100) != 0;
                 self.envelope.continue_flag =  (data & 0b0000_1000) != 0;
                 self.envelope.restart_envelope();
-
-
             },
             _ => {}
         }
