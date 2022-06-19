@@ -9,6 +9,7 @@ use crate::memoryblock::MemoryBlock;
 use crate::mmc::mapper::*;
 use crate::mmc::mirroring;
 
+#[derive(Clone)]
 pub struct Mmc3 {
     pub prg_rom: MemoryBlock,
     pub prg_ram: MemoryBlock,
@@ -418,4 +419,9 @@ impl Mapper for Mmc3 {
         self.prg_ram.load_state(data);
         self.prg_rom.load_state(data);
     }
+    fn box_clone(&self) -> Box<dyn Mapper> {
+        Box::new((*self).clone())
+    }
+    
 }
+
