@@ -395,23 +395,19 @@ impl PpuState {
 
         // If sprites are enabled
         if self.mask & 0b0001_0000 != 0 && ((self.mask & 0b0000_0100 != 0) || px >= 8) {
-            // Iterate over sprites in reverse order, and find the lowest numbered sprite with an opaque pixel:
-            let mut sprite_index = 8;
-            for i in (0 .. self.secondary_oam_index).rev() {
-                if self.secondary_oam[i].active && self.secondary_oam[i].palette_index() != 0 {
-                    // Mark this as the lowest active sprite
-                    sprite_index = i;
-                }
-            }
-            if sprite_index < 8 {
-                if self.sprite_zero_on_scanline && sprite_index == 0 && bg_palette_index != 0 {
-                    // Sprite zero hit!
-                    self.status = self.status | 0x40;
-                }
-                if bg_palette_index == 0 || !self.secondary_oam[sprite_index].bg_priority() {
-                    let sprite_palette_number = self.secondary_oam[sprite_index].palette() as u16;
-                    let sprite_palette_index = self.secondary_oam[sprite_index].palette_index() as u16;
-                    pixel_color = self.read_byte(mapper, (sprite_palette_number << 2) + sprite_palette_index + 0x3F10);
+            // Find the lowest active sprite with an opaque pixel
+            for sprite_index in 0 .. self.secondary_oam_index {
+                if self.secondary_oam[sprite_index].active && self.secondary_oam[sprite_index].palette_index() != 0 {
+                    if self.sprite_zero_on_scanline && sprite_index == 0 && bg_palette_index != 0 {
+                        // Sprite zero hit!
+                        self.status = self.status | 0x40;
+                    }
+                    if bg_palette_index == 0 || !self.secondary_oam[sprite_index].bg_priority() {
+                        let sprite_palette_number = self.secondary_oam[sprite_index].palette() as u16;
+                        let sprite_palette_index = self.secondary_oam[sprite_index].palette_index() as u16;
+                        pixel_color = self.read_byte(mapper, (sprite_palette_number << 2) + sprite_palette_index + 0x3F10);
+                    }
+                    break;
                 }
             }
         }
