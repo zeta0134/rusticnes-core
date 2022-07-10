@@ -102,10 +102,15 @@ pub struct PpuState {
     // Internal
     pub current_frame: u32,
     pub current_scanline: u16,
-    pub current_scanline_cycle: u16,    
+    pub current_scanline_cycle: u16,
+
+    pub overall_cycle: usize,
+    pub frame_starting_cycle: usize,
+    pub scanline_ntsc_samples: [f32; 256*8],
 
     // Framebuffer
     pub screen: Vec<u16>,
+    pub filtered_screen: Vec<u32>,
     pub sprite_color: Vec<u8>,
     pub sprite_index: Vec<u8>,
     pub sprite_bg_priority: Vec<bool>,
@@ -164,7 +169,11 @@ impl PpuState {
             current_frame: 0,
             current_scanline: 0,
             current_scanline_cycle: 0,
+            overall_cycle: 0,
+            frame_starting_cycle: 0,
             screen: vec!(0u16; 256 * 240),
+            filtered_screen: vec!(0u32; 2048 * 240),
+            scanline_ntsc_samples: [0f32; 256 * 8],
             sprite_color: vec!(0u8; 256),
             sprite_index: vec!(0u8; 256),
             sprite_bg_priority: vec!(false; 256),
@@ -706,7 +715,6 @@ impl PpuState {
             }
         } else {
             match self.current_scanline_cycle {
-                // cycle 0 is a dummy cycle, nothing happens
                 1 ..= 256 => {
                     // The PPU is disabled. Usually, we should show the backdrop color:
                     let mut pixel_color = self.read_byte(mapper, 0x3F00);
@@ -735,7 +743,13 @@ impl PpuState {
 
     pub fn clock(&mut self, mapper: &mut dyn Mapper) {
         match self.current_scanline {
-            0 ..= 239 => self.render_scanline(mapper),
+            0 => {
+                if self.current_scanline_cycle == 1 {
+                    self.frame_starting_cycle = self.overall_cycle % 12
+                }
+                self.render_scanline(mapper);
+            },
+            1 ..= 239 => self.render_scanline(mapper),
             240 => {
                 if self.current_scanline_cycle == 1 && self.rendering_enabled() {
                     // When scanline 240 is reached, rendering ends and the contents of v are immediately placed
@@ -750,6 +764,7 @@ impl PpuState {
         }
 
         self.current_scanline_cycle += 1;
+        self.overall_cycle += 1;
         if self.current_scanline_cycle > 340 {
             self.current_scanline_cycle = 0;
             self.current_scanline += 1;
@@ -787,54 +802,136 @@ impl PpuState {
         let mask = 0x3 << shift;
         return (attr_byte & mask) >> shift;
     }
+
+    pub fn render_ntsc(&mut self, width: usize) {
+        // One scanline logic, needs wrapping for Y yet.
+        for scanline in 0 .. 240 {
+            // Compute ntsc signal from raw palette+emphasis values
+            for dot in 0 .. 256 {
+                let dot_phase = (self.frame_starting_cycle + (scanline*341) + dot) *8;
+                for sample_phase in  0 .. 8 {
+                    let pixel = self.screen[scanline*256+dot];
+                    self.scanline_ntsc_samples[dot*8+sample_phase] = render_ntsc_sample(pixel, dot_phase + sample_phase);
+                }
+            }
+
+            // Decode scanline into framebuffer
+            let phase = (self.frame_starting_cycle + (scanline * 341)) * 8;
+            for x in 0 .. width {
+                let center = x * (256 * 8) / width + 0;
+                let begin = if center >= 6 {center - 6} else {0};
+                let end = if (center + 6) < (256 * 8) {center + 6} else {256*8};
+                let mut y = 0.0;
+                let mut i = 0.0;
+                let mut q = 0.0;
+                for p in begin .. end {
+                    let level = self.scanline_ntsc_samples[p] / 12.0;
+                    y = y + level;
+                    i = i + level * PHASED_COS[(phase + p) % 12];
+                    q = q + level * PHASED_SIN[(phase + p) % 12];
+                }
+                self.filtered_screen[scanline * width + x] = yiq_to_argb(y, i, q);
+            }
+        }
+    }
 }
 
-pub fn nametable_address(read_address: u16, mirroring: Mirroring) -> u16 {
-    // Mirroring documented here, the ABCD references to the charts in this article:
-    // https://wiki.nesdev.com/w/index.php/Mirroring
-    let nt_address = read_address & 0x3FF;
-    let nt_offset = (0x000, 0x400, 0x800, 0xC00);
-    match read_address {
-        // Nametable 0 (top-left)
-        0x2000 ..= 0x23FF => {
-            return match mirroring {
-                Mirroring::Horizontal       => nt_address + nt_offset.0, // A
-                Mirroring::Vertical         => nt_address + nt_offset.0, // A
-                Mirroring::OneScreenLower   => nt_address + nt_offset.0, // A
-                Mirroring::OneScreenUpper   => nt_address + nt_offset.1, // B
-                Mirroring::FourScreen       => nt_address + nt_offset.0, // A
-            }
-        },
-        // Nametable 1 (top-right)
-        0x2400 ..= 0x27FF => {
-            return match mirroring {
-                Mirroring::Horizontal       => nt_address + nt_offset.0, // A
-                Mirroring::Vertical         => nt_address + nt_offset.1, // B
-                Mirroring::OneScreenLower   => nt_address + nt_offset.0, // A
-                Mirroring::OneScreenUpper   => nt_address + nt_offset.1, // B
-                Mirroring::FourScreen       => nt_address + nt_offset.1, // B
-            }
-        },
-        // Nametable 2 (bottom-left)
-        0x2800 ..= 0x2BFF => {
-            return match mirroring {
-                Mirroring::Horizontal       => nt_address + nt_offset.1, // B
-                Mirroring::Vertical         => nt_address + nt_offset.0, // A
-                Mirroring::OneScreenLower   => nt_address + nt_offset.0, // A
-                Mirroring::OneScreenUpper   => nt_address + nt_offset.1, // B
-                Mirroring::FourScreen       => nt_address + nt_offset.2, // C
-            }
-        },
-        // Nametable 3 (bottom-right)
-        0x2C00 ..= 0x2FFF => {
-            return match mirroring {
-                Mirroring::Horizontal       => nt_address + nt_offset.1, // B
-                Mirroring::Vertical         => nt_address + nt_offset.1, // B
-                Mirroring::OneScreenLower   => nt_address + nt_offset.0, // A
-                Mirroring::OneScreenUpper   => nt_address + nt_offset.1, // B
-                Mirroring::FourScreen       => nt_address + nt_offset.3, // D
-            }
-        },
-        _ => return 0, // wat
+const PHASED_SIN: [f32; 12] = [
+    // =SIN(PI() * (PHASE+3.9) / 6)
+    0.89100652418836800000,
+    0.54463903501502700000,
+    0.05233595624294380000,
+    -0.45399049973954700000,
+    -0.83867056794542400000,
+    -0.99862953475457400000,
+    -0.89100652418836800000,
+    -0.54463903501502700000,
+    -0.05233595624294440000,
+    0.45399049973954700000,
+    0.83867056794542400000,
+    0.99862953475457400000,
+];
+
+const PHASED_COS: [f32; 12] = [
+    // =COS(PI() * (PHASE+3.9) / 6)
+    -0.45399049973954700000,
+    -0.83867056794542400000,
+    -0.99862953475457400000,
+    -0.89100652418836800000,
+    -0.54463903501502700000,
+    -0.05233595624294340000,
+    0.45399049973954700000,
+    0.83867056794542400000,
+    0.99862953475457400000,
+    0.89100652418836800000,
+    0.54463903501502800000,
+    0.05233595624294350000,
+];
+
+
+// Translated from https://www.nesdev.org/wiki/NTSC_video#Emulating_in_C++_code
+// Voltage levels, relative to synch voltage
+const NTSC_BLACK: f32 = 0.518;
+const NTSC_WHITE: f32 = 1.962;
+const NTSC_ATTENUATION: f32 = 0.746;
+//const NTSC_GAMMA: f32 = 2.0;
+
+pub fn ntsc_signal(pixel: u16, phase: usize) -> f32 {
+    let levels = [
+        0.350, 0.518, 0.962, 1.550,  // Signal low
+        1.094, 1.506, 1.962, 1.962   // Signal high
+    ];
+
+    // Decode the NES color.
+    let color = pixel & 0b1111;                  // 0..15 "cccc"
+    let emphasis = (pixel >> 6) & 0b111;         // 0..7 "eee"
+    // For colors 14 .. 15, level 1 is forced    // 0..3 "ll"
+    let level = if color > 13 {1} else {(pixel >> 4) & 0b11};
+
+    // The square wave for this color alternates between these two voltages
+    // For color 0, only high level is emitted
+    let low_base = levels[0 + level as usize];
+    let high_base = levels[4 + level as usize];
+    let low = if color == 0 {high_base} else {low_base};
+    // For colors 13..15, only low level is emitted
+    let high = if color > 12 {low_base} else {high_base};
+
+    // Generate the square wave
+    let signal = if in_color_phase(color, phase) {high} else {low};
+
+    // When de-emphasis bits are set, some parts of the signal are attenuated
+    if ((emphasis & 0b001) != 0) && in_color_phase(0, phase) || 
+       ((emphasis & 0b010) != 0) && in_color_phase(4, phase) || 
+       ((emphasis & 0b100) != 0) && in_color_phase(8, phase) {
+        return signal * NTSC_ATTENUATION;
     }
+
+    return signal;
+}
+
+pub fn in_color_phase(color: u16, phase: usize)  -> bool {
+    return ((color as usize + phase) % 12) < 6;
+}
+
+pub fn render_ntsc_sample(pixel: u16, phase: usize) -> f32 {
+    return (ntsc_signal(pixel, phase) - NTSC_BLACK) / (NTSC_WHITE - NTSC_BLACK);
+}
+
+pub fn gammafix(f: f32) -> f32 {
+    // This is excessively slow and seems to have a very minor impact on the output.
+    // Skipping this for now.
+    //return if f <= 0.0 {0.0} else {f.powf(2.2 / NTSC_GAMMA)}
+    return f;
+}
+
+pub fn clamp(v: f32) -> u32 {
+    return if v >= 255.0 {255} else {v as u32}
+}
+
+pub fn yiq_to_argb(y: f32, i: f32, q: f32) -> u32 {
+    let rgb = 
+      0x10000 * clamp(255.95 * gammafix(y + ( 0.946882*i) +  (0.623557*q)))
+    + 0x00100 * clamp(255.95 * gammafix(y + (-0.274788*i) + -(0.635691*q)))
+    + 0x00001 * clamp(255.95 * gammafix(y + (-1.108545*i) +  (1.709007*q)));
+    return 0xFF000000 + rgb; // set alpha exlicitly to full
 }
