@@ -85,6 +85,10 @@ impl TriangleChannelState {
             } else {
                 self.period_current -= 1;
             }
+        } else {
+            // When the triangle is disabled, treat every sample as the last edge. This prevents
+            // holding onto the trailing end of the waveform in the debug display for too long
+            self.last_edge = true;
         }
     }
 
