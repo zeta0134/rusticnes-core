@@ -1,4 +1,4 @@
-use nes::NesState;
+use crate::nes::NesState;
 
 pub struct CpuMemory {
     pub iram_raw: Vec<u8>,
@@ -16,6 +16,16 @@ impl CpuMemory {
             recent_writes: Vec::new(),
             open_bus: 0,
         }
+    }
+
+    pub fn save_state(&self, data: &mut Vec<u8>) {
+        data.extend(&self.iram_raw);
+        data.push(self.open_bus);
+    }
+
+    pub fn load_state(&mut self, data: &mut Vec<u8>) {
+        self.open_bus = data.pop().unwrap();
+        self.iram_raw = data.split_off(data.len() - self.iram_raw.len());
     }
 }
 

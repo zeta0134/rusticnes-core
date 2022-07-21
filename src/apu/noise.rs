@@ -1,3 +1,5 @@
+use std::convert::TryInto;
+
 use super::length_counter::LengthCounterState;
 use super::volume_envelope::VolumeEnvelopeState;
 use super::audio_channel::AudioChannelState;
@@ -80,6 +82,28 @@ impl NoiseChannelState {
         } else {
             return 0;
         }
+    }
+
+    pub fn save_state(&self, data: &mut Vec<u8>) {
+        data.push(self.length);
+        data.push(self.length_halt_flag as u8);
+        self.envelope.save_state(data);
+        self.length_counter.save_state(data);
+        data.push(self.mode);
+        data.extend(&self.period_initial.to_le_bytes());
+        data.extend(&self.period_current.to_le_bytes());
+        data.extend(&self.shift_register.to_le_bytes());
+    }
+
+    pub fn load_state(&mut self, data: &mut Vec<u8>) {
+        self.shift_register = u16::from_le_bytes(data.split_off(data.len() - 2).try_into().unwrap());
+        self.period_current = u16::from_le_bytes(data.split_off(data.len() - 2).try_into().unwrap());
+        self.period_initial = u16::from_le_bytes(data.split_off(data.len() - 2).try_into().unwrap());
+        self.mode = data.pop().unwrap();
+        self.length_counter.load_state(data);
+        self.envelope.load_state(data);
+        self.length_halt_flag = data.pop().unwrap() != 0;
+        self.length = data.pop().unwrap();
     }
 }
 

@@ -1,7 +1,7 @@
 // A dummy mapper with no loaded data. Useful for initializing an NesState
 // with no actual cartridge loaded.
 
-use mmc::mapper::*;
+use crate::mmc::mapper::*;
 
 pub struct NoneMapper {
 }
@@ -32,5 +32,5 @@ impl Mapper for NoneMapper {
 
     fn write_ppu(&mut self, _: u16, _: u8) {
         //Do nothing
-    }    
+    }
 }

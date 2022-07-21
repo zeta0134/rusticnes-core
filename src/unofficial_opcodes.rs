@@ -1,9 +1,9 @@
-use addressing;
-use cycle_cpu::Registers;
-use opcodes;
-use nes::NesState;
-use memory::read_byte;
-use memory::write_byte;
+use crate::addressing;
+use crate::cycle_cpu::Registers;
+use crate::opcodes;
+use crate::nes::NesState;
+use crate::memory::read_byte;
+use crate::memory::write_byte;
 
 // Note: Opcode names follow the undefined opcodes tabke here:
 // https://wiki.nesdev.com/w/index.php/CPU_unofficial_opcodes

@@ -1,19 +1,19 @@
 // Vrc6, 
 // Reference capabilities: https://wiki.nesdev.com/w/index.php/VRC6
 
-use ines::INesCartridge;
-use memoryblock::MemoryBlock;
+use crate::ines::INesCartridge;
+use crate::memoryblock::MemoryBlock;
 
-use mmc::mapper::*;
-use mmc::mirroring;
+use crate::mmc::mapper::*;
+use crate::mmc::mirroring;
 
-use apu::AudioChannelState;
-use apu::PlaybackRate;
-use apu::Volume;
-use apu::Timbre;
-use apu::RingBuffer;
-use apu::filters;
-use apu::filters::DspFilter;
+use crate::apu::AudioChannelState;
+use crate::apu::PlaybackRate;
+use crate::apu::Volume;
+use crate::apu::Timbre;
+use crate::apu::RingBuffer;
+use crate::apu::filters;
+use crate::apu::filters::DspFilter;
 
 pub struct Vrc6PulseChannel {
     pub name: String,

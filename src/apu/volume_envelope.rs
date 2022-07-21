@@ -49,4 +49,22 @@ impl VolumeEnvelopeState {
             }
         }
     }
+
+    pub fn save_state(&self, data: &mut Vec<u8>) {
+        data.push(self.volume_register);
+        data.push(self.decay);
+        data.push(self.divider);
+        data.push(self.enabled as u8);
+        data.push(self.looping as u8);
+        data.push(self.start_flag as u8);
+    }
+
+    pub fn load_state(&mut self, data: &mut Vec<u8>) {
+        self.start_flag = data.pop().unwrap() != 0;
+        self.looping = data.pop().unwrap() != 0;
+        self.enabled = data.pop().unwrap() != 0;
+        self.divider = data.pop().unwrap();
+        self.decay = data.pop().unwrap();
+        self.volume_register = data.pop().unwrap();
+    }
 }

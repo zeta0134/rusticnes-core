@@ -1,4 +1,4 @@
-use apu::AudioChannelState;
+use crate::apu::AudioChannelState;
 
 #[derive(Copy, Clone, PartialEq)]
 pub enum Mirroring {
@@ -38,7 +38,17 @@ pub trait Mapper: Send {
     fn channels(&self) ->  Vec<& dyn AudioChannelState> {return Vec::new();}
     fn channels_mut(&mut self) ->  Vec<&mut dyn AudioChannelState> {return Vec::new();}
     fn record_expansion_audio_output(&mut self, _nes_sample: f32) {}
+    fn save_state(&self, data: &mut Vec<u8>) { todo!() }
+    fn load_state(&mut self, data: &mut Vec<u8>) { todo!() }
+    fn box_clone(&self) -> Box<dyn Mapper> { todo!() }
     fn nsf_set_track(&mut self, _track_index: u8) {}
     fn nsf_manual_mode(&mut self) {}
     fn audio_multiplexing(&mut self, _emulate: bool) {}
+}
+
+impl Clone for Box<dyn Mapper>
+{
+    fn clone(&self) -> Box<dyn Mapper> {
+        self.box_clone()
+    }
 }

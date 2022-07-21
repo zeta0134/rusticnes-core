@@ -1,5 +1,6 @@
-use mmc::mapper::Mapper;
+use crate::mmc::mapper::Mapper;
 
+use std::convert::TryInto;
 use std::fs::OpenOptions;
 use std::io::prelude::*;
 
@@ -214,6 +215,38 @@ impl ApuState {
             filter_chain: construct_hq_filter_chain(1789773.0, 44100.0, FilterType::FamiCom),
             filter_hq: true,
         }
+    }
+
+    pub fn save_state(&self, data: &mut Vec<u8>) {
+        data.extend(&self.current_cycle.to_le_bytes());
+        data.push(self.frame_sequencer_mode);
+        data.extend(&self.frame_sequencer.to_le_bytes());
+        data.push(self.frame_reset_delay);
+        data.push(self.frame_interrupt as u8);
+        data.push(self.disable_interrupt as u8);
+        self.pulse_1.save_state(data);
+        self.pulse_2.save_state(data);
+        self.triangle.save_state(data);
+        self.noise.save_state(data);
+        self.dmc.save_state(data);
+        data.extend(&self.generated_samples.to_le_bytes());
+        data.extend(&self.next_sample_at.to_le_bytes());
+    }
+
+    pub fn load_state(&mut self, data: &mut Vec<u8>) {
+        self.next_sample_at = u64::from_le_bytes(data.split_off(data.len() - 8).try_into().unwrap());
+        self.generated_samples = u64::from_le_bytes(data.split_off(data.len() - 8).try_into().unwrap());
+        self.dmc.load_state(data);
+        self.noise.load_state(data);
+        self.triangle.load_state(data);
+        self.pulse_2.load_state(data);
+        self.pulse_1.load_state(data);
+        self.disable_interrupt = data.pop().unwrap() != 0;
+        self.frame_interrupt = data.pop().unwrap() != 0;
+        self.frame_reset_delay = data.pop().unwrap();
+        self.frame_sequencer = u16::from_le_bytes(data.split_off(data.len() - 2).try_into().unwrap());
+        self.frame_sequencer_mode = data.pop().unwrap();
+        self.current_cycle = u64::from_le_bytes(data.split_off(data.len() - 8).try_into().unwrap());
     }
 
     pub fn set_buffer_size(&mut self, buffer_size: usize) {

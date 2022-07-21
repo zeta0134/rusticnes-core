@@ -2,11 +2,13 @@
 // later be rewritten with cycle-accurate logic once we're past proof of concept
 // and prototype stages.
 
-use mmc::mapper::*;
+use std::convert::TryInto;
+
+use crate::mmc::mapper::*;
 
 #[derive(Copy, Clone)]
 pub struct SpriteLatch {
-    tile_index: u8,    
+    tile_index: u8,
     bitmap_high: u8,
     bitmap_low: u8,
     attributes: u8,
@@ -72,6 +74,26 @@ impl SpriteLatch {
                 ((self.bitmap_high & 0b1000_0000) >> 6) | 
                 ((self.bitmap_low  & 0b1000_0000) >> 7);
         }
+    }
+
+    pub fn save_state(&self, data: &mut Vec<u8>) {
+        data.push(self.tile_index);
+        data.push(self.bitmap_high);
+        data.push(self.bitmap_low);
+        data.push(self.attributes);
+        data.push(self.x_counter);
+        data.push(self.y_pos);
+        data.push(self.active as u8);
+    }
+
+    pub fn load_state(&mut self, data: &mut Vec<u8>) {
+        self.active = data.pop().unwrap() != 0;
+        self.y_pos = data.pop().unwrap();
+        self.x_counter = data.pop().unwrap();
+        self.attributes = data.pop().unwrap();
+        self.bitmap_low = data.pop().unwrap();
+        self.bitmap_high = data.pop().unwrap();
+        self.tile_index = data.pop().unwrap();
     }
 }
 
@@ -801,6 +823,76 @@ impl PpuState {
         let shift = (((tx & 0x2) >> 1) + ((ty % 30) & 0x2)) << 1;
         let mask = 0x3 << shift;
         return (attr_byte & mask) >> shift;
+    }
+
+    pub fn save_state(&self, data: &mut Vec<u8>) {
+        data.extend(&self.internal_vram);
+        data.extend(&self.oam);
+        for d in &self.secondary_oam {
+            d.save_state(data);
+        }
+        data.extend(&self.secondary_oam_index.to_le_bytes());
+        data.extend(&self.palette);
+        data.push(self.latch);
+        data.push(self.open_bus);
+        data.push(self.read_buffer);
+        data.push(self.control);
+        data.push(self.mask);
+        data.push(self.status);
+        data.push(self.oam_addr);
+        data.push(self.oam_dma_high);
+        data.extend(&self.current_frame.to_le_bytes());
+        data.extend(&self.current_scanline.to_le_bytes());
+        data.extend(&self.current_scanline_cycle.to_le_bytes());
+        data.push(self.write_toggle as u8);
+        data.extend(&self.current_vram_address.to_le_bytes());
+        data.extend(&self.temporary_vram_address.to_le_bytes());
+        data.push(self.fine_x);
+        data.extend(&self.tile_shift_low.to_le_bytes());
+        data.extend(&self.tile_shift_high.to_le_bytes());
+        data.push(self.tile_low);
+        data.push(self.tile_high);
+        data.push(self.tile_index);
+        data.push(self.palette_shift_low);
+        data.push(self.palette_shift_high);
+        data.push(self.palette_latch);
+        data.push(self.attribute_byte);
+        data.push(self.sprite_zero_on_scanline as u8);
+    }
+
+    pub fn load_state(&mut self, data: &mut Vec<u8>) {
+        self.sprite_zero_on_scanline = data.pop().unwrap() != 0;
+        self.attribute_byte = data.pop().unwrap();
+        self.palette_latch = data.pop().unwrap();
+        self.palette_shift_high = data.pop().unwrap();
+        self.palette_shift_low = data.pop().unwrap();
+        self.tile_index = data.pop().unwrap();
+        self.tile_high = data.pop().unwrap();
+        self.tile_low = data.pop().unwrap();
+        self.tile_shift_high = u16::from_le_bytes(data.split_off(data.len() - 2).try_into().unwrap());
+        self.tile_shift_low = u16::from_le_bytes(data.split_off(data.len() - 2).try_into().unwrap());
+        self.fine_x = data.pop().unwrap();
+        self.temporary_vram_address = u16::from_le_bytes(data.split_off(data.len() - 2).try_into().unwrap());
+        self.current_vram_address = u16::from_le_bytes(data.split_off(data.len() - 2).try_into().unwrap());
+        self.write_toggle = data.pop().unwrap() != 0;
+        self.current_scanline_cycle = u16::from_le_bytes(data.split_off(data.len() - 2).try_into().unwrap());
+        self.current_scanline = u16::from_le_bytes(data.split_off(data.len() - 2).try_into().unwrap());
+        self.current_frame = u32::from_le_bytes(data.split_off(data.len() - 4).try_into().unwrap());
+        self.oam_dma_high = data.pop().unwrap();
+        self.oam_addr = data.pop().unwrap();
+        self.status = data.pop().unwrap();
+        self.mask = data.pop().unwrap();
+        self.control = data.pop().unwrap();
+        self.read_buffer = data.pop().unwrap();
+        self.open_bus = data.pop().unwrap();
+        self.latch = data.pop().unwrap();
+        self.palette = data.split_off(data.len() - self.palette.len());
+        self.secondary_oam_index = usize::from_le_bytes(data.split_off(data.len() - std::mem::size_of::<usize>()).try_into().unwrap());
+        for d in &mut self.secondary_oam {
+            d.load_state(data);
+        }
+        self.oam = data.split_off(data.len() - self.oam.len());
+        self.internal_vram = data.split_off(data.len() - self.internal_vram.len());
     }
 
     pub fn render_ntsc(&mut self, width: usize) {

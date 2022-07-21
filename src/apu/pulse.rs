@@ -1,3 +1,5 @@
+use std::convert::TryInto;
+
 use super::length_counter::LengthCounterState;
 use super::volume_envelope::VolumeEnvelopeState;
 use super::audio_channel::AudioChannelState;
@@ -135,6 +137,40 @@ impl PulseChannelState {
         } else {
             self.sweep_divider -= 1;
         }
+    }
+
+    pub fn save_state(&self, data: &mut Vec<u8>) {
+        self.envelope.save_state(data);
+        self.length_counter.save_state(data);
+        data.push(self.sweep_enabled as u8);
+        data.push(self.sweep_period);
+        data.push(self.sweep_divider);
+        data.push(self.sweep_negate as u8);
+        data.push(self.sweep_shift);
+        data.push(self.sweep_reload as u8);
+        data.push(self.sweep_ones_compliment as u8);
+        data.push(self.duty);
+        data.push(self.sequence_counter);
+        data.extend(&self.period_initial.to_le_bytes());
+        data.extend(&self.period_current.to_le_bytes());
+        data.extend(&self.cpu_clock_rate.to_le_bytes());
+    }
+
+    pub fn load_state(&mut self, data: &mut Vec<u8>) {
+        self.cpu_clock_rate = u64::from_le_bytes(data.split_off(data.len() - 8).try_into().unwrap());
+        self.period_current = u16::from_le_bytes(data.split_off(data.len() - 2).try_into().unwrap());
+        self.period_initial = u16::from_le_bytes(data.split_off(data.len() - 2).try_into().unwrap());
+        self.sequence_counter = data.pop().unwrap();
+        self.duty = data.pop().unwrap();
+        self.sweep_ones_compliment = data.pop().unwrap() != 0;
+        self.sweep_reload = data.pop().unwrap() != 0;
+        self.sweep_shift = data.pop().unwrap();
+        self.sweep_negate = data.pop().unwrap() != 0;
+        self.sweep_divider = data.pop().unwrap();
+        self.sweep_period = data.pop().unwrap();
+        self.sweep_enabled = data.pop().unwrap() != 0;
+        self.length_counter.load_state(data);
+        self.envelope.load_state(data);
     }
 }
 

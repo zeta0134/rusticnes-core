@@ -3,12 +3,14 @@
 // http://www.llx.com/~nparker/a2/opcodes.html - For opcode decoding structure
 // http://nesdev.com/6502_cpu.txt - for information on cycle timings for each addressing mode
 
-use addressing;
-use memory::read_byte;
-use memory::write_byte;
-use nes::NesState;
-use opcodes;
-use unofficial_opcodes;
+use std::convert::TryInto;
+
+use crate::addressing;
+use crate::memory::read_byte;
+use crate::memory::write_byte;
+use crate::nes::NesState;
+use crate::opcodes;
+use crate::unofficial_opcodes;
 
 #[derive(Copy, Clone)]
 pub struct Flags {
@@ -21,6 +23,28 @@ pub struct Flags {
 
     // internal only
     pub last_nmi: bool,
+}
+
+impl Flags {
+  pub fn save_state(&self, data: &mut Vec<u8>) {
+    data.push(self.carry as u8);
+    data.push(self.zero as u8);
+    data.push(self.decimal as u8);
+    data.push(self.interrupts_disabled as u8);
+    data.push(self.overflow as u8);
+    data.push(self.negative as u8);
+    data.push(self.last_nmi as u8);
+  }
+
+  pub fn load_state(&mut self, data: &mut Vec<u8>) {
+    self.last_nmi = data.pop().unwrap() != 0;
+    self.negative = data.pop().unwrap() != 0;
+    self.overflow = data.pop().unwrap() != 0;
+    self.interrupts_disabled = data.pop().unwrap() != 0;
+    self.decimal = data.pop().unwrap() != 0;
+    self.zero = data.pop().unwrap() != 0;
+    self.carry = data.pop().unwrap() != 0;
+  }
 }
 
 #[derive(Copy, Clone)]
@@ -73,6 +97,24 @@ impl Registers {
         self.flags.overflow = data & (1 << 6) != 0;
         self.flags.negative = data & (1 << 7) != 0;
     }
+
+    pub fn save_state(&self, data: &mut Vec<u8>) {
+      data.push(self.a);
+      data.push(self.x);
+      data.push(self.y);
+      data.extend(&self.pc.to_le_bytes());
+      data.push(self.s);
+      self.flags.save_state(data);
+    }
+
+    pub fn load_state(&mut self, data: &mut Vec<u8>) {
+      self.flags.load_state(data);
+      self.s = data.pop().unwrap();
+      self.pc = u16::from_le_bytes(data.split_off(data.len() - 2).try_into().unwrap());
+      self.y = data.pop().unwrap();
+      self.x = data.pop().unwrap();
+      self.a = data.pop().unwrap();
+  }
 }
 
 pub struct CpuState {
@@ -109,6 +151,38 @@ impl CpuState {
       oam_dma_address: 0,
       upcoming_write: false,
     }
+  }
+
+  pub fn save_state(&self, data: &mut Vec<u8>) {
+    data.push(self.tick);
+    data.push(self.opcode);
+    data.push(self.data1);
+    data.push(self.data2);
+    data.extend(&self.temp_address.to_le_bytes());
+    data.push(self.service_routine_active as u8);
+    data.push(self.nmi_requested as u8);
+    data.push(self.irq_requested as u8);
+    data.push(self.last_nmi as u8);
+    data.push(self.upcoming_write as u8);
+    data.push(self.oam_dma_active as u8);
+    data.extend(&self.oam_dma_cycle.to_le_bytes());
+    data.extend(&self.oam_dma_address.to_le_bytes());
+  }
+
+  pub fn load_state(&mut self, data: &mut Vec<u8>) {
+    self.oam_dma_address = u16::from_le_bytes(data.split_off(data.len() - 2).try_into().unwrap());
+    self.oam_dma_cycle = u16::from_le_bytes(data.split_off(data.len() - 2).try_into().unwrap());
+    self.oam_dma_active = data.pop().unwrap() != 0;
+    self.upcoming_write = data.pop().unwrap() != 0;
+    self.last_nmi = data.pop().unwrap() != 0;
+    self.irq_requested = data.pop().unwrap() != 0;
+    self.nmi_requested = data.pop().unwrap() != 0;
+    self.service_routine_active = data.pop().unwrap() != 0;
+    self.temp_address = u16::from_le_bytes(data.split_off(data.len() - 2).try_into().unwrap());
+    self.data2 = data.pop().unwrap();
+    self.data1 = data.pop().unwrap();
+    self.opcode = data.pop().unwrap();
+    self.tick = data.pop().unwrap();
   }
 }
 

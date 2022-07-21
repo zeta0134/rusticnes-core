@@ -7,9 +7,9 @@ use std::io::Read;
 use std::error::Error;
 use std::fmt;
 
-use mmc::mapper::Mirroring;
-use memoryblock::MemoryBlock;
-use memoryblock::MemoryType;
+use crate::mmc::mapper::Mirroring;
+use crate::memoryblock::MemoryBlock;
+use crate::memoryblock::MemoryType;
 
 #[derive(Debug)]
 pub enum INesError {

@@ -84,5 +84,17 @@ impl MemoryBlock {
     pub fn as_mut_vec(&mut self) -> &mut Vec<u8> {
         return &mut self.bytes;
     }
+
+    pub fn save_state(&self, data: &mut Vec<u8>) {
+        if !self.readonly {
+            data.extend(&self.bytes);
+        }
+    }
+
+    pub fn load_state(&mut self, data: &mut Vec<u8>) {
+        if !self.readonly {
+            self.bytes = data.split_off(data.len() - self.bytes.len());
+        }
+    }
 }
 

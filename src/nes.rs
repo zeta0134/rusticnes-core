@@ -1,13 +1,15 @@
-use apu::ApuState;
-use cartridge;
-use cycle_cpu;
-use cycle_cpu::CpuState;
-use cycle_cpu::Registers;
-use memory;
-use memory::CpuMemory;
-use ppu::PpuState;
-use mmc::mapper::Mapper;
-use tracked_events::EventTracker;
+use std::convert::TryInto;
+
+use crate::apu::ApuState;
+use crate::cartridge;
+use crate::cycle_cpu;
+use crate::cycle_cpu::CpuState;
+use crate::cycle_cpu::Registers;
+use crate::memory;
+use crate::memory::CpuMemory;
+use crate::ppu::PpuState;
+use crate::mmc::mapper::Mapper;
+use crate::tracked_events::EventTracker;
 
 pub struct NesState {
     pub apu: ApuState,
@@ -44,6 +46,38 @@ impl NesState {
             last_frame: 0,
             event_tracker: EventTracker::new(),
         }
+    }
+
+    pub fn save_state(&self) -> Vec<u8> {
+        let mut data = vec!();
+        self.apu.save_state(&mut data);
+        self.cpu.save_state(&mut data);
+        self.memory.save_state(&mut data);
+        self.ppu.save_state(&mut data);
+        self.registers.save_state(&mut data);
+        data.extend(&self.master_clock.to_le_bytes());
+        data.push(self.p1_input);
+        data.push(self.p1_data);
+        data.push(self.p2_input);
+        data.push(self.p2_data);
+        data.push(self.input_latch as u8);
+        self.mapper.save_state(&mut data);
+        data
+    }
+
+    pub fn load_state(&mut self, data: &mut Vec<u8>) {
+        self.mapper.load_state(data);
+        self.input_latch = data.pop().unwrap() != 0;
+        self.p2_data = data.pop().unwrap();
+        self.p2_input = data.pop().unwrap();
+        self.p1_data = data.pop().unwrap();
+        self.p1_input = data.pop().unwrap();
+        self.master_clock = u64::from_le_bytes(data.split_off(data.len() - 8).try_into().unwrap());
+        self.registers.load_state(data);
+        self.ppu.load_state(data);
+        self.memory.load_state(data);
+        self.cpu.load_state(data);
+        self.apu.load_state(data);
     }
 
     #[deprecated(since="0.2.0", note="please use `::new(mapper)` instead")]
