@@ -7,6 +7,7 @@ use crate::memoryblock::MemoryBlock;
 use crate::mmc::mapper::*;
 use crate::mmc::mirroring;
 
+#[derive(Clone)]
 pub struct GxRom {
     pub prg_rom: MemoryBlock,
     pub chr: MemoryBlock,
@@ -82,5 +83,25 @@ impl Mapper for GxRom {
             },
             _ => {}
         }
+    }
+    
+    fn save_state(&self, buff: &mut Vec<u8>) {    
+        self.prg_rom.save_state(buff);
+        self.chr.save_state(buff);
+        save_usize(buff, self.prg_bank);
+        save_usize(buff, self.chr_bank);
+        save_vec(buff, &self.vram);
+    }
+
+    fn load_state(&mut self, buff: &mut Vec<u8>) {
+        self.vram = load_vec(buff, self.vram.len());
+        self.chr_bank = load_usize(buff);
+        self.prg_bank = load_usize(buff);
+        self.chr.load_state(buff);
+        self.prg_rom.load_state(buff);
+    }
+
+    fn box_clone(&self) -> Box<dyn Mapper> {
+        Box::new((*self).clone())
     }
 }
