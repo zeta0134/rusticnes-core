@@ -7,6 +7,7 @@ use crate::memoryblock::MemoryBlock;
 use crate::mmc::mapper::*;
 use crate::mmc::mirroring;
 
+#[derive(Clone)]
 pub struct Nrom {
     prg_rom: MemoryBlock,
     prg_ram: MemoryBlock,
@@ -80,5 +81,25 @@ impl Mapper for Nrom {
             },
             _ => {}
         }
+    }
+
+    fn save_state(&self, buff: &mut Vec<u8>) {
+        self.prg_rom.save_state(buff);
+        self.prg_ram.save_state(buff);
+        self.chr.save_state(buff);
+
+        save_vec(buff, &self.vram);
+    }
+
+    fn load_state(&mut self, buff: &mut Vec<u8>) {
+        self.vram = load_vec(buff, self.vram.len());
+
+        self.chr.load_state(buff);
+        self.prg_ram.load_state(buff);
+        self.prg_rom.load_state(buff);
+    }
+
+    fn box_clone(&self) -> Box<dyn Mapper> {
+        Box::new((*self).clone())
     }
 }
