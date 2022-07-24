@@ -7,6 +7,7 @@ use crate::memoryblock::MemoryBlock;
 use crate::mmc::mapper::*;
 use crate::mmc::mirroring;
 
+#[derive(Clone)]
 pub struct Mmc1 {
     pub prg_rom: MemoryBlock,
     pub prg_ram: MemoryBlock,
@@ -292,4 +293,50 @@ impl Mapper for Mmc1 {
     fn load_sram(&mut self, sram_data: Vec<u8>) {
         *self.prg_ram.as_mut_vec() = sram_data;
     }
+    fn save_state(&self, buff: &mut Vec<u8>) {
+        self.prg_rom.save_state(buff);
+        self.prg_ram.save_state(buff);
+        self.chr.save_state(buff);
+        save_vec(buff, &self.vram);
+
+        buff.push(self.shift_counter);
+        buff.push(self.shift_data);
+
+        save_usize(buff, self.chr_bank_0);
+        save_usize(buff, self.chr_bank_1);
+
+        save_usize(buff, self.prg_bank);
+        buff.push(self.prg_ram_enabled as u8);
+        save_usize(buff, self.prg_ram_bank);
+
+        buff.push(self.control);
+
+        buff.push(self.last_write as u8);
+    }
+
+    fn load_state(&mut self, buff: &mut Vec<u8>) {
+        self.last_write = buff.pop().unwrap() != 0;
+
+        self.control = buff.pop().unwrap();
+
+        self.prg_ram_bank = load_usize(buff);
+        self.prg_ram_enabled = buff.pop().unwrap() != 0;
+        self.prg_bank = load_usize(buff);
+
+        self.chr_bank_1 = load_usize(buff);
+        self.chr_bank_0 = load_usize(buff);
+        
+        self.shift_data = buff.pop().unwrap();
+        self.shift_counter = buff.pop().unwrap();
+
+        self.vram = load_vec(buff, self.vram.len());
+        self.chr.load_state(buff);
+        self.prg_ram.load_state(buff);
+        self.prg_rom.load_state(buff);
+    }
+
+    fn box_clone(&self) -> Box<dyn Mapper> {
+        Box::new((*self).clone())
+    }
+
 }

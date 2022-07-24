@@ -120,17 +120,17 @@ impl TriangleChannelState {
         data.extend(&self.cpu_clock_rate.to_le_bytes());
     }
 
-    pub fn load_state(&mut self, data: &mut Vec<u8>) {
-        self.cpu_clock_rate = u64::from_le_bytes(data.split_off(data.len() - 8).try_into().unwrap());
-        self.length = data.pop().unwrap();
-        self.period_current = u16::from_le_bytes(data.split_off(data.len() - 2).try_into().unwrap());
-        self.period_initial = u16::from_le_bytes(data.split_off(data.len() - 2).try_into().unwrap());
-        self.sequence_counter = data.pop().unwrap();
-        self.linear_counter_current = data.pop().unwrap();
-        self.linear_counter_initial = data.pop().unwrap();
-        self.linear_reload_flag = data.pop().unwrap() != 0;
-        self.control_flag = data.pop().unwrap() != 0;
-        self.length_counter.load_state(data);
+    pub fn load_state(&mut self, buff: &mut Vec<u8>) {
+        self.cpu_clock_rate = u64::from_le_bytes(buff.split_off(buff.len() - 8).try_into().unwrap());
+        self.length = buff.pop().unwrap();
+        self.period_current = u16::from_le_bytes(buff.split_off(buff.len() - 2).try_into().unwrap());
+        self.period_initial = u16::from_le_bytes(buff.split_off(buff.len() - 2).try_into().unwrap());
+        self.sequence_counter = buff.pop().unwrap();
+        self.linear_counter_current = buff.pop().unwrap();
+        self.linear_counter_initial = buff.pop().unwrap();
+        self.linear_reload_flag = buff.pop().unwrap() != 0;
+        self.control_flag = buff.pop().unwrap() != 0;
+        self.length_counter.load_state(buff);
     }
 }
 

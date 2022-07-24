@@ -65,19 +65,19 @@ impl NesState {
         data
     }
 
-    pub fn load_state(&mut self, data: &mut Vec<u8>) {
-        self.mapper.load_state(data);
-        self.input_latch = data.pop().unwrap() != 0;
-        self.p2_data = data.pop().unwrap();
-        self.p2_input = data.pop().unwrap();
-        self.p1_data = data.pop().unwrap();
-        self.p1_input = data.pop().unwrap();
-        self.master_clock = u64::from_le_bytes(data.split_off(data.len() - 8).try_into().unwrap());
-        self.registers.load_state(data);
-        self.ppu.load_state(data);
-        self.memory.load_state(data);
-        self.cpu.load_state(data);
-        self.apu.load_state(data);
+    pub fn load_state(&mut self, buff: &mut Vec<u8>) {
+        self.mapper.load_state(buff);
+        self.input_latch = buff.pop().unwrap() != 0;
+        self.p2_data = buff.pop().unwrap();
+        self.p2_input = buff.pop().unwrap();
+        self.p1_data = buff.pop().unwrap();
+        self.p1_input = buff.pop().unwrap();
+        self.master_clock = u64::from_le_bytes(buff.split_off(buff.len() - 8).try_into().unwrap());
+        self.registers.load_state(buff);
+        self.ppu.load_state(buff);
+        self.memory.load_state(buff);
+        self.cpu.load_state(buff);
+        self.apu.load_state(buff);
     }
 
     #[deprecated(since="0.2.0", note="please use `::new(mapper)` instead")]

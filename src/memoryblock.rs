@@ -91,9 +91,9 @@ impl MemoryBlock {
         }
     }
 
-    pub fn load_state(&mut self, data: &mut Vec<u8>) {
+    pub fn load_state(&mut self, buff: &mut Vec<u8>) {
         if !self.readonly {
-            self.bytes = data.split_off(data.len() - self.bytes.len());
+            self.bytes = buff.split_off(buff.len() - self.bytes.len());
         }
     }
 }

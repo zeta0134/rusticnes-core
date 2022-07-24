@@ -95,15 +95,15 @@ impl NoiseChannelState {
         data.extend(&self.shift_register.to_le_bytes());
     }
 
-    pub fn load_state(&mut self, data: &mut Vec<u8>) {
-        self.shift_register = u16::from_le_bytes(data.split_off(data.len() - 2).try_into().unwrap());
-        self.period_current = u16::from_le_bytes(data.split_off(data.len() - 2).try_into().unwrap());
-        self.period_initial = u16::from_le_bytes(data.split_off(data.len() - 2).try_into().unwrap());
-        self.mode = data.pop().unwrap();
-        self.length_counter.load_state(data);
-        self.envelope.load_state(data);
-        self.length_halt_flag = data.pop().unwrap() != 0;
-        self.length = data.pop().unwrap();
+    pub fn load_state(&mut self, buff: &mut Vec<u8>) {
+        self.shift_register = u16::from_le_bytes(buff.split_off(buff.len() - 2).try_into().unwrap());
+        self.period_current = u16::from_le_bytes(buff.split_off(buff.len() - 2).try_into().unwrap());
+        self.period_initial = u16::from_le_bytes(buff.split_off(buff.len() - 2).try_into().unwrap());
+        self.mode = buff.pop().unwrap();
+        self.length_counter.load_state(buff);
+        self.envelope.load_state(buff);
+        self.length_halt_flag = buff.pop().unwrap() != 0;
+        self.length = buff.pop().unwrap();
     }
 }
 

@@ -172,24 +172,24 @@ impl DmcState {
         data.push(self.rdy_delay);
     }
 
-    pub fn load_state(&mut self, data: &mut Vec<u8>) {
-        self.rdy_delay = data.pop().unwrap();
-        self.rdy_line = data.pop().unwrap() != 0;
-        self.interrupt_flag = data.pop().unwrap() != 0;
-        self.interrupt_enabled = data.pop().unwrap() != 0;
-        self.silence_flag = data.pop().unwrap() != 0;
-        self.bytes_remaining = u16::from_le_bytes(data.split_off(data.len() - 2).try_into().unwrap());
-        self.bits_remaining = data.pop().unwrap();
-        self.sample_buffer_empty = data.pop().unwrap() != 0;
-        self.shift_register = data.pop().unwrap();
-        self.sample_buffer = data.pop().unwrap();
-        self.current_address = u16::from_le_bytes(data.split_off(data.len() - 2).try_into().unwrap());
-        self.sample_length = u16::from_le_bytes(data.split_off(data.len() - 2).try_into().unwrap());
-        self.starting_address = u16::from_le_bytes(data.split_off(data.len() - 2).try_into().unwrap());
-        self.output_level = data.pop().unwrap();
-        self.period_current = u16::from_le_bytes(data.split_off(data.len() - 2).try_into().unwrap());
-        self.period_initial = u16::from_le_bytes(data.split_off(data.len() - 2).try_into().unwrap());
-        self.looping = data.pop().unwrap() != 0;
+    pub fn load_state(&mut self, buff: &mut Vec<u8>) {
+        self.rdy_delay = buff.pop().unwrap();
+        self.rdy_line = buff.pop().unwrap() != 0;
+        self.interrupt_flag = buff.pop().unwrap() != 0;
+        self.interrupt_enabled = buff.pop().unwrap() != 0;
+        self.silence_flag = buff.pop().unwrap() != 0;
+        self.bytes_remaining = u16::from_le_bytes(buff.split_off(buff.len() - 2).try_into().unwrap());
+        self.bits_remaining = buff.pop().unwrap();
+        self.sample_buffer_empty = buff.pop().unwrap() != 0;
+        self.shift_register = buff.pop().unwrap();
+        self.sample_buffer = buff.pop().unwrap();
+        self.current_address = u16::from_le_bytes(buff.split_off(buff.len() - 2).try_into().unwrap());
+        self.sample_length = u16::from_le_bytes(buff.split_off(buff.len() - 2).try_into().unwrap());
+        self.starting_address = u16::from_le_bytes(buff.split_off(buff.len() - 2).try_into().unwrap());
+        self.output_level = buff.pop().unwrap();
+        self.period_current = u16::from_le_bytes(buff.split_off(buff.len() - 2).try_into().unwrap());
+        self.period_initial = u16::from_le_bytes(buff.split_off(buff.len() - 2).try_into().unwrap());
+        self.looping = buff.pop().unwrap() != 0;
     }
 }
 

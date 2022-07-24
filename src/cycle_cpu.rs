@@ -36,14 +36,14 @@ impl Flags {
     data.push(self.last_nmi as u8);
   }
 
-  pub fn load_state(&mut self, data: &mut Vec<u8>) {
-    self.last_nmi = data.pop().unwrap() != 0;
-    self.negative = data.pop().unwrap() != 0;
-    self.overflow = data.pop().unwrap() != 0;
-    self.interrupts_disabled = data.pop().unwrap() != 0;
-    self.decimal = data.pop().unwrap() != 0;
-    self.zero = data.pop().unwrap() != 0;
-    self.carry = data.pop().unwrap() != 0;
+  pub fn load_state(&mut self, buff: &mut Vec<u8>) {
+    self.last_nmi = buff.pop().unwrap() != 0;
+    self.negative = buff.pop().unwrap() != 0;
+    self.overflow = buff.pop().unwrap() != 0;
+    self.interrupts_disabled = buff.pop().unwrap() != 0;
+    self.decimal = buff.pop().unwrap() != 0;
+    self.zero = buff.pop().unwrap() != 0;
+    self.carry = buff.pop().unwrap() != 0;
   }
 }
 
@@ -107,13 +107,13 @@ impl Registers {
       self.flags.save_state(data);
     }
 
-    pub fn load_state(&mut self, data: &mut Vec<u8>) {
-      self.flags.load_state(data);
-      self.s = data.pop().unwrap();
-      self.pc = u16::from_le_bytes(data.split_off(data.len() - 2).try_into().unwrap());
-      self.y = data.pop().unwrap();
-      self.x = data.pop().unwrap();
-      self.a = data.pop().unwrap();
+    pub fn load_state(&mut self, buff: &mut Vec<u8>) {
+      self.flags.load_state(buff);
+      self.s = buff.pop().unwrap();
+      self.pc = u16::from_le_bytes(buff.split_off(buff.len() - 2).try_into().unwrap());
+      self.y = buff.pop().unwrap();
+      self.x = buff.pop().unwrap();
+      self.a = buff.pop().unwrap();
   }
 }
 
@@ -169,20 +169,20 @@ impl CpuState {
     data.extend(&self.oam_dma_address.to_le_bytes());
   }
 
-  pub fn load_state(&mut self, data: &mut Vec<u8>) {
-    self.oam_dma_address = u16::from_le_bytes(data.split_off(data.len() - 2).try_into().unwrap());
-    self.oam_dma_cycle = u16::from_le_bytes(data.split_off(data.len() - 2).try_into().unwrap());
-    self.oam_dma_active = data.pop().unwrap() != 0;
-    self.upcoming_write = data.pop().unwrap() != 0;
-    self.last_nmi = data.pop().unwrap() != 0;
-    self.irq_requested = data.pop().unwrap() != 0;
-    self.nmi_requested = data.pop().unwrap() != 0;
-    self.service_routine_active = data.pop().unwrap() != 0;
-    self.temp_address = u16::from_le_bytes(data.split_off(data.len() - 2).try_into().unwrap());
-    self.data2 = data.pop().unwrap();
-    self.data1 = data.pop().unwrap();
-    self.opcode = data.pop().unwrap();
-    self.tick = data.pop().unwrap();
+  pub fn load_state(&mut self, buff: &mut Vec<u8>) {
+    self.oam_dma_address = u16::from_le_bytes(buff.split_off(buff.len() - 2).try_into().unwrap());
+    self.oam_dma_cycle = u16::from_le_bytes(buff.split_off(buff.len() - 2).try_into().unwrap());
+    self.oam_dma_active = buff.pop().unwrap() != 0;
+    self.upcoming_write = buff.pop().unwrap() != 0;
+    self.last_nmi = buff.pop().unwrap() != 0;
+    self.irq_requested = buff.pop().unwrap() != 0;
+    self.nmi_requested = buff.pop().unwrap() != 0;
+    self.service_routine_active = buff.pop().unwrap() != 0;
+    self.temp_address = u16::from_le_bytes(buff.split_off(buff.len() - 2).try_into().unwrap());
+    self.data2 = buff.pop().unwrap();
+    self.data1 = buff.pop().unwrap();
+    self.opcode = buff.pop().unwrap();
+    self.tick = buff.pop().unwrap();
   }
 }
 

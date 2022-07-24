@@ -156,21 +156,21 @@ impl PulseChannelState {
         data.extend(&self.cpu_clock_rate.to_le_bytes());
     }
 
-    pub fn load_state(&mut self, data: &mut Vec<u8>) {
-        self.cpu_clock_rate = u64::from_le_bytes(data.split_off(data.len() - 8).try_into().unwrap());
-        self.period_current = u16::from_le_bytes(data.split_off(data.len() - 2).try_into().unwrap());
-        self.period_initial = u16::from_le_bytes(data.split_off(data.len() - 2).try_into().unwrap());
-        self.sequence_counter = data.pop().unwrap();
-        self.duty = data.pop().unwrap();
-        self.sweep_ones_compliment = data.pop().unwrap() != 0;
-        self.sweep_reload = data.pop().unwrap() != 0;
-        self.sweep_shift = data.pop().unwrap();
-        self.sweep_negate = data.pop().unwrap() != 0;
-        self.sweep_divider = data.pop().unwrap();
-        self.sweep_period = data.pop().unwrap();
-        self.sweep_enabled = data.pop().unwrap() != 0;
-        self.length_counter.load_state(data);
-        self.envelope.load_state(data);
+    pub fn load_state(&mut self, buff: &mut Vec<u8>) {
+        self.cpu_clock_rate = u64::from_le_bytes(buff.split_off(buff.len() - 8).try_into().unwrap());
+        self.period_current = u16::from_le_bytes(buff.split_off(buff.len() - 2).try_into().unwrap());
+        self.period_initial = u16::from_le_bytes(buff.split_off(buff.len() - 2).try_into().unwrap());
+        self.sequence_counter = buff.pop().unwrap();
+        self.duty = buff.pop().unwrap();
+        self.sweep_ones_compliment = buff.pop().unwrap() != 0;
+        self.sweep_reload = buff.pop().unwrap() != 0;
+        self.sweep_shift = buff.pop().unwrap();
+        self.sweep_negate = buff.pop().unwrap() != 0;
+        self.sweep_divider = buff.pop().unwrap();
+        self.sweep_period = buff.pop().unwrap();
+        self.sweep_enabled = buff.pop().unwrap() != 0;
+        self.length_counter.load_state(buff);
+        self.envelope.load_state(buff);
     }
 }
 

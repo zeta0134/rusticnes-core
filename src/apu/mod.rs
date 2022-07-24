@@ -233,20 +233,20 @@ impl ApuState {
         data.extend(&self.next_sample_at.to_le_bytes());
     }
 
-    pub fn load_state(&mut self, data: &mut Vec<u8>) {
-        self.next_sample_at = u64::from_le_bytes(data.split_off(data.len() - 8).try_into().unwrap());
-        self.generated_samples = u64::from_le_bytes(data.split_off(data.len() - 8).try_into().unwrap());
-        self.dmc.load_state(data);
-        self.noise.load_state(data);
-        self.triangle.load_state(data);
-        self.pulse_2.load_state(data);
-        self.pulse_1.load_state(data);
-        self.disable_interrupt = data.pop().unwrap() != 0;
-        self.frame_interrupt = data.pop().unwrap() != 0;
-        self.frame_reset_delay = data.pop().unwrap();
-        self.frame_sequencer = u16::from_le_bytes(data.split_off(data.len() - 2).try_into().unwrap());
-        self.frame_sequencer_mode = data.pop().unwrap();
-        self.current_cycle = u64::from_le_bytes(data.split_off(data.len() - 8).try_into().unwrap());
+    pub fn load_state(&mut self, buff: &mut Vec<u8>) {
+        self.next_sample_at = u64::from_le_bytes(buff.split_off(buff.len() - 8).try_into().unwrap());
+        self.generated_samples = u64::from_le_bytes(buff.split_off(buff.len() - 8).try_into().unwrap());
+        self.dmc.load_state(buff);
+        self.noise.load_state(buff);
+        self.triangle.load_state(buff);
+        self.pulse_2.load_state(buff);
+        self.pulse_1.load_state(buff);
+        self.disable_interrupt = buff.pop().unwrap() != 0;
+        self.frame_interrupt = buff.pop().unwrap() != 0;
+        self.frame_reset_delay = buff.pop().unwrap();
+        self.frame_sequencer = u16::from_le_bytes(buff.split_off(buff.len() - 2).try_into().unwrap());
+        self.frame_sequencer_mode = buff.pop().unwrap();
+        self.current_cycle = u64::from_le_bytes(buff.split_off(buff.len() - 8).try_into().unwrap());
     }
 
     pub fn set_buffer_size(&mut self, buffer_size: usize) {

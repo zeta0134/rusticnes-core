@@ -1,8 +1,6 @@
 // Advanced mapper with bank-switched PRG ROM and CHR ROM, and a scanline counter feeding into IRQ
 // Reference capabilities: https://wiki.nesdev.com/w/index.php/MMC3
 
-use std::convert::TryInto;
-
 use crate::ines::INesCartridge;
 use crate::memoryblock::MemoryBlock;
 
@@ -368,57 +366,58 @@ impl Mapper for Mmc3 {
         *self.prg_ram.as_mut_vec() = sram_data;
     }
 
-    fn save_state(&self, data: &mut Vec<u8>) {
-        self.prg_rom.save_state(data);
-        self.prg_ram.save_state(data);
-        self.chr.save_state(data);
-        data.extend(&self.vram);
-        data.extend(&self.chr2_bank_0.to_le_bytes());
-        data.extend(&self.chr2_bank_1.to_le_bytes());
-        data.extend(&self.chr1_bank_2.to_le_bytes());
-        data.extend(&self.chr1_bank_3.to_le_bytes());
-        data.extend(&self.chr1_bank_4.to_le_bytes());
-        data.extend(&self.chr1_bank_5.to_le_bytes());
-        data.extend(&self.prg_bank_6.to_le_bytes());
-        data.extend(&self.prg_bank_7.to_le_bytes());
-        data.push(self.switch_chr_banks as u8);
-        data.push(self.switch_prg_banks as u8);
-        data.push(self.bank_select);
-        data.push(self.irq_counter);
-        data.push(self.irq_reload);
-        data.push(self.irq_reload_requested as u8);
-        data.push(self.irq_enabled as u8);
-        data.push(self.irq_flag as u8);
-        data.push(self.last_a12);
-        data.push(self.filtered_a12);
-        data.push(self.low_a12_counter);
+    fn save_state(&self, buff: &mut Vec<u8>) {
+        self.prg_rom.save_state(buff);
+        self.prg_ram.save_state(buff);
+        self.chr.save_state(buff);
+        save_vec(buff, &self.vram);
+        save_usize(buff, self.chr2_bank_0);
+        save_usize(buff, self.chr2_bank_1);
+        save_usize(buff, self.chr1_bank_2);
+        save_usize(buff, self.chr1_bank_3);
+        save_usize(buff, self.chr1_bank_4);
+        save_usize(buff, self.chr1_bank_5);
+        save_usize(buff, self.prg_bank_6);
+        save_usize(buff, self.prg_bank_7);
+        buff.push(self.switch_chr_banks as u8);
+        buff.push(self.switch_prg_banks as u8);
+        buff.push(self.bank_select);
+        buff.push(self.irq_counter);
+        buff.push(self.irq_reload);
+        buff.push(self.irq_reload_requested as u8);
+        buff.push(self.irq_enabled as u8);
+        buff.push(self.irq_flag as u8);
+        buff.push(self.last_a12);
+        buff.push(self.filtered_a12);
+        buff.push(self.low_a12_counter);
     }
 
-    fn load_state(&mut self, data: &mut Vec<u8>) {
-        self.low_a12_counter = data.pop().unwrap();
-        self.filtered_a12 = data.pop().unwrap();
-        self.last_a12 = data.pop().unwrap();
-        self.irq_flag = data.pop().unwrap() != 0;
-        self.irq_enabled = data.pop().unwrap() != 0;
-        self.irq_reload_requested = data.pop().unwrap() != 0;
-        self.irq_reload = data.pop().unwrap();
-        self.irq_counter = data.pop().unwrap();
-        self.bank_select = data.pop().unwrap();
-        self.switch_prg_banks = data.pop().unwrap() != 0;
-        self.switch_chr_banks = data.pop().unwrap() != 0;
-        self.prg_bank_7 = usize::from_le_bytes(data.split_off(data.len() - std::mem::size_of::<usize>()).try_into().unwrap());
-        self.prg_bank_6 = usize::from_le_bytes(data.split_off(data.len() - std::mem::size_of::<usize>()).try_into().unwrap());
-        self.chr1_bank_5 = usize::from_le_bytes(data.split_off(data.len() - std::mem::size_of::<usize>()).try_into().unwrap());
-        self.chr1_bank_4 = usize::from_le_bytes(data.split_off(data.len() - std::mem::size_of::<usize>()).try_into().unwrap());
-        self.chr1_bank_3 = usize::from_le_bytes(data.split_off(data.len() - std::mem::size_of::<usize>()).try_into().unwrap());
-        self.chr1_bank_2 = usize::from_le_bytes(data.split_off(data.len() - std::mem::size_of::<usize>()).try_into().unwrap());
-        self.chr2_bank_1 = usize::from_le_bytes(data.split_off(data.len() - std::mem::size_of::<usize>()).try_into().unwrap());
-        self.chr2_bank_0 = usize::from_le_bytes(data.split_off(data.len() - std::mem::size_of::<usize>()).try_into().unwrap());
-        self.vram = data.split_off(data.len() - self.vram.len());
-        self.chr.load_state(data);
-        self.prg_ram.load_state(data);
-        self.prg_rom.load_state(data);
+    fn load_state(&mut self, buff: &mut Vec<u8>) {
+        self.low_a12_counter = buff.pop().unwrap();
+        self.filtered_a12 = buff.pop().unwrap();
+        self.last_a12 = buff.pop().unwrap();
+        self.irq_flag = buff.pop().unwrap() != 0;
+        self.irq_enabled = buff.pop().unwrap() != 0;
+        self.irq_reload_requested = buff.pop().unwrap() != 0;
+        self.irq_reload = buff.pop().unwrap();
+        self.irq_counter = buff.pop().unwrap();
+        self.bank_select = buff.pop().unwrap();
+        self.switch_prg_banks = buff.pop().unwrap() != 0;
+        self.switch_chr_banks = buff.pop().unwrap() != 0;
+        self.prg_bank_7 = load_usize(buff);
+        self.prg_bank_6 = load_usize(buff);
+        self.chr1_bank_5 = load_usize(buff);
+        self.chr1_bank_4 = load_usize(buff);
+        self.chr1_bank_3 = load_usize(buff);
+        self.chr1_bank_2 = load_usize(buff);
+        self.chr2_bank_1 = load_usize(buff);
+        self.chr2_bank_0 = load_usize(buff);
+        self.vram = load_vec(buff, self.vram.len());
+        self.chr.load_state(buff);
+        self.prg_ram.load_state(buff);
+        self.prg_rom.load_state(buff);
     }
+
     fn box_clone(&self) -> Box<dyn Mapper> {
         Box::new((*self).clone())
     }

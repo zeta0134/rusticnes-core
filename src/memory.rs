@@ -23,9 +23,9 @@ impl CpuMemory {
         data.push(self.open_bus);
     }
 
-    pub fn load_state(&mut self, data: &mut Vec<u8>) {
-        self.open_bus = data.pop().unwrap();
-        self.iram_raw = data.split_off(data.len() - self.iram_raw.len());
+    pub fn load_state(&mut self, buff: &mut Vec<u8>) {
+        self.open_bus = buff.pop().unwrap();
+        self.iram_raw = buff.split_off(buff.len() - self.iram_raw.len());
     }
 }
 
