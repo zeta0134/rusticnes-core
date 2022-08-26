@@ -1,3 +1,5 @@
+use crate::save_load::*;
+
 pub struct VolumeEnvelopeState {
     // Volume Envelope
     pub volume_register: u8,
@@ -54,15 +56,15 @@ impl VolumeEnvelopeState {
         data.push(self.volume_register);
         data.push(self.decay);
         data.push(self.divider);
-        data.push(self.enabled as u8);
-        data.push(self.looping as u8);
-        data.push(self.start_flag as u8);
+        save_bool(data, self.enabled);
+        save_bool(data, self.looping);
+        save_bool(data, self.start_flag);
     }
 
     pub fn load_state(&mut self, buff: &mut Vec<u8>) {
-        self.start_flag = buff.pop().unwrap() != 0;
-        self.looping = buff.pop().unwrap() != 0;
-        self.enabled = buff.pop().unwrap() != 0;
+        self.start_flag = load_bool(buff);
+        self.looping = load_bool(buff);
+        self.enabled = load_bool(buff);
         self.divider = buff.pop().unwrap();
         self.decay = buff.pop().unwrap();
         self.volume_register = buff.pop().unwrap();

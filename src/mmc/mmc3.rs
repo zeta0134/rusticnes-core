@@ -7,6 +7,8 @@ use crate::memoryblock::MemoryBlock;
 use crate::mmc::mapper::*;
 use crate::mmc::mirroring;
 
+use crate::save_load::*;
+
 #[derive(Clone)]
 pub struct Mmc3 {
     pub prg_rom: MemoryBlock,
@@ -379,14 +381,14 @@ impl Mapper for Mmc3 {
         save_usize(buff, self.chr1_bank_5);
         save_usize(buff, self.prg_bank_6);
         save_usize(buff, self.prg_bank_7);
-        buff.push(self.switch_chr_banks as u8);
-        buff.push(self.switch_prg_banks as u8);
+        save_bool(buff, self.switch_chr_banks);
+        save_bool(buff, self.switch_prg_banks);
         buff.push(self.bank_select);
         buff.push(self.irq_counter);
         buff.push(self.irq_reload);
-        buff.push(self.irq_reload_requested as u8);
-        buff.push(self.irq_enabled as u8);
-        buff.push(self.irq_flag as u8);
+        save_bool(buff, self.irq_reload_requested);
+        save_bool(buff, self.irq_enabled);
+        save_bool(buff, self.irq_flag);
         buff.push(self.last_a12);
         buff.push(self.filtered_a12);
         buff.push(self.low_a12_counter);
@@ -396,14 +398,14 @@ impl Mapper for Mmc3 {
         self.low_a12_counter = buff.pop().unwrap();
         self.filtered_a12 = buff.pop().unwrap();
         self.last_a12 = buff.pop().unwrap();
-        self.irq_flag = buff.pop().unwrap() != 0;
-        self.irq_enabled = buff.pop().unwrap() != 0;
-        self.irq_reload_requested = buff.pop().unwrap() != 0;
+        self.irq_flag = load_bool(buff);
+        self.irq_enabled = load_bool(buff);
+        self.irq_reload_requested = load_bool(buff);
         self.irq_reload = buff.pop().unwrap();
         self.irq_counter = buff.pop().unwrap();
         self.bank_select = buff.pop().unwrap();
-        self.switch_prg_banks = buff.pop().unwrap() != 0;
-        self.switch_chr_banks = buff.pop().unwrap() != 0;
+        self.switch_prg_banks = load_bool(buff);
+        self.switch_chr_banks = load_bool(buff);
         self.prg_bank_7 = load_usize(buff);
         self.prg_bank_6 = load_usize(buff);
         self.chr1_bank_5 = load_usize(buff);

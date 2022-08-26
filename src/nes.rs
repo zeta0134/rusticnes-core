@@ -1,5 +1,3 @@
-use std::convert::TryInto;
-
 use crate::apu::ApuState;
 use crate::cartridge;
 use crate::cycle_cpu;
@@ -9,6 +7,7 @@ use crate::memory;
 use crate::memory::CpuMemory;
 use crate::ppu::PpuState;
 use crate::mmc::mapper::Mapper;
+use crate::save_load::*;
 use crate::tracked_events::EventTracker;
 
 pub struct NesState {
@@ -55,24 +54,26 @@ impl NesState {
         self.memory.save_state(&mut data);
         self.ppu.save_state(&mut data);
         self.registers.save_state(&mut data);
-        data.extend(&self.master_clock.to_le_bytes());
+        save_u64(&mut data, self.master_clock);
         data.push(self.p1_input);
         data.push(self.p1_data);
         data.push(self.p2_input);
         data.push(self.p2_data);
-        data.push(self.input_latch as u8);
+        save_bool(&mut data, self.input_latch);
         self.mapper.save_state(&mut data);
+        save_u32(&mut data, self.last_frame);
         data
     }
 
     pub fn load_state(&mut self, buff: &mut Vec<u8>) {
+        self.last_frame = load_u32(buff);
         self.mapper.load_state(buff);
-        self.input_latch = buff.pop().unwrap() != 0;
+        self.input_latch = load_bool(buff);
         self.p2_data = buff.pop().unwrap();
         self.p2_input = buff.pop().unwrap();
         self.p1_data = buff.pop().unwrap();
         self.p1_input = buff.pop().unwrap();
-        self.master_clock = u64::from_le_bytes(buff.split_off(buff.len() - 8).try_into().unwrap());
+        self.master_clock = load_u64(buff);
         self.registers.load_state(buff);
         self.ppu.load_state(buff);
         self.memory.load_state(buff);

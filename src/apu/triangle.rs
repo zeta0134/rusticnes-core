@@ -1,4 +1,4 @@
-use std::convert::TryInto;
+use crate::save_load::*;
 
 use super::length_counter::LengthCounterState;
 use super::audio_channel::AudioChannelState;
@@ -109,27 +109,27 @@ impl TriangleChannelState {
 
     pub fn save_state(&self, data: &mut Vec<u8>) {
         self.length_counter.save_state(data);
-        data.push(self.control_flag as u8);
-        data.push(self.linear_reload_flag as u8);
+        save_bool(data, self.control_flag);
+        save_bool(data, self.linear_reload_flag);
         data.push(self.linear_counter_initial);
         data.push(self.linear_counter_current);
         data.push(self.sequence_counter);
-        data.extend(&self.period_initial.to_le_bytes());
-        data.extend(&self.period_current.to_le_bytes());
+        save_u16(data, self.period_initial);
+        save_u16(data, self.period_current);
         data.push(self.length);
-        data.extend(&self.cpu_clock_rate.to_le_bytes());
+        save_u64(data, self.cpu_clock_rate);
     }
 
     pub fn load_state(&mut self, buff: &mut Vec<u8>) {
-        self.cpu_clock_rate = u64::from_le_bytes(buff.split_off(buff.len() - 8).try_into().unwrap());
+        self.cpu_clock_rate = load_u64(buff);
         self.length = buff.pop().unwrap();
-        self.period_current = u16::from_le_bytes(buff.split_off(buff.len() - 2).try_into().unwrap());
-        self.period_initial = u16::from_le_bytes(buff.split_off(buff.len() - 2).try_into().unwrap());
+        self.period_current = load_u16(buff);
+        self.period_initial = load_u16(buff);
         self.sequence_counter = buff.pop().unwrap();
         self.linear_counter_current = buff.pop().unwrap();
         self.linear_counter_initial = buff.pop().unwrap();
-        self.linear_reload_flag = buff.pop().unwrap() != 0;
-        self.control_flag = buff.pop().unwrap() != 0;
+        self.linear_reload_flag = load_bool(buff);
+        self.control_flag = load_bool(buff);
         self.length_counter.load_state(buff);
     }
 }

@@ -1,4 +1,4 @@
-use std::convert::TryInto;
+use crate::save_load::*;
 
 use super::length_counter::LengthCounterState;
 use super::volume_envelope::VolumeEnvelopeState;
@@ -86,23 +86,23 @@ impl NoiseChannelState {
 
     pub fn save_state(&self, data: &mut Vec<u8>) {
         data.push(self.length);
-        data.push(self.length_halt_flag as u8);
+        save_bool(data, self.length_halt_flag);
         self.envelope.save_state(data);
         self.length_counter.save_state(data);
         data.push(self.mode);
-        data.extend(&self.period_initial.to_le_bytes());
-        data.extend(&self.period_current.to_le_bytes());
-        data.extend(&self.shift_register.to_le_bytes());
+        save_u16(data, self.period_initial);
+        save_u16(data, self.period_current);
+        save_u16(data, self.shift_register);
     }
 
     pub fn load_state(&mut self, buff: &mut Vec<u8>) {
-        self.shift_register = u16::from_le_bytes(buff.split_off(buff.len() - 2).try_into().unwrap());
-        self.period_current = u16::from_le_bytes(buff.split_off(buff.len() - 2).try_into().unwrap());
-        self.period_initial = u16::from_le_bytes(buff.split_off(buff.len() - 2).try_into().unwrap());
+        self.shift_register = load_u16(buff);
+        self.period_current = load_u16(buff);
+        self.period_initial = load_u16(buff);
         self.mode = buff.pop().unwrap();
         self.length_counter.load_state(buff);
         self.envelope.load_state(buff);
-        self.length_halt_flag = buff.pop().unwrap() != 0;
+        self.length_halt_flag = load_bool(buff);
         self.length = buff.pop().unwrap();
     }
 }

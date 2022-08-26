@@ -3,13 +3,12 @@
 // http://www.llx.com/~nparker/a2/opcodes.html - For opcode decoding structure
 // http://nesdev.com/6502_cpu.txt - for information on cycle timings for each addressing mode
 
-use std::convert::TryInto;
-
 use crate::addressing;
 use crate::memory::read_byte;
 use crate::memory::write_byte;
 use crate::nes::NesState;
 use crate::opcodes;
+use crate::save_load::*;
 use crate::unofficial_opcodes;
 
 #[derive(Copy, Clone)]
@@ -27,23 +26,23 @@ pub struct Flags {
 
 impl Flags {
   pub fn save_state(&self, data: &mut Vec<u8>) {
-    data.push(self.carry as u8);
-    data.push(self.zero as u8);
-    data.push(self.decimal as u8);
-    data.push(self.interrupts_disabled as u8);
-    data.push(self.overflow as u8);
-    data.push(self.negative as u8);
-    data.push(self.last_nmi as u8);
+    save_bool(data, self.carry);
+    save_bool(data, self.zero);
+    save_bool(data, self.decimal);
+    save_bool(data, self.interrupts_disabled);
+    save_bool(data, self.overflow);
+    save_bool(data, self.negative);
+    save_bool(data, self.last_nmi);
   }
 
   pub fn load_state(&mut self, buff: &mut Vec<u8>) {
-    self.last_nmi = buff.pop().unwrap() != 0;
-    self.negative = buff.pop().unwrap() != 0;
-    self.overflow = buff.pop().unwrap() != 0;
-    self.interrupts_disabled = buff.pop().unwrap() != 0;
-    self.decimal = buff.pop().unwrap() != 0;
-    self.zero = buff.pop().unwrap() != 0;
-    self.carry = buff.pop().unwrap() != 0;
+    self.last_nmi = load_bool(buff);
+    self.negative = load_bool(buff);
+    self.overflow = load_bool(buff);
+    self.interrupts_disabled = load_bool(buff);
+    self.decimal = load_bool(buff);
+    self.zero = load_bool(buff);
+    self.carry = load_bool(buff);
   }
 }
 
@@ -102,7 +101,7 @@ impl Registers {
       data.push(self.a);
       data.push(self.x);
       data.push(self.y);
-      data.extend(&self.pc.to_le_bytes());
+      save_u16(data, self.pc);
       data.push(self.s);
       self.flags.save_state(data);
     }
@@ -110,7 +109,7 @@ impl Registers {
     pub fn load_state(&mut self, buff: &mut Vec<u8>) {
       self.flags.load_state(buff);
       self.s = buff.pop().unwrap();
-      self.pc = u16::from_le_bytes(buff.split_off(buff.len() - 2).try_into().unwrap());
+      self.pc = load_u16(buff);
       self.y = buff.pop().unwrap();
       self.x = buff.pop().unwrap();
       self.a = buff.pop().unwrap();
@@ -158,27 +157,27 @@ impl CpuState {
     data.push(self.opcode);
     data.push(self.data1);
     data.push(self.data2);
-    data.extend(&self.temp_address.to_le_bytes());
-    data.push(self.service_routine_active as u8);
-    data.push(self.nmi_requested as u8);
-    data.push(self.irq_requested as u8);
-    data.push(self.last_nmi as u8);
-    data.push(self.upcoming_write as u8);
-    data.push(self.oam_dma_active as u8);
-    data.extend(&self.oam_dma_cycle.to_le_bytes());
-    data.extend(&self.oam_dma_address.to_le_bytes());
+    save_u16(data, self.temp_address);
+    save_bool(data, self.service_routine_active);
+    save_bool(data, self.nmi_requested);
+    save_bool(data, self.irq_requested);
+    save_bool(data, self.last_nmi);
+    save_bool(data, self.upcoming_write);
+    save_bool(data, self.oam_dma_active);
+    save_u16(data, self.oam_dma_cycle);
+    save_u16(data, self.oam_dma_address);
   }
 
   pub fn load_state(&mut self, buff: &mut Vec<u8>) {
-    self.oam_dma_address = u16::from_le_bytes(buff.split_off(buff.len() - 2).try_into().unwrap());
-    self.oam_dma_cycle = u16::from_le_bytes(buff.split_off(buff.len() - 2).try_into().unwrap());
-    self.oam_dma_active = buff.pop().unwrap() != 0;
-    self.upcoming_write = buff.pop().unwrap() != 0;
-    self.last_nmi = buff.pop().unwrap() != 0;
-    self.irq_requested = buff.pop().unwrap() != 0;
-    self.nmi_requested = buff.pop().unwrap() != 0;
-    self.service_routine_active = buff.pop().unwrap() != 0;
-    self.temp_address = u16::from_le_bytes(buff.split_off(buff.len() - 2).try_into().unwrap());
+    self.oam_dma_address = load_u16(buff);
+    self.oam_dma_cycle = load_u16(buff);
+    self.oam_dma_active = load_bool(buff);
+    self.upcoming_write = load_bool(buff);
+    self.last_nmi = load_bool(buff);
+    self.irq_requested = load_bool(buff);
+    self.nmi_requested = load_bool(buff);
+    self.service_routine_active = load_bool(buff);
+    self.temp_address = load_u16(buff);
     self.data2 = buff.pop().unwrap();
     self.data1 = buff.pop().unwrap();
     self.opcode = buff.pop().unwrap();

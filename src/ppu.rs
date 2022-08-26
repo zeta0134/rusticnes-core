@@ -2,9 +2,7 @@
 // later be rewritten with cycle-accurate logic once we're past proof of concept
 // and prototype stages.
 
-use std::convert::TryInto;
-
-use crate::mmc::mapper::*;
+use crate::{mmc::mapper::*, save_load::*};
 
 #[derive(Copy, Clone)]
 pub struct SpriteLatch {
@@ -83,11 +81,11 @@ impl SpriteLatch {
         data.push(self.attributes);
         data.push(self.x_counter);
         data.push(self.y_pos);
-        data.push(self.active as u8);
+        save_bool(data, self.active);
     }
 
     pub fn load_state(&mut self, buff: &mut Vec<u8>) {
-        self.active = buff.pop().unwrap() != 0;
+        self.active = load_bool(buff);
         self.y_pos = buff.pop().unwrap();
         self.x_counter = buff.pop().unwrap();
         self.attributes = buff.pop().unwrap();
@@ -826,13 +824,13 @@ impl PpuState {
     }
 
     pub fn save_state(&self, data: &mut Vec<u8>) {
-        data.extend(&self.internal_vram);
-        data.extend(&self.oam);
+        save_vec(data, &self.internal_vram);
+        save_vec(data, &self.oam);
         for d in &self.secondary_oam {
             d.save_state(data);
         }
-        data.extend(&self.secondary_oam_index.to_le_bytes());
-        data.extend(&self.palette);
+        save_usize(data, self.secondary_oam_index);
+        save_vec(data, &self.palette);
         data.push(self.latch);
         data.push(self.open_bus);
         data.push(self.read_buffer);
@@ -841,15 +839,15 @@ impl PpuState {
         data.push(self.status);
         data.push(self.oam_addr);
         data.push(self.oam_dma_high);
-        data.extend(&self.current_frame.to_le_bytes());
-        data.extend(&self.current_scanline.to_le_bytes());
-        data.extend(&self.current_scanline_cycle.to_le_bytes());
-        data.push(self.write_toggle as u8);
-        data.extend(&self.current_vram_address.to_le_bytes());
-        data.extend(&self.temporary_vram_address.to_le_bytes());
+        save_u32(data, self.current_frame);
+        save_u16(data, self.current_scanline);
+        save_u16(data, self.current_scanline_cycle);
+        save_bool(data, self.write_toggle);
+        save_u16(data, self.current_vram_address);
+        save_u16(data, self.temporary_vram_address);
         data.push(self.fine_x);
-        data.extend(&self.tile_shift_low.to_le_bytes());
-        data.extend(&self.tile_shift_high.to_le_bytes());
+        save_u16(data, self.tile_shift_low);
+        save_u16(data, self.tile_shift_high);
         data.push(self.tile_low);
         data.push(self.tile_high);
         data.push(self.tile_index);
@@ -857,11 +855,11 @@ impl PpuState {
         data.push(self.palette_shift_high);
         data.push(self.palette_latch);
         data.push(self.attribute_byte);
-        data.push(self.sprite_zero_on_scanline as u8);
+        save_bool(data, self.sprite_zero_on_scanline);
     }
 
     pub fn load_state(&mut self, buff: &mut Vec<u8>) {
-        self.sprite_zero_on_scanline = buff.pop().unwrap() != 0;
+        self.sprite_zero_on_scanline = load_bool(buff);
         self.attribute_byte = buff.pop().unwrap();
         self.palette_latch = buff.pop().unwrap();
         self.palette_shift_high = buff.pop().unwrap();
@@ -869,15 +867,15 @@ impl PpuState {
         self.tile_index = buff.pop().unwrap();
         self.tile_high = buff.pop().unwrap();
         self.tile_low = buff.pop().unwrap();
-        self.tile_shift_high = u16::from_le_bytes(buff.split_off(buff.len() - 2).try_into().unwrap());
-        self.tile_shift_low = u16::from_le_bytes(buff.split_off(buff.len() - 2).try_into().unwrap());
+        self.tile_shift_high = load_u16(buff);
+        self.tile_shift_low = load_u16(buff);
         self.fine_x = buff.pop().unwrap();
-        self.temporary_vram_address = u16::from_le_bytes(buff.split_off(buff.len() - 2).try_into().unwrap());
-        self.current_vram_address = u16::from_le_bytes(buff.split_off(buff.len() - 2).try_into().unwrap());
-        self.write_toggle = buff.pop().unwrap() != 0;
-        self.current_scanline_cycle = u16::from_le_bytes(buff.split_off(buff.len() - 2).try_into().unwrap());
-        self.current_scanline = u16::from_le_bytes(buff.split_off(buff.len() - 2).try_into().unwrap());
-        self.current_frame = u32::from_le_bytes(buff.split_off(buff.len() - 4).try_into().unwrap());
+        self.temporary_vram_address = load_u16(buff);
+        self.current_vram_address = load_u16(buff);
+        self.write_toggle = load_bool(buff);
+        self.current_scanline_cycle = load_u16(buff);
+        self.current_scanline = load_u16(buff);
+        self.current_frame = load_u32(buff);
         self.oam_dma_high = buff.pop().unwrap();
         self.oam_addr = buff.pop().unwrap();
         self.status = buff.pop().unwrap();
@@ -886,13 +884,13 @@ impl PpuState {
         self.read_buffer = buff.pop().unwrap();
         self.open_bus = buff.pop().unwrap();
         self.latch = buff.pop().unwrap();
-        self.palette = buff.split_off(buff.len() - self.palette.len());
-        self.secondary_oam_index = usize::from_le_bytes(buff.split_off(buff.len() - std::mem::size_of::<usize>()).try_into().unwrap());
-        for d in &mut self.secondary_oam {
+        self.palette = load_vec(buff, self.palette.len());
+        self.secondary_oam_index = load_usize(buff);
+        for d in (&mut self.secondary_oam).into_iter().rev() {
             d.load_state(buff);
         }
-        self.oam = buff.split_off(buff.len() - self.oam.len());
-        self.internal_vram = buff.split_off(buff.len() - self.internal_vram.len());
+        self.oam = load_vec(buff, self.oam.len());
+        self.internal_vram = load_vec(buff, self.internal_vram.len());
     }
 
     pub fn render_ntsc(&mut self, width: usize) {

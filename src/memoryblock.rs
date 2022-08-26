@@ -1,3 +1,5 @@
+use crate::save_load::{save_vec, load_vec};
+
 /// Represents one contiguous block of memory, typically residing on a single
 /// physical chip. Implementations have varying behavior, but provide one
 /// consistent guarantee: all memory access will return some value, possibly
@@ -87,13 +89,13 @@ impl MemoryBlock {
 
     pub fn save_state(&self, data: &mut Vec<u8>) {
         if !self.readonly {
-            data.extend(&self.bytes);
+            save_vec(data, &self.bytes);
         }
     }
 
     pub fn load_state(&mut self, buff: &mut Vec<u8>) {
         if !self.readonly {
-            self.bytes = buff.split_off(buff.len() - self.bytes.len());
+            self.bytes = load_vec(buff, self.bytes.len());
         }
     }
 }

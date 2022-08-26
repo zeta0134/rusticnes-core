@@ -1,3 +1,5 @@
+use crate::save_load::*;
+
 pub struct LengthCounterState {
     pub length: u8,
     pub halt_flag: bool,
@@ -36,13 +38,13 @@ impl LengthCounterState{
 
     pub fn save_state(&self, buff: &mut Vec<u8>) {
         buff.push(self.length);
-        buff.push(self.halt_flag as u8);
-        buff.push(self.channel_enabled as u8);
+        save_bool(buff, self.halt_flag);
+        save_bool(buff, self.channel_enabled);
     }
 
     pub fn load_state(&mut self, buff: &mut Vec<u8>) {
-        self.channel_enabled = buff.pop().unwrap() != 0;
-        self.halt_flag = buff.pop().unwrap() != 0;
+        self.channel_enabled = load_bool(buff);
+        self.halt_flag = load_bool(buff);
         self.length = buff.pop().unwrap();
     }
 }

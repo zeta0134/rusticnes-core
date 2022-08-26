@@ -7,6 +7,8 @@ use crate::memoryblock::MemoryBlock;
 use crate::mmc::mapper::*;
 use crate::mmc::mirroring;
 
+use crate::save_load::*;
+
 #[derive(Clone)]
 pub struct Nrom {
     prg_rom: MemoryBlock,

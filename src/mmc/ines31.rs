@@ -8,6 +8,8 @@ use crate::memoryblock::MemoryBlock;
 use crate::mmc::mapper::*;
 use crate::mmc::mirroring;
 
+use crate::save_load::*;
+
 #[derive(Clone)]
 pub struct INes31 {
     pub prg_rom: MemoryBlock,
@@ -102,14 +104,11 @@ impl Mapper for INes31 {
         for prg_bank in &self.prg_banks {
             save_usize(buff, *prg_bank);
         }
-        save_usize(buff, self.prg_banks.len());
     }
 
     fn load_state(&mut self, buff: &mut Vec<u8>) {
-        self.prg_banks = Vec::new();
-        let len = load_usize(buff);
-        for _ in 0..len {
-            self.prg_banks.push(load_usize(buff));
+        for prg_bank in &mut self.prg_banks.iter_mut().rev() {
+            *prg_bank = load_usize(buff);
         }
         self.vram = load_vec(buff, self.vram.len());
         self.chr.load_state(buff);

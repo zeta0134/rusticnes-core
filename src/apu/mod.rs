@@ -1,6 +1,6 @@
 use crate::mmc::mapper::Mapper;
+use crate::save_load::*;
 
-use std::convert::TryInto;
 use std::fs::OpenOptions;
 use std::io::prelude::*;
 
@@ -218,9 +218,9 @@ impl ApuState {
     }
 
     pub fn save_state(&self, data: &mut Vec<u8>) {
-        data.extend(&self.current_cycle.to_le_bytes());
+        save_u64(data, self.current_cycle);
         data.push(self.frame_sequencer_mode);
-        data.extend(&self.frame_sequencer.to_le_bytes());
+        save_u16(data, self.frame_sequencer);
         data.push(self.frame_reset_delay);
         data.push(self.frame_interrupt as u8);
         data.push(self.disable_interrupt as u8);
@@ -229,24 +229,24 @@ impl ApuState {
         self.triangle.save_state(data);
         self.noise.save_state(data);
         self.dmc.save_state(data);
-        data.extend(&self.generated_samples.to_le_bytes());
-        data.extend(&self.next_sample_at.to_le_bytes());
+        save_u64(data, self.generated_samples);
+        save_u64(data, self.next_sample_at);
     }
 
     pub fn load_state(&mut self, buff: &mut Vec<u8>) {
-        self.next_sample_at = u64::from_le_bytes(buff.split_off(buff.len() - 8).try_into().unwrap());
-        self.generated_samples = u64::from_le_bytes(buff.split_off(buff.len() - 8).try_into().unwrap());
+        self.next_sample_at = load_u64(buff);
+        self.generated_samples = load_u64(buff);
         self.dmc.load_state(buff);
         self.noise.load_state(buff);
         self.triangle.load_state(buff);
         self.pulse_2.load_state(buff);
         self.pulse_1.load_state(buff);
-        self.disable_interrupt = buff.pop().unwrap() != 0;
-        self.frame_interrupt = buff.pop().unwrap() != 0;
+        self.disable_interrupt = load_bool(buff);
+        self.frame_interrupt = load_bool(buff);
         self.frame_reset_delay = buff.pop().unwrap();
-        self.frame_sequencer = u16::from_le_bytes(buff.split_off(buff.len() - 2).try_into().unwrap());
+        self.frame_sequencer = load_u16(buff);
         self.frame_sequencer_mode = buff.pop().unwrap();
-        self.current_cycle = u64::from_le_bytes(buff.split_off(buff.len() - 8).try_into().unwrap());
+        self.current_cycle = load_u64(buff);
     }
 
     pub fn set_buffer_size(&mut self, buffer_size: usize) {

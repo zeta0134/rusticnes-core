@@ -1,5 +1,3 @@
-use std::convert::TryInto;
-
 use crate::apu::AudioChannelState;
 
 #[derive(Copy, Clone, PartialEq)]
@@ -46,20 +44,6 @@ pub trait Mapper: Send {
     fn nsf_set_track(&mut self, _track_index: u8) {}
     fn nsf_manual_mode(&mut self) {}
     fn audio_multiplexing(&mut self, _emulate: bool) {}
-}
-
-pub(crate) fn save_usize(buff: &mut Vec<u8>, data: usize) {
-    buff.extend(&data.to_le_bytes());
-}
-pub(crate) fn load_usize(buff: &mut Vec<u8>) -> usize {
-    usize::from_le_bytes(buff.split_off(buff.len() - std::mem::size_of::<usize>()).try_into().unwrap())
-}
-
-pub(crate) fn save_vec(buff: &mut Vec<u8>, data: &Vec<u8>) {
-    buff.extend(data);
-}
-pub(crate) fn load_vec(buff: &mut Vec<u8>, len: usize) -> Vec<u8> {
-    buff.split_off(buff.len() - len)
 }
 
 impl Clone for Box<dyn Mapper>

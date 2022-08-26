@@ -1,6 +1,5 @@
-use std::convert::TryInto;
-
 use crate::mmc::mapper::Mapper;
+use crate::save_load::*;
 use super::audio_channel::AudioChannelState;
 use super::ring_buffer::RingBuffer;
 use super::filters;
@@ -153,43 +152,43 @@ impl DmcState {
     }
 
     pub fn save_state(&self, data: &mut Vec<u8>) {
-        data.push(self.looping as u8);
-        data.extend(&self.period_initial.to_le_bytes());
-        data.extend(&self.period_current.to_le_bytes());
+        save_bool(data, self.looping);
+        save_u16(data, self.period_initial);
+        save_u16(data, self.period_current);
         data.push(self.output_level);
-        data.extend(&self.starting_address.to_le_bytes());
-        data.extend(&self.sample_length.to_le_bytes());
-        data.extend(&self.current_address.to_le_bytes());
+        save_u16(data, self.starting_address);
+        save_u16(data, self.sample_length);
+        save_u16(data, self.current_address);
         data.push(self.sample_buffer);
         data.push(self.shift_register);
-        data.push(self.sample_buffer_empty as u8);
+        save_bool(data, self.sample_buffer_empty);
         data.push(self.bits_remaining);
-        data.extend(&self.bytes_remaining.to_le_bytes());
-        data.push(self.silence_flag as u8);
-        data.push(self.interrupt_enabled as u8);
-        data.push(self.interrupt_flag as u8);
-        data.push(self.rdy_line as u8);
+        save_u16(data, self.bytes_remaining);
+        save_bool(data, self.silence_flag);
+        save_bool(data, self.interrupt_enabled);
+        save_bool(data, self.interrupt_flag);
+        save_bool(data, self.rdy_line);
         data.push(self.rdy_delay);
     }
 
     pub fn load_state(&mut self, buff: &mut Vec<u8>) {
         self.rdy_delay = buff.pop().unwrap();
-        self.rdy_line = buff.pop().unwrap() != 0;
-        self.interrupt_flag = buff.pop().unwrap() != 0;
-        self.interrupt_enabled = buff.pop().unwrap() != 0;
-        self.silence_flag = buff.pop().unwrap() != 0;
-        self.bytes_remaining = u16::from_le_bytes(buff.split_off(buff.len() - 2).try_into().unwrap());
+        self.rdy_line = load_bool(buff);
+        self.interrupt_flag = load_bool(buff);
+        self.interrupt_enabled = load_bool(buff);
+        self.silence_flag = load_bool(buff);
+        self.bytes_remaining = load_u16(buff);
         self.bits_remaining = buff.pop().unwrap();
-        self.sample_buffer_empty = buff.pop().unwrap() != 0;
+        self.sample_buffer_empty = load_bool(buff);
         self.shift_register = buff.pop().unwrap();
         self.sample_buffer = buff.pop().unwrap();
-        self.current_address = u16::from_le_bytes(buff.split_off(buff.len() - 2).try_into().unwrap());
-        self.sample_length = u16::from_le_bytes(buff.split_off(buff.len() - 2).try_into().unwrap());
-        self.starting_address = u16::from_le_bytes(buff.split_off(buff.len() - 2).try_into().unwrap());
+        self.current_address = load_u16(buff);
+        self.sample_length = load_u16(buff);
+        self.starting_address = load_u16(buff);
         self.output_level = buff.pop().unwrap();
-        self.period_current = u16::from_le_bytes(buff.split_off(buff.len() - 2).try_into().unwrap());
-        self.period_initial = u16::from_le_bytes(buff.split_off(buff.len() - 2).try_into().unwrap());
-        self.looping = buff.pop().unwrap() != 0;
+        self.period_current = load_u16(buff);
+        self.period_initial = load_u16(buff);
+        self.looping = load_bool(buff);
     }
 }
 

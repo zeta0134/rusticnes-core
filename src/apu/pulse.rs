@@ -1,4 +1,4 @@
-use std::convert::TryInto;
+use crate::save_load::*;
 
 use super::length_counter::LengthCounterState;
 use super::volume_envelope::VolumeEnvelopeState;
@@ -142,33 +142,33 @@ impl PulseChannelState {
     pub fn save_state(&self, data: &mut Vec<u8>) {
         self.envelope.save_state(data);
         self.length_counter.save_state(data);
-        data.push(self.sweep_enabled as u8);
+        save_bool(data, self.sweep_enabled);
         data.push(self.sweep_period);
         data.push(self.sweep_divider);
-        data.push(self.sweep_negate as u8);
+        save_bool(data, self.sweep_negate);
         data.push(self.sweep_shift);
-        data.push(self.sweep_reload as u8);
-        data.push(self.sweep_ones_compliment as u8);
+        save_bool(data, self.sweep_reload);
+        save_bool(data, self.sweep_ones_compliment);
         data.push(self.duty);
         data.push(self.sequence_counter);
-        data.extend(&self.period_initial.to_le_bytes());
-        data.extend(&self.period_current.to_le_bytes());
-        data.extend(&self.cpu_clock_rate.to_le_bytes());
+        save_u16(data, self.period_initial);
+        save_u16(data, self.period_current);
+        save_u64(data, self.cpu_clock_rate);
     }
 
     pub fn load_state(&mut self, buff: &mut Vec<u8>) {
-        self.cpu_clock_rate = u64::from_le_bytes(buff.split_off(buff.len() - 8).try_into().unwrap());
-        self.period_current = u16::from_le_bytes(buff.split_off(buff.len() - 2).try_into().unwrap());
-        self.period_initial = u16::from_le_bytes(buff.split_off(buff.len() - 2).try_into().unwrap());
+        self.cpu_clock_rate = load_u64(buff);
+        self.period_current = load_u16(buff);
+        self.period_initial = load_u16(buff);
         self.sequence_counter = buff.pop().unwrap();
         self.duty = buff.pop().unwrap();
-        self.sweep_ones_compliment = buff.pop().unwrap() != 0;
-        self.sweep_reload = buff.pop().unwrap() != 0;
+        self.sweep_ones_compliment = load_bool(buff);
+        self.sweep_reload = load_bool(buff);
         self.sweep_shift = buff.pop().unwrap();
-        self.sweep_negate = buff.pop().unwrap() != 0;
+        self.sweep_negate = load_bool(buff);
         self.sweep_divider = buff.pop().unwrap();
         self.sweep_period = buff.pop().unwrap();
-        self.sweep_enabled = buff.pop().unwrap() != 0;
+        self.sweep_enabled = load_bool(buff);
         self.length_counter.load_state(buff);
         self.envelope.load_state(buff);
     }

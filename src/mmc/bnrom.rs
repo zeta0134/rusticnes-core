@@ -9,6 +9,8 @@ use crate::memoryblock::MemoryBlock;
 use crate::mmc::mapper::*;
 use crate::mmc::mirroring;
 
+use crate::save_load::*;
+
 #[derive(Clone)]
 pub struct BnRom {
     pub prg_rom: MemoryBlock,
