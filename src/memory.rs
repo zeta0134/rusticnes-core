@@ -104,7 +104,8 @@ pub fn read_byte(nes: &mut NesState, address: u16) -> u8 {
                 nes.p1_data = nes.p1_input;
             }
             let result = 0x40 | (nes.p1_data & 0x1);
-            nes.p1_data = nes.p1_data >> 1;
+            // Standard Controllers set extra bits to 1, which affects controller detection routines
+            nes.p1_data = (nes.p1_data >> 1) | 0x80; 
             nes.event_tracker.snoop_cpu_read(nes.registers.pc, address, result);
             return result;
         },
@@ -115,7 +116,8 @@ pub fn read_byte(nes: &mut NesState, address: u16) -> u8 {
                 nes.p2_data = nes.p2_input;
             }
             let result = 0x40 | (nes.p2_data & 0x1);
-            nes.p2_data = nes.p2_data >> 1;
+            // Standard Controllers set extra bits to 1, which affects controller detection routines
+            nes.p2_data = (nes.p2_data >> 1) | 0x80; 
             nes.event_tracker.snoop_cpu_read(nes.registers.pc, address, result);
             return result;
         },
