@@ -196,7 +196,7 @@ impl AudioChannelState for DmcState {
     }
 
     fn playing(&self) -> bool {
-        return true;
+        return self.amplitude() > 0.0;
     }
 
     fn amplitude(&self) -> f32 {
