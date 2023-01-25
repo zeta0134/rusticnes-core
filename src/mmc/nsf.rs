@@ -912,12 +912,10 @@ impl NsfMapper {
         if !self.mmc5_enabled {
             return 0.0;
         }
-        let pulse_1_output = (self.mmc5_pulse_1.output() as f32 / 15.0) - 0.5;
-        let pulse_2_output = (self.mmc5_pulse_2.output() as f32 / 15.0) - 0.5;
-        let mut pcm_output = (self.mmc5_pcm_channel.level as f32 / 256.0) - 0.5;
-        if self.mmc5_pcm_channel.muted {
-            pcm_output = 0.0;
-        }
+        
+        let pulse_1_output = if !self.mmc5_pulse_1.debug_disable {(self.mmc5_pulse_1.output() as f32 / 15.0) - 0.5} else {0.0};
+        let pulse_2_output = if !self.mmc5_pulse_2.debug_disable {(self.mmc5_pulse_2.output() as f32 / 15.0) - 0.5} else {0.0};
+        let pcm_output = if !self.mmc5_pcm_channel.muted {(self.mmc5_pcm_channel.level as f32 / 256.0) - 0.5} else {0.0};
 
         return 
             (pulse_1_output + pulse_2_output) * 0.12 + 

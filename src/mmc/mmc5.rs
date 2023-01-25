@@ -862,12 +862,9 @@ impl Mapper for Mmc5 {
     }
 
     fn mix_expansion_audio(&self, nes_sample: f32) -> f32 {
-        let pulse_1_output = (self.pulse_1.output() as f32 / 15.0) - 0.5;
-        let pulse_2_output = (self.pulse_2.output() as f32 / 15.0) - 0.5;
-        let mut pcm_output = (self.pcm_channel.level as f32 / 256.0) - 0.5;
-        if self.pcm_channel.muted {
-            pcm_output = 0.0;
-        }
+        let pulse_1_output = if !self.pulse_1.debug_disable {(self.pulse_1.output() as f32 / 15.0) - 0.5} else {0.0};
+        let pulse_2_output = if !self.pulse_2.debug_disable {(self.pulse_2.output() as f32 / 15.0) - 0.5} else {0.0};
+        let pcm_output = if !self.pcm_channel.muted {(self.pcm_channel.level as f32 / 256.0) - 0.5} else {0.0};
 
         return 
             (pulse_1_output + pulse_2_output) * 0.12 + 
