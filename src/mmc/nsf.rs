@@ -403,6 +403,12 @@ impl NsfMapper {
         let mut font_chr = include_bytes!("../../assets/troll8x8.chr").to_vec();
         font_chr.resize(0x2000, 0);
 
+        // MMC5 pulses have no sweep unit, so we need to explicitly disable sweep muting
+        let mut mmc5_pulse_1 = PulseChannelState::new("Pulse 1", "MMC5", 1_789_773, false);
+        let mut mmc5_pulse_2 = PulseChannelState::new("Pulse 2", "MMC5", 1_789_773, false);
+        mmc5_pulse_1.sweep_negate = true;
+        mmc5_pulse_2.sweep_negate = true;
+
         let mut mapper = NsfMapper {
             prg: MemoryBlock::new(&prg_rom, MemoryType::Ram),
             chr: font_chr,
@@ -434,8 +440,8 @@ impl NsfMapper {
             mmc5_enabled: nsf.header.mmc5(),
             mmc5_multiplicand_a: 0,
             mmc5_multiplicand_b: 0,
-            mmc5_pulse_1: PulseChannelState::new("Pulse 1", "MMC5", 1_789_773, false),
-            mmc5_pulse_2: PulseChannelState::new("Pulse 2", "MMC5", 1_789_773, false),
+            mmc5_pulse_1: mmc5_pulse_1,
+            mmc5_pulse_2: mmc5_pulse_2,
             mmc5_audio_sequencer_counter: 0,
             mmc5_pcm_channel: Mmc5PcmChannel::new(),
             mmc5_exram: vec![0u8; 0x400],
