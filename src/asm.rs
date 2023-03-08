@@ -224,7 +224,6 @@ fn relative_offset(known_labels: &HashMap<String, u16>, label: &String, current_
         Some(label_address) => {
             //let current_offset = assemble(translated_opcodes.clone())?.len();
             let relative_offset = (*label_address as i32) - (current_address as i32) - 2;
-            println!("Will emit branch to label {} with relative offset {}", label, relative_offset);
             if relative_offset > 127 || relative_offset < -128 {
                 return Err(format!("Branch to label {} is out of range ({})", label, relative_offset))
             }
@@ -249,7 +248,6 @@ pub fn resolve_labels(opcodes: Vec<Opcode>, starting_address: u16) -> Result<Vec
         match opcode {
             Opcode::Label(label) => {
                 known_labels.insert(label.to_string(), total_bytes);
-                println!("Registering label {} with offset {}", label, total_bytes);
             },
             // These opcodes will fail to resolve in opcode_bytes, so we instead catch them here
             // and advance the total_bytes manually; we'll replace these in a later step
