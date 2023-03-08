@@ -338,7 +338,7 @@ pub struct INesCartridge {
     pub trainer: Vec<u8>,
     pub prg: Vec<u8>,
     pub chr: Vec<u8>,
-    misc_rom: Vec<u8>,
+    pub misc_rom: Vec<u8>,
 }
 
 impl INesCartridge {
