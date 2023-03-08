@@ -1202,9 +1202,10 @@ impl Mapper for NsfMapper {
             0xC000 ..= 0xCFFF => self.prg.banked_read(0x1000, self.prg_rom_banks[4], (address - 0xC000) as usize),
             0xD000 ..= 0xDFFF => self.prg.banked_read(0x1000, self.prg_rom_banks[5], (address - 0xD000) as usize),
             0xE000 ..= 0xEFFF => self.prg.banked_read(0x1000, self.prg_rom_banks[6], (address - 0xE000) as usize),
-            0xF000 ..= 0xFFF9 => self.prg.banked_read(0x1000, self.prg_rom_banks[7], (address - 0xF000) as usize),
+            0xF000 ..= 0xFFFB => self.prg.banked_read(0x1000, self.prg_rom_banks[7], (address - 0xF000) as usize),
             0xFFFC => {Some(((PLAYER_ORIGIN & 0x00FF) >> 0) as u8)}, // reset vector
             0xFFFD => {Some(((PLAYER_ORIGIN & 0xFF00) >> 8) as u8)},
+            0xFFFE ..= 0xFFFF => self.prg.banked_read(0x1000, self.prg_rom_banks[7], (address - 0xF000) as usize),
             _ => None
         }
     }
