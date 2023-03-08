@@ -15,6 +15,9 @@ use apu::RingBuffer;
 use apu::filters;
 use apu::filters::DspFilter;
 
+use std::collections::hash_map::DefaultHasher;
+use std::hash::Hasher;
+
 pub struct Namco163AudioChannel {
     pub debug_disable: bool,
     pub channel_address: usize,
@@ -22,7 +25,9 @@ pub struct Namco163AudioChannel {
     // cache these to return for debugging purposes
     pub tracked_frequency: f32,
     pub tracked_volume: u8,
-    pub tracked_address: u8,
+    pub tracked_address: usize,
+    pub tracked_length: usize,
+    pub tracked_sample_data: [u8; 256],
     pub output_buffer: RingBuffer,
     pub edge_buffer: RingBuffer,
     pub last_edge: bool,
@@ -58,6 +63,8 @@ impl Namco163AudioChannel {
             tracked_frequency: 0.0,
             tracked_volume: 0,
             tracked_address: 0,
+            tracked_length: 0,
+            tracked_sample_data: [0u8; 256],
             output_buffer: RingBuffer::new(32768),
             edge_buffer: RingBuffer::new(32768),
             last_edge: false,
@@ -115,7 +122,8 @@ impl Namco163AudioChannel {
         }
 
         let sample_index = (sample_address + (new_phase >> 16)) & 0xFF;
-        let sample = audio_sample(audio_ram, sample_index as u8) as f32;
+        let raw_sample = audio_sample(audio_ram, sample_index as u8);
+        let sample = raw_sample as f32;
 
         // The final output sample is biased, such that +8 is centered
         self.current_output = (sample - 8.0) * (volume as f32);
@@ -126,7 +134,9 @@ impl Namco163AudioChannel {
 
         self.tracked_frequency = (ntsc_clockrate * (frequency as f32)) / (15.0 * 65536.0 * (length as f32) * (enabled_channels as f32));
         self.tracked_volume = volume;
-        self.tracked_address = sample_address as u8;
+        self.tracked_address = sample_address as usize;
+        self.tracked_length = length as usize;
+        self.tracked_sample_data[sample_index as usize] = raw_sample;
     }
 }
 
@@ -189,7 +199,15 @@ impl AudioChannelState for Namco163AudioChannel {
     }
 
     fn timbre(&self) -> Option<Timbre> {
-        return Some(Timbre::PatchIndex{ index: self.tracked_address as usize, max: 255 });
+        let mut hasher = DefaultHasher::new();
+        let starting_index = self.tracked_address;
+        let ending_index = std::cmp::min(self.tracked_address + self.tracked_length, 256);
+        let audio_data = &self.tracked_sample_data[starting_index .. ending_index];
+        hasher.write(audio_data);
+        let full_result = hasher.finish();
+        let truncated_result = (full_result & 0xFF) as usize;
+
+        return Some(Timbre::PatchIndex{ index: truncated_result, max: 255 });
     }
 }
 
