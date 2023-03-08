@@ -380,8 +380,6 @@ impl NsfMapper {
         let mut nsf_player = assemble(nsf_player_opcodes, PLAYER_ORIGIN)?;
         nsf_player.resize(PLAYER_SIZE as usize, 0);
 
-        println!("NSF Version: {}", nsf.header.version_number());
-
         let mut prg_rom = nsf.prg.clone();
         let mut prg_rom_banks = nsf.header.initial_banks();
         if !nsf.header.is_bank_switched() {
