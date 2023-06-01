@@ -892,7 +892,7 @@ pub fn ntsc_signal(pixel: u16, phase: usize) -> f32 {
 
     // When de-emphasis bits are set, some parts of the signal are attenuated
     let attenuate = if (
-        (emphasis & 0b001) != 0) && in_color_phase(0, phase) || 
+        (emphasis & 0b001) != 0) && in_color_phase(C, phase) || 
        ((emphasis & 0b010) != 0) && in_color_phase(4, phase) || 
        ((emphasis & 0b100) != 0) && in_color_phase(8, phase) {8}
     else {0};
