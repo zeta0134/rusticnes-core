@@ -892,9 +892,9 @@ pub fn ntsc_signal(pixel: u16, phase: usize) -> f32 {
 
     // When de-emphasis bits are set, some parts of the signal are attenuated
     let attenuate = if (
-        (emphasis & 0b001) != 0) && in_color_phase(C, phase) || 
-       ((emphasis & 0b010) != 0) && in_color_phase(4, phase) || 
-       ((emphasis & 0b100) != 0) && in_color_phase(8, phase) {8}
+        (emphasis & 0b001) != 0) && in_color_phase(0xC, phase) || 
+       ((emphasis & 0b010) != 0) && in_color_phase(0x4, phase) || 
+       ((emphasis & 0b100) != 0) && in_color_phase(0x8, phase) {8}
     else {0};
 
     // The square wave for this color alternates between these two voltages
@@ -927,13 +927,14 @@ pub fn gammafix(f: f32) -> f32 {
 }
 
 pub fn clamp(v: f32) -> u32 {
-    return if v >= 255.0 {255} else {v as u32}
+    // round instead of floor
+    return std::cmp::min(255, (v*255.0 + 0.5) as u32)
 }
 
 pub fn yuv_to_argb(y: f32, u: f32, v: f32) -> u32 {
     let rgb = 
-      0x10000 * clamp(255.0 * gammafix(y +  (1.14*v)))
-    + 0x00100 * clamp(255.0 * gammafix(y + -(0.394242*u) + -(0.580681*v)))
-    + 0x00001 * clamp(255.0 * gammafix(y +  (2.03*u)));
+      0x10000 * clamp(gammafix(y +  (1.14*v)))
+    + 0x00100 * clamp(gammafix(y + -(0.394242*u) + -(0.580681*v)))
+    + 0x00001 * clamp(gammafix(y +  (2.03*u)));
     return 0xFF000000 + rgb; // set alpha exlicitly to full
 }
