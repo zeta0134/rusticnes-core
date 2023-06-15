@@ -2,28 +2,28 @@
 // player, so it will have some inherent limitations similar to most flashcarts.
 // Reference capabilities: https://wiki.nesdev.com/w/index.php/NSF
 
-use apu::AudioChannelState;
-use asm::*;
-use asm::Opcode::*;
-use asm::AddressingMode::*;
-use memoryblock::MemoryBlock;
-use memoryblock::MemoryType;
-use mmc::mapper::*;
-use mmc::mirroring;
-use nsf::NsfFile;
-use nsf::NsfHeader;
+use crate::apu::AudioChannelState;
+use crate::asm::*;
+use crate::asm::Opcode::*;
+use crate::asm::AddressingMode::*;
+use crate::memoryblock::MemoryBlock;
+use crate::memoryblock::MemoryType;
+use crate::mmc::mapper::*;
+use crate::mmc::mirroring;
+use crate::nsf::NsfFile;
+use crate::nsf::NsfHeader;
 
 // various expansion audio chips
-use mmc::vrc6::Vrc6PulseChannel;
-use mmc::vrc6::Vrc6SawtoothChannel;
+use crate::mmc::vrc6::Vrc6PulseChannel;
+use crate::mmc::vrc6::Vrc6SawtoothChannel;
 
-use apu::PulseChannelState;
-use mmc::mmc5::Mmc5PcmChannel;
+use crate::apu::PulseChannelState;
+use crate::mmc::mmc5::Mmc5PcmChannel;
 
-use mmc::fme7::YM2149F;
+use crate::mmc::fme7::YM2149F;
 
-use mmc::n163::Namco163Audio;
-use mmc::n163::n163_mixing_level;
+use crate::mmc::n163::Namco163Audio;
+use crate::mmc::n163::n163_mixing_level;
 
 const PPUCTRL: u16 = 0x2000;
 const PPUMASK: u16 = 0x2001;

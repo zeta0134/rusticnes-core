@@ -1,8 +1,8 @@
-use addressing;
-use cycle_cpu::Registers;
-use nes::NesState;
-use memory::read_byte;
-use memory::write_byte;
+use crate::addressing;
+use crate::cycle_cpu::Registers;
+use crate::nes::NesState;
+use crate::memory::read_byte;
+use crate::memory::write_byte;
 
 // Memory Utilities
 pub fn push(nes: &mut NesState, data: u8) {

@@ -1,11 +1,11 @@
 // Common mapper with bank switched PRG_ROM, CHR_ROM/RAM, and optional PRG RAM.
 // Reference capabilities: https://wiki.nesdev.com/w/index.php/MMC1
 
-use ines::INesCartridge;
-use memoryblock::MemoryBlock;
+use crate::ines::INesCartridge;
+use crate::memoryblock::MemoryBlock;
 
-use mmc::mapper::*;
-use mmc::mirroring;
+use crate::mmc::mapper::*;
+use crate::mmc::mirroring;
 
 pub struct Mmc1 {
     pub prg_rom: MemoryBlock,

@@ -1,11 +1,11 @@
 // GxRom, simple bank switchable 32kb PRG ROM and 8k CHR ROM
 // Reference capabilities: https://wiki.nesdev.com/w/index.php/GxROM
 
-use ines::INesCartridge;
-use memoryblock::MemoryBlock;
+use crate::ines::INesCartridge;
+use crate::memoryblock::MemoryBlock;
 
-use mmc::mapper::*;
-use mmc::mirroring;
+use crate::mmc::mapper::*;
+use crate::mmc::mirroring;
 
 pub struct GxRom {
     pub prg_rom: MemoryBlock,
