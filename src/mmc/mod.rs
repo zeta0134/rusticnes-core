@@ -18,3 +18,4 @@ pub mod nsf;
 pub mod pxrom;
 pub mod uxrom;
 pub mod vrc6;
+pub mod vrc7;
