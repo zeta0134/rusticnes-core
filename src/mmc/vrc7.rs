@@ -326,7 +326,7 @@ pub struct Vrc7AudioChannel {
 
     // Register $02
     modulator_key_level_scaling: u8,
-    modulator_output_level: u8,
+    modulator_output_level: u16,
 
     // Register $03
     carrier_key_level_scaling: u8,
@@ -453,11 +453,7 @@ impl Vrc7AudioChannel {
             positive_result
         };
 
-        return signed_result >> 4;
-    }
-
-    pub fn adjusted_sine(&self, phase: usize, volume: u16, eg_level: u16) -> i16 {
-        return self.lookup_exp(self.lookup_logsin(phase) + 128 * volume + 16 * eg_level);
+        return signed_result;
     }
 
     pub fn clock_global_counter(&mut self) {
@@ -480,7 +476,7 @@ impl Vrc7AudioChannel {
         self.carrier_multiplier      = (patch[1] & 0b0000_1111) as usize;
 
         self.modulator_key_level_scaling = (patch[2] & 0b1100_0000) >> 6;
-        self.modulator_output_level      =  patch[2] & 0b0011_1111;
+        self.modulator_output_level      = (patch[2] & 0b0011_1111) as u16;
 
         self.carrier_key_level_scaling = (patch[3] & 0b1100_0000) >> 6;
         self.carrier_rectified         = (patch[3] & 0b0001_0000) != 0;
@@ -678,8 +674,11 @@ impl Vrc7AudioChannel {
     }
 
     pub fn output(&self) -> i16 {
-        return self.adjusted_sine((self.carrier_phase >> 9) as usize, self.volume, self.carrier_env_level as u16);
-        //return self.adjusted_sine((self.carrier_phase >> 9) as usize, self.volume, 0);
+        let effective_mod_phase = (self.modulator_phase - 1) & 0x7FFFF;
+        let mod_logsin = self.lookup_logsin((effective_mod_phase >> 9) as usize);
+        let mod_amount = self.lookup_exp(mod_logsin + 32 * self.modulator_output_level + 16 * self.modulator_env_level as u16) & !0x1; // mask lowest bit
+        let effective_carrier_phase = ((((self.carrier_phase >> 9) as i32) + ((mod_amount as i32)) & 0x7FFFF)) as usize;
+        return self.lookup_exp(self.lookup_logsin(effective_carrier_phase) + 128 * self.volume + 16 * self.carrier_env_level as u16) / 16;
     }
 }
 
