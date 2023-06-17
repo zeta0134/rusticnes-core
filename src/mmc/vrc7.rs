@@ -249,7 +249,7 @@ fn generate_logsin_lut() -> Vec<u16> {
     for n in 0 ..= 255 {
         let i = n as f32 + 0.5;
         let x = i * (std::f32::consts::PI / 2.0) / 256.0;
-        logsin_lut[n] = (f32::log2(f32::sin(x)) * -256.0) as u16;
+        logsin_lut[n] = (f32::log2(f32::sin(x)) * -256.0).round() as u16;
     }
     return logsin_lut;
 }
@@ -258,37 +258,172 @@ fn generate_exp_table() -> Vec<u16> {
     let mut exp_lut = vec!(0u16; 256);
     for n in 0 ..= 255 {
         let i = n as f32 / 256.0;
-        exp_lut[n] = ((f32::exp2(i) * 1024.0) - 1024.0) as u16
+        exp_lut[n] = ((f32::exp2(i) * 1024.0) - 1024.0).round() as u16
     }
     return exp_lut;
 }
 
+pub const DEFAULT_PATCH_TABLE: [u8; 8 * 15] = [
+    0x03, 0x21, 0x05, 0x06, 0xE8, 0x81, 0x42, 0x27, // Buzzy Bell
+    0x13, 0x41, 0x14, 0x0D, 0xD8, 0xF6, 0x23, 0x12, // Guitar
+    0x11, 0x11, 0x08, 0x08, 0xFA, 0xB2, 0x20, 0x12, // Wurly
+    0x31, 0x61, 0x0C, 0x07, 0xA8, 0x64, 0x61, 0x27, // Flute
+    0x32, 0x21, 0x1E, 0x06, 0xE1, 0x76, 0x01, 0x28, // Clarinet
+    0x02, 0x01, 0x06, 0x00, 0xA3, 0xE2, 0xF4, 0xF4, // Synth
+    0x21, 0x61, 0x1D, 0x07, 0x82, 0x81, 0x11, 0x07, // Trumpet
+    0x23, 0x21, 0x22, 0x17, 0xA2, 0x72, 0x01, 0x17, // Organ
+    0x35, 0x11, 0x25, 0x00, 0x40, 0x73, 0x72, 0x01, // Bells
+    0xB5, 0x01, 0x0F, 0x0F, 0xA8, 0xA5, 0x51, 0x02, // Vibes
+    0x17, 0xC1, 0x24, 0x07, 0xF8, 0xF8, 0x22, 0x12, // Vibraphone
+    0x71, 0x23, 0x11, 0x06, 0x65, 0x74, 0x18, 0x16, // Tutti
+    0x01, 0x02, 0xD3, 0x05, 0xC9, 0x95, 0x03, 0x02, // Fretless
+    0x61, 0x63, 0x0C, 0x00, 0x94, 0xC0, 0x33, 0xF6, // Synth Bass
+    0x21, 0x72, 0x0D, 0x00, 0xC1, 0xD5, 0x56, 0x06  // Sweep
+];
+
 pub const MT_LUT: [u32; 16] = [1, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 20, 24, 24, 30, 30];
 
+pub const ADSR_RATE_LUT: [u8; 32] = [
+    0, 1, 0, 1, 0, 1, 0, 1, // 4 out of 8
+    0, 1, 0, 1, 1, 1, 0, 1, // 5 out of 8
+    0, 1, 1, 1, 0, 1, 1, 1, // 6 out of 8
+    0, 1, 1, 1, 1, 1, 1, 1  // 7 out of 8 
+];
+
+#[derive(PartialEq, Copy, Clone, Debug)]
+pub enum EnvState {
+    Damp,
+    Attack,
+    Decay,
+    Sustain
+}
+
 pub struct Vrc7AudioChannel {
-    fnum: u32,
-    octave: u32,
-    carrier_phase: u32,
-    carrier_multiplier: usize,
-    volume: u16,
     logsin_lut: Vec<u16>,
     exp_lut: Vec<u16>,
+    
+    fnum: u32,
+    octave: u32,
+    volume: u16,
+    instrument_index: u8,
 
-    debug_key_on: bool,
+    carrier_phase: u32,
+    modulator_phase: u32,
+    
+    // Register $00
+    modulator_tremolo: bool,
+    modulator_vibrato: bool,
+    modulator_sustain_enabled: bool,
+    modulator_key_scaling: bool,
+    modulator_multiplier: usize,
+
+    // Register $01
+    carrier_tremolo: bool,
+    carrier_vibrato: bool,
+    carrier_sustain_enabled: bool,
+    carrier_key_scaling: bool,
+    carrier_multiplier: usize,
+
+    // Register $02
+    modulator_key_level_scaling: u8,
+    modulator_output_level: u8,
+
+    // Register $03
+    carrier_key_level_scaling: u8,
+    carrier_rectified: bool,
+    modulator_rectified: bool,
+    feedback: u8,
+
+    // Register $04
+    modulator_attack_rate: u8,
+    modulator_decay_rate: u8,
+
+    // Reigster $05
+    carrier_attack_rate: u8,
+    carrier_decay_rate: u8,    
+
+    // Register $06
+    modulator_sustain_level: u8,
+    modulator_release_rate: u8,
+
+    // Register $07
+    carrier_sustain_level: u8,
+    carrier_release_rate: u8,
+
+    // Internal State
+    global_counter: u32,
+    global_counter_toggled_bits: u32,
+    carrier_env_level: u8,
+    carrier_env_state: EnvState,
+    modulator_env_level: u8,
+    modulator_env_state: EnvState,
+
+    key_on: bool,
+    sustain_mode: bool,
 }
 
 impl Vrc7AudioChannel {
     pub fn new() -> Vrc7AudioChannel {
         return Vrc7AudioChannel {
-            fnum: 0,
-            octave: 0,
-            carrier_phase: 0,
-            carrier_multiplier: 0,
-            volume: 0,
             logsin_lut: generate_logsin_lut(),
             exp_lut: generate_exp_table(),
 
-            debug_key_on: false,
+            fnum: 0,
+            octave: 0,
+            volume: 0,
+            instrument_index: 0,
+
+            carrier_phase: 0,
+            modulator_phase: 0,
+
+            modulator_tremolo: false,
+            modulator_vibrato: false,
+            modulator_sustain_enabled: false,
+            modulator_key_scaling: false,
+            modulator_multiplier: 0,
+
+            carrier_tremolo: false,
+            carrier_vibrato: false,
+            carrier_sustain_enabled: false,
+            carrier_key_scaling: false,
+            carrier_multiplier: 0,
+
+            modulator_key_level_scaling: 0,
+            modulator_output_level: 0,
+
+            // Register $03
+            carrier_key_level_scaling: 0,
+            carrier_rectified: true,
+            modulator_rectified: true,
+            feedback: 0,
+
+            // Register $04
+            modulator_attack_rate: 0,
+            modulator_decay_rate: 0,
+
+            // Reigster $05
+            carrier_attack_rate: 0,
+            carrier_decay_rate: 0,    
+
+            // Register $06
+            modulator_sustain_level: 0,
+            modulator_release_rate: 0,
+
+            // Register $07
+            carrier_sustain_level: 0,
+            carrier_release_rate: 0,
+
+            // Internal state
+            global_counter: 0,
+            global_counter_toggled_bits: 0,
+
+            carrier_env_level: 127,
+            carrier_env_state: EnvState::Sustain,
+            modulator_env_level: 127,
+            modulator_env_state: EnvState::Sustain,
+
+            key_on: false,
+            sustain_mode: false,
         };
     }
 
@@ -308,33 +443,248 @@ impl Vrc7AudioChannel {
         let sign = i & 0x8000;
         let integral_magnitude =    (i & 0x7F00) >> 8;
         let fractional_magnitude =   i & 0x00FF;
-        let t_value = (self.exp_lut[(255 - fractional_magnitude) as usize] + 1024) << 1;
-        let mut result = (t_value >> integral_magnitude) as i16;
-        if sign != 0 {
-            result = !result;
-        }
-        return result >> 4;
+        // Note: we might shift by 16 or more, so we need to expand to i32, as otherwise the
+        // result is undefined
+        let t_value = ((self.exp_lut[(255 - fractional_magnitude) as usize] + 1024) << 1) as i32;
+        let positive_result = (t_value >> integral_magnitude) as i16;
+        let signed_result = if sign != 0 {
+            !positive_result
+        } else {
+            positive_result
+        };
+
+        return signed_result >> 4;
     }
 
     pub fn adjusted_sine(&self, phase: usize, volume: u16, eg_level: u16) -> i16 {
         return self.lookup_exp(self.lookup_logsin(phase) + 128 * volume + 16 * eg_level);
     }
 
+    pub fn clock_global_counter(&mut self) {
+        let old_value = self.global_counter;
+        self.global_counter += 1;
+        self.global_counter_toggled_bits = old_value ^ self.global_counter;
+    }
+
+    pub fn load_patch(&mut self, patch: &[u8]) {
+        self.modulator_tremolo         = (patch[0] & 0b1000_0000) != 0;
+        self.modulator_vibrato         = (patch[0] & 0b0100_0000) != 0;
+        self.modulator_sustain_enabled = (patch[0] & 0b0010_0000) != 0;
+        self.modulator_key_scaling     = (patch[0] & 0b0001_0000) != 0;
+        self.modulator_multiplier      = (patch[0] & 0b0000_1111) as usize;
+
+        self.carrier_tremolo         = (patch[1] & 0b1000_0000) != 0;
+        self.carrier_vibrato         = (patch[1] & 0b0100_0000) != 0;
+        self.carrier_sustain_enabled = (patch[1] & 0b0010_0000) != 0;
+        self.carrier_key_scaling     = (patch[1] & 0b0001_0000) != 0;
+        self.carrier_multiplier      = (patch[1] & 0b0000_1111) as usize;
+
+        self.modulator_key_level_scaling = (patch[2] & 0b1100_0000) >> 6;
+        self.modulator_output_level      =  patch[2] & 0b0011_1111;
+
+        self.carrier_key_level_scaling = (patch[3] & 0b1100_0000) >> 6;
+        self.carrier_rectified         = (patch[3] & 0b0001_0000) != 0;
+        self.modulator_rectified       = (patch[3] & 0b0000_1000) != 0;
+        self.feedback                  =  patch[3] & 0b0000_0111;
+
+        self.modulator_attack_rate = (patch[4] & 0b1111_0000) >> 4;
+        self.modulator_decay_rate  =  patch[4] & 0b0000_1111;
+
+        self.carrier_attack_rate = (patch[5] & 0b1111_0000) >> 4;
+        self.carrier_decay_rate  =  patch[5] & 0b0000_1111;
+
+        self.modulator_sustain_level = (patch[6] & 0b1111_0000) >> 4;
+        self.modulator_release_rate  =  patch[6] & 0b0000_1111;
+
+        self.carrier_sustain_level = (patch[7] & 0b1111_0000) >> 4;
+        self.carrier_release_rate  =  patch[7] & 0b0000_1111;
+    }
+
+    fn effective_rate(&self, given_rate: u8, ks_enabled: bool) -> u8 {
+        // effective rates 0..3 and 60..63 are special cases
+        if given_rate == 0 {
+            return 0;
+        }
+        if given_rate == 15 {
+            return 63;
+        }
+
+        let octave_and_fnum_msb = ((self.octave << 1) + (self.fnum >> 8)) as u8;
+        let rate_ks = if ks_enabled {
+            octave_and_fnum_msb
+        } else {
+            octave_and_fnum_msb >> 2
+        };
+
+        let result = given_rate * 4 + rate_ks;
+
+        // I am rather unsure about this!
+        return result & 63;
+    }
+
+    fn shall_we_advance_the_adsr_today(&self, given_rate: u8, ks_enabled: bool) -> bool {
+        let rate = self.effective_rate(given_rate, ks_enabled);
+        let shift_amount = 13 - (rate / 4);
+        let table_index = ((rate & 0x3) * 8) as usize;
+
+        let shifted_toggled_bits = self.global_counter_toggled_bits >> shift_amount;
+        if (shifted_toggled_bits & 0x1) != 0 {
+            let row_index = (shifted_toggled_bits & 0x7) as usize;
+            if ADSR_RATE_LUT[table_index + row_index] == 1 {
+                return true;
+            }
+        }
+        // Not a chance!
+        return false;
+    }
+
+    fn update_carrier_adsr(&mut self) {
+        let max_env = (self.carrier_env_level >> 2) ==  0x1F;
+        if self.carrier_env_state == EnvState::Damp && max_env {
+            if self.carrier_attack_rate == 15 { 
+                self.carrier_env_state = EnvState::Decay;
+                self.carrier_env_level = 0;
+            } else { 
+                self.carrier_env_state = EnvState::Attack;
+            };
+            self.carrier_phase = 0;
+
+            // Also reset the modulator here
+            if self.modulator_attack_rate == 15 { 
+                self.modulator_env_state = EnvState::Decay;
+                self.modulator_env_level = 0;
+            } else { 
+                self.modulator_env_state = EnvState::Attack;
+                self.modulator_env_level = 127;
+            };
+            self.modulator_phase = 0;
+        } else if self.carrier_env_state == EnvState::Attack && self.carrier_env_level == 0 {
+            self.carrier_env_state = EnvState::Decay;
+        } else if self.carrier_env_state == EnvState::Decay && ((self.carrier_env_level >> 3) == self.carrier_sustain_level) {
+            self.carrier_env_state = EnvState::Sustain;
+        }
+
+        let rate = if self.key_on == false {
+            // release state
+            if self.carrier_sustain_enabled {
+                self.carrier_release_rate
+            } else if self.sustain_mode  {
+                5
+            } else {
+                7
+            }
+        } else {
+            match self.carrier_env_state {
+                EnvState::Damp => {12},
+                EnvState::Attack => {self.carrier_attack_rate },
+                EnvState::Decay => {self.carrier_decay_rate },
+                EnvState::Sustain => {
+                    if self.sustain_mode { 0 } else { self.carrier_release_rate }
+                }
+            }
+        };
+
+        if self.shall_we_advance_the_adsr_today(rate, self.carrier_key_scaling) {
+            if self.carrier_env_state == EnvState::Attack && self.key_on == true {
+                if (rate == 0) || (rate == 15) {
+                    // Do absolutely nothing. An attack of 0 produces no effect.
+                    // An attack of 15 is usually instantly transitioned to decay before we
+                    // get here, but if the custom patch is changed after a key_on event, this
+                    // is the behavior to apply.
+                } else {
+                    self.carrier_env_level = self.carrier_env_level - (self.carrier_env_level >> 4) - 1;
+                }
+            } else {
+                if rate == 0 {
+                    // Do absolutely nothing
+                } else if rate == 15 {
+                    // Increase the envelope two times (capping at 127)
+                    self.carrier_env_level += 2;
+                    if self.carrier_env_level > 127 {
+                        self.carrier_env_level = 127;
+                    }
+                } else if self.carrier_env_level < 127 {
+                    // Increase the envelope just once (usual case)
+                    self.carrier_env_level += 1;
+                }
+            }
+        }
+    }
+
+    fn update_modulator_adsr(&mut self) {
+        if self.modulator_env_state == EnvState::Attack && self.modulator_env_level == 0 {
+            self.modulator_env_state = EnvState::Decay;
+        } else if self.modulator_env_state == EnvState::Decay && ((self.modulator_env_level >> 3) == self.modulator_sustain_level) {
+            self.modulator_env_state = EnvState::Sustain;
+        }
+
+        let rate = match self.modulator_env_state {
+            EnvState::Damp => {12},
+            EnvState::Attack => {self.modulator_attack_rate },
+            EnvState::Decay => {self.modulator_decay_rate },
+            EnvState::Sustain => {
+                if self.sustain_mode { 0 } else { self.modulator_release_rate }
+            }
+        };
+
+        if self.shall_we_advance_the_adsr_today(rate, self.modulator_key_scaling) {
+            if self.modulator_env_state == EnvState::Attack {
+                if (rate == 0) || (rate == 15) {
+                    // Do absolutely nothing. An attack of 0 produces no effect.
+                    // An attack of 15 is usually instantly transitioned to decay before we
+                    // get here, but if the custom patch is changed after a key_on event, this
+                    // is the behavior to apply.
+                } else {
+                    self.modulator_env_level = self.modulator_env_level - (self.modulator_env_level >> 4) - 1;
+                }
+            } else {
+                if rate == 0 {
+                    // Do absolutely nothing
+                } else if rate == 15 {
+                    // Increase the envelope two times (capping at 127)
+                    self.modulator_env_level += 2;
+                    if self.modulator_env_level > 127 {
+                        self.modulator_env_level = 127;
+                    }
+                } else if self.modulator_env_level < 127 {
+                    // Increase the envelope just once (usual case)
+                    self.modulator_env_level += 1;
+                }
+            }
+        }
+    }
+
+    fn handle_key_on(&mut self, new_key_on: bool) {
+        // Transition from 0 -> 1 triggers a new note event
+        if self.key_on == false && new_key_on == true {
+            // Note: carrier will set modulator state when switching from damp -> attack
+            self.carrier_env_state = EnvState::Damp;
+        }
+
+        self.key_on = new_key_on;
+    }
+
     pub fn update(&mut self) {
-        let step_size = ((self.fnum * MT_LUT[self.carrier_multiplier]) << self.octave) >> 1;
-        self.carrier_phase = (self.carrier_phase + step_size) & 0x7FFFF;
+        let carrier_step_size = ((self.fnum * MT_LUT[self.carrier_multiplier]) << self.octave) >> 1;
+        self.carrier_phase = (self.carrier_phase + carrier_step_size) & 0x7FFFF;
+
+        let modulator_step_size = ((self.fnum * MT_LUT[self.modulator_multiplier]) << self.octave) >> 1;
+        self.modulator_phase = (self.modulator_phase + modulator_step_size) & 0x7FFFF;        
+
+        self.update_carrier_adsr();
+        self.update_modulator_adsr();
+
+        self.clock_global_counter();
     }
 
     pub fn output(&self) -> i16 {
-        if self.debug_key_on {
-            return self.adjusted_sine((self.carrier_phase >> 9) as usize, self.volume, 0);
-        } else {
-            return 0;
-        }
+        return self.adjusted_sine((self.carrier_phase >> 9) as usize, self.volume, self.carrier_env_level as u16);
+        //return self.adjusted_sine((self.carrier_phase >> 9) as usize, self.volume, 0);
     }
 }
 
 pub struct Vrc7Audio {
+    pub custom_patch: [u8; 8],
     pub channel1: Vrc7AudioChannel,
     pub channel2: Vrc7AudioChannel,
     pub channel3: Vrc7AudioChannel,
@@ -347,7 +697,8 @@ pub struct Vrc7Audio {
 
 impl Vrc7Audio {
     pub fn new() -> Vrc7Audio {
-        return Vrc7Audio {
+         let thing = Vrc7Audio {
+            custom_patch: [0u8; 8],
             channel1: Vrc7AudioChannel::new(),
             channel2: Vrc7AudioChannel::new(),
             channel3: Vrc7AudioChannel::new(),
@@ -357,6 +708,8 @@ impl Vrc7Audio {
             current_channel: 1,
             delay_counter: 0,
         };
+
+        return thing;
     }
 
     pub fn clock(&mut self) {
@@ -391,8 +744,37 @@ impl Vrc7Audio {
         return combined_output;
     }
 
+    pub fn refresh_custom_patch(&mut self) {
+        if self.channel1.instrument_index == 0 {
+            self.channel1.load_patch(&self.custom_patch);
+        }
+        if self.channel2.instrument_index == 0 {
+            self.channel2.load_patch(&self.custom_patch);
+        }
+        if self.channel3.instrument_index == 0 {
+            self.channel3.load_patch(&self.custom_patch);
+        }
+        if self.channel4.instrument_index == 0 {
+            self.channel4.load_patch(&self.custom_patch);
+        }
+        if self.channel5.instrument_index == 0 {
+            self.channel5.load_patch(&self.custom_patch);
+        }
+        if self.channel6.instrument_index == 0 {
+            self.channel6.load_patch(&self.custom_patch);
+        }
+    }
+
     pub fn write(&mut self, address: u8, data: u8) {
         match address {
+            0x00 => {self.custom_patch[0] = data; self.refresh_custom_patch()},
+            0x01 => {self.custom_patch[1] = data; self.refresh_custom_patch()},
+            0x02 => {self.custom_patch[2] = data; self.refresh_custom_patch()},
+            0x03 => {self.custom_patch[3] = data; self.refresh_custom_patch()},
+            0x04 => {self.custom_patch[4] = data; self.refresh_custom_patch()},
+            0x05 => {self.custom_patch[5] = data; self.refresh_custom_patch()},
+            0x06 => {self.custom_patch[6] = data; self.refresh_custom_patch()},
+            0x07 => {self.custom_patch[7] = data; self.refresh_custom_patch()},
             0x10 => {self.channel1.fnum = (self.channel1.fnum & 0xFF00) + (data as u32)},
             0x11 => {self.channel2.fnum = (self.channel2.fnum & 0xFF00) + (data as u32)},
             0x12 => {self.channel3.fnum = (self.channel3.fnum & 0xFF00) + (data as u32)},
@@ -402,50 +784,98 @@ impl Vrc7Audio {
             0x20 => {
                 self.channel1.fnum = (self.channel1.fnum & 0x00FF) + (((data & 0b1) as u32) << 8);
                 self.channel1.octave = ((data & 0b1110) >> 1) as u32;
-                self.channel1.debug_key_on = (data & 0b1_0000) != 0;
+                self.channel1.handle_key_on((data & 0b1_0000) != 0);
+                self.channel1.sustain_mode = (data & 0b10_0000) != 0;
             },
             0x21 => {
                 self.channel2.fnum = (self.channel2.fnum & 0x00FF) + (((data & 0b1) as u32) << 8);
                 self.channel2.octave = ((data & 0b1110) >> 1) as u32;
-                self.channel2.debug_key_on = (data & 0b1_0000) != 0;
+                self.channel2.handle_key_on((data & 0b1_0000) != 0);
+                self.channel2.sustain_mode = (data & 0b10_0000) != 0;
             },
             0x22 => {
                 self.channel3.fnum = (self.channel3.fnum & 0x00FF) + (((data & 0b1) as u32) << 8);
                 self.channel3.octave = ((data & 0b1110) >> 1) as u32;
-                self.channel3.debug_key_on = (data & 0b1_0000) != 0;
+                self.channel3.handle_key_on((data & 0b1_0000) != 0);
+                self.channel3.sustain_mode = (data & 0b10_0000) != 0;
             },
             0x23 => {
                 self.channel4.fnum = (self.channel4.fnum & 0x00FF) + (((data & 0b1) as u32) << 8);
                 self.channel4.octave = ((data & 0b1110) >> 1) as u32;
-                self.channel4.debug_key_on = (data & 0b1_0000) != 0;
+                self.channel4.handle_key_on((data & 0b1_0000) != 0);
+                self.channel4.sustain_mode = (data & 0b10_0000) != 0;
             },
             0x24 => {
                 self.channel5.fnum = (self.channel5.fnum & 0x00FF) + (((data & 0b1) as u32) << 8);
                 self.channel5.octave = ((data & 0b1110) >> 1) as u32;
-                self.channel5.debug_key_on = (data & 0b1_0000) != 0;
+                self.channel5.handle_key_on((data & 0b1_0000) != 0);
+                self.channel5.sustain_mode = (data & 0b10_0000) != 0;
             },
             0x25 => {
                 self.channel6.fnum = (self.channel6.fnum & 0x00FF) + (((data & 0b1) as u32) << 8);
                 self.channel6.octave = ((data & 0b1110) >> 1) as u32;
-                self.channel6.debug_key_on = (data & 0b1_0000) != 0;
+                self.channel6.handle_key_on((data & 0b1_0000) != 0);
+                self.channel6.sustain_mode = (data & 0b10_0000) != 0;
             },
             0x30 => {
                 self.channel1.volume = (data & 0xF) as u16;
+                let instrument_index = ((data & 0xF0) >> 4) as usize;
+                if instrument_index == 0 {
+                    self.channel1.load_patch(&self.custom_patch);
+                } else {
+                    let patch_index = (instrument_index - 1) * 8;
+                    self.channel1.load_patch(&DEFAULT_PATCH_TABLE[patch_index .. patch_index + 8]);
+                }
             },
             0x31 => {
                 self.channel2.volume = (data & 0xF) as u16;
+                let instrument_index = ((data & 0xF0) >> 4) as usize;
+                if instrument_index == 0 {
+                    self.channel2.load_patch(&self.custom_patch);
+                } else {
+                    let patch_index = (instrument_index - 1) * 8;
+                    self.channel2.load_patch(&DEFAULT_PATCH_TABLE[patch_index .. patch_index + 8]);
+                }
             },
             0x32 => {
                 self.channel3.volume = (data & 0xF) as u16;
+                let instrument_index = ((data & 0xF0) >> 4) as usize;
+                if instrument_index == 0 {
+                    self.channel3.load_patch(&self.custom_patch);
+                } else {
+                    let patch_index = (instrument_index - 1) * 8;
+                    self.channel3.load_patch(&DEFAULT_PATCH_TABLE[patch_index .. patch_index + 8]);
+                }
             },
             0x33 => {
                 self.channel4.volume = (data & 0xF) as u16;
+                let instrument_index = ((data & 0xF0) >> 4) as usize;
+                if instrument_index == 0 {
+                    self.channel4.load_patch(&self.custom_patch);
+                } else {
+                    let patch_index = (instrument_index - 1) * 8;
+                    self.channel4.load_patch(&DEFAULT_PATCH_TABLE[patch_index .. patch_index + 8]);
+                }
             },
             0x34 => {
                 self.channel5.volume = (data & 0xF) as u16;
+                let instrument_index = ((data & 0xF0) >> 4) as usize;
+                if instrument_index == 0 {
+                    self.channel5.load_patch(&self.custom_patch);
+                } else {
+                    let patch_index = (instrument_index - 1) * 8;
+                    self.channel5.load_patch(&DEFAULT_PATCH_TABLE[patch_index .. patch_index + 8]);
+                }
             },
             0x35 => {
                 self.channel6.volume = (data & 0xF) as u16;
+                let instrument_index = ((data & 0xF0) >> 4) as usize;
+                if instrument_index == 0 {
+                    self.channel6.load_patch(&self.custom_patch);
+                } else {
+                    let patch_index = (instrument_index - 1) * 8;
+                    self.channel6.load_patch(&DEFAULT_PATCH_TABLE[patch_index .. patch_index + 8]);
+                }
             },
             _ => {}
         }
