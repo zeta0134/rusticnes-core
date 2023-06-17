@@ -25,6 +25,8 @@ use mmc::fme7::YM2149F;
 use mmc::n163::Namco163Audio;
 use mmc::n163::n163_mixing_level;
 
+use mmc::vrc7::Vrc7Audio;
+
 const PPUCTRL: u16 = 0x2000;
 const PPUMASK: u16 = 0x2001;
 const PPUSTATUS: u16 = 0x2002;
@@ -372,6 +374,10 @@ pub struct NsfMapper {
     n163_ram_auto_increment: bool,
     n163_expansion_audio_chip: Namco163Audio,
     n163_mix: f32,
+
+    vrc7_enabled: bool,
+    vrc7_audio: Vrc7Audio,
+    vrc7_audio_register: u8,
 }
 
 impl NsfMapper {
@@ -453,6 +459,10 @@ impl NsfMapper {
             n163_ram_auto_increment: false,
             n163_expansion_audio_chip: Namco163Audio::new(),
             n163_mix: n163_mixing_level(0),
+
+            vrc7_enabled: nsf.header.vrc7(),
+            vrc7_audio: Vrc7Audio::new(),
+            vrc7_audio_register: 0,
 
             prg_rom_banks: prg_rom_banks,
 
@@ -1017,6 +1027,37 @@ impl NsfMapper {
         self.n163_expansion_audio_chip.clock();
     }
 
+    pub fn vrc7_output(&self) -> f32 {
+        if !self.vrc7_enabled {
+            return 0.0;
+        }
+        // TODO: This mix is extremely not final
+        let combined_vrc7_audio = self.vrc7_audio.output() as f32 / 256.0 / 6.0;
+        return combined_vrc7_audio;
+    }
+
+    pub fn clock_vrc7(&mut self) {
+        if !self.vrc7_enabled {
+            return;
+        }
+        self.vrc7_audio.clock();
+    }
+
+    pub fn vrc7_write(&mut self, address: u16, data: u8) {
+        if !self.vrc7_enabled {
+            return;
+        }
+        match address {
+            0x9010  => {
+                self.vrc7_audio_register = data
+            },
+            0x9030          => {
+                self.vrc7_audio.write(self.vrc7_audio_register, data);
+            },
+            _ => {}
+        }
+    }
+
     fn fade_weight(&self) -> f32 {
         match self.advance_mode {
             TrackAdvanceMode::Timer => {
@@ -1063,6 +1104,7 @@ impl Mapper for NsfMapper {
         self.clock_mmc5();
         self.clock_s5b();
         self.clock_n163();
+        self.clock_vrc7();
         self.current_cycles += 1;
 
         if self.detect_silence() {
@@ -1078,6 +1120,7 @@ impl Mapper for NsfMapper {
             self.mmc5_output() +
             self.s5b_output() +
             self.n163_output() + 
+            self.vrc7_output() + 
             nes_sample;
         return mixed_sample * self.fade_weight();
     }
@@ -1241,6 +1284,9 @@ impl Mapper for NsfMapper {
         }
         if self.n163_enabled {
             self.n163_write(address, data);
+        }
+        if self.vrc7_enabled {
+            self.vrc7_write(address, data);
         }
     }
 
