@@ -415,6 +415,8 @@ pub struct Vrc7AudioChannel {
     carrier_env_state: EnvState,
     modulator_env_level: u8,
     modulator_env_state: EnvState,
+    modulator_previous_0: i16,
+    modulator_previous_1: i16,
 
     key_on: bool,
     sustain_mode: bool,
@@ -425,6 +427,8 @@ pub struct Vrc7AudioChannel {
     last_edge: bool,
     debug_filter: filters::HighPassIIR,
     debug_disable: bool,
+
+    current_output: i16,
 }
 
 impl Vrc7AudioChannel {
@@ -488,6 +492,9 @@ impl Vrc7AudioChannel {
             modulator_env_level: 127,
             modulator_env_state: EnvState::Sustain,
 
+            modulator_previous_0: 0,
+            modulator_previous_1: 0,
+
             key_on: false,
             sustain_mode: false,
             channel_index: channel_index,
@@ -497,6 +504,8 @@ impl Vrc7AudioChannel {
             last_edge: false,
             debug_filter: filters::HighPassIIR::new(44100.0, 300.0),
             debug_disable: false,
+
+            current_output: 0,
         };
     }
 
@@ -771,22 +780,35 @@ impl Vrc7AudioChannel {
         self.update_modulator_adsr();
 
         self.clock_global_counter();
+
+        self.compute_output();
     }
 
-    pub fn output(&self) -> i16 {
-        let effective_mod_phase = ((self.modulator_phase - 1) & 0x7FFFF) as usize;
-        let mod_logsin = self.lookup_logsin(effective_mod_phase >> 9, self.modulator_rectified);
+    pub fn compute_output(&mut self) {
+        let feedback = if self.feedback != 0 {
+            (self.modulator_previous_0 + self.modulator_previous_1) >> (8 - self.feedback)
+        } else {
+            0
+        };
+        let effective_mod_phase = ((self.modulator_phase - 1) & 0x7FFFF) as i32;
+        let mod_logsin = self.lookup_logsin((((effective_mod_phase >> 9) + (feedback as i32)) & 0x7FFFF) as usize, self.modulator_rectified);
         let mod_output_attenuation = 32 * self.modulator_output_level;
         let mod_env_attenuation = 16 * self.modulator_env_level as u16;
         let mod_ksl_attenuation = 16 * self.ksl_lut[(self.modulator_key_level_scaling * 8 * 16) + (self.octave as usize * 16) + (self.fnum >> 5) as usize];
-        let mod_amount = self.lookup_exp(mod_logsin + mod_output_attenuation + mod_env_attenuation + mod_ksl_attenuation) & !0x1; // mask lowest bit
+        let mod_amount = self.lookup_exp(mod_logsin + mod_output_attenuation + mod_env_attenuation + mod_ksl_attenuation) >> 1; // drop lowest bit
+        self.modulator_previous_0 = self.modulator_previous_1;
+        self.modulator_previous_1 = mod_amount;
 
-        let effective_carrier_phase = ((((self.carrier_phase >> 9) as i32) + ((mod_amount as i32)) & 0x7FFFF)) as usize;
+        let effective_carrier_phase = ((((self.carrier_phase >> 9) as i32) + ((2 * mod_amount as i32)) & 0x7FFFF)) as usize;
         let carrier_logsin = self.lookup_logsin(effective_carrier_phase, self.carrier_rectified);
         let carrier_vol_attenuation = 128 * self.volume;
         let carrier_env_attenuation = 16 * self.carrier_env_level as u16;
         let carrier_ksl_attenuation = 16 * self.ksl_lut[(self.carrier_key_level_scaling * 8 * 16) + (self.octave as usize * 16) + (self.fnum >> 5) as usize];
-        return self.lookup_exp(carrier_logsin + carrier_vol_attenuation + carrier_env_attenuation + carrier_ksl_attenuation) / 16;
+        self.current_output = self.lookup_exp(carrier_logsin + carrier_vol_attenuation + carrier_env_attenuation + carrier_ksl_attenuation) / 16;
+    }
+
+    pub fn output(&self) -> i16 {
+        return self.current_output;
     }
 }
 
