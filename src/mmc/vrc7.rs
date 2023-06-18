@@ -7,6 +7,14 @@ use memoryblock::MemoryBlock;
 use mmc::mapper::*;
 use mmc::mirroring;
 
+use apu::AudioChannelState;
+use apu::PlaybackRate;
+use apu::Volume;
+use apu::Timbre;
+use apu::RingBuffer;
+use apu::filters;
+use apu::filters::DspFilter;
+
 pub struct Vrc7 {
     pub prg_rom: MemoryBlock,
     pub prg_ram: MemoryBlock,
@@ -240,6 +248,28 @@ impl Mapper for Vrc7 {
     fn load_sram(&mut self, sram_data: Vec<u8>) {
         *self.prg_ram.as_mut_vec() = sram_data;
     }
+
+    fn channels(&self) ->  Vec<& dyn AudioChannelState> {
+        let mut channels: Vec<& dyn AudioChannelState> = Vec::new();
+        channels.push(&self.audio.channel1);
+        channels.push(&self.audio.channel2);
+        channels.push(&self.audio.channel3);
+        channels.push(&self.audio.channel4);
+        channels.push(&self.audio.channel5);
+        channels.push(&self.audio.channel6);
+        return channels;
+    }
+    
+    fn channels_mut(&mut self) ->  Vec<&mut dyn AudioChannelState> {
+        let mut channels: Vec<&mut dyn AudioChannelState> = Vec::new();
+        channels.push(&mut self.audio.channel1);
+        channels.push(&mut self.audio.channel2);
+        channels.push(&mut self.audio.channel3);
+        channels.push(&mut self.audio.channel4);
+        channels.push(&mut self.audio.channel5);
+        channels.push(&mut self.audio.channel6);        
+        return channels;
+    }
 }
 
 // TODO: explore and see if we can't somehow make these constant while keeping them
@@ -360,10 +390,17 @@ pub struct Vrc7AudioChannel {
 
     key_on: bool,
     sustain_mode: bool,
+    channel_index: u8,
+
+    output_buffer: RingBuffer,
+    edge_buffer: RingBuffer,
+    last_edge: bool,
+    debug_filter: filters::HighPassIIR,
+    debug_disable: bool,
 }
 
 impl Vrc7AudioChannel {
-    pub fn new() -> Vrc7AudioChannel {
+    pub fn new(channel_index: u8) -> Vrc7AudioChannel {
         return Vrc7AudioChannel {
             logsin_lut: generate_logsin_lut(),
             exp_lut: generate_exp_table(),
@@ -424,6 +461,13 @@ impl Vrc7AudioChannel {
 
             key_on: false,
             sustain_mode: false,
+            channel_index: channel_index,
+
+            output_buffer: RingBuffer::new(32768),
+            edge_buffer: RingBuffer::new(32768),
+            last_edge: false,
+            debug_filter: filters::HighPassIIR::new(44100.0, 300.0),
+            debug_disable: false,
         };
     }
 
@@ -662,6 +706,9 @@ impl Vrc7AudioChannel {
 
     pub fn update(&mut self) {
         let carrier_step_size = ((self.fnum * MT_LUT[self.carrier_multiplier]) << self.octave) >> 1;
+        if self.carrier_phase + carrier_step_size > 0x7FFFF {
+            self.last_edge = true;
+        }
         self.carrier_phase = (self.carrier_phase + carrier_step_size) & 0x7FFFF;
 
         let modulator_step_size = ((self.fnum * MT_LUT[self.modulator_multiplier]) << self.octave) >> 1;
@@ -698,12 +745,12 @@ impl Vrc7Audio {
     pub fn new() -> Vrc7Audio {
          let thing = Vrc7Audio {
             custom_patch: [0u8; 8],
-            channel1: Vrc7AudioChannel::new(),
-            channel2: Vrc7AudioChannel::new(),
-            channel3: Vrc7AudioChannel::new(),
-            channel4: Vrc7AudioChannel::new(),
-            channel5: Vrc7AudioChannel::new(),
-            channel6: Vrc7AudioChannel::new(),
+            channel1: Vrc7AudioChannel::new(1),
+            channel2: Vrc7AudioChannel::new(2),
+            channel3: Vrc7AudioChannel::new(3),
+            channel4: Vrc7AudioChannel::new(4),
+            channel5: Vrc7AudioChannel::new(5),
+            channel6: Vrc7AudioChannel::new(6),
             current_channel: 1,
             delay_counter: 0,
         };
@@ -733,13 +780,25 @@ impl Vrc7Audio {
     }
 
     pub fn output(&self) -> i16 {
-        let combined_output = 
-            self.channel1.output() + 
-            self.channel2.output() + 
-            self.channel3.output() + 
-            self.channel4.output() + 
-            self.channel5.output() + 
-            self.channel6.output();
+        let mut combined_output = 0;
+        if !self.channel1.debug_disable {
+            combined_output += self.channel1.output();   
+        }
+        if !self.channel2.debug_disable {
+            combined_output += self.channel2.output();   
+        }
+        if !self.channel3.debug_disable {
+            combined_output += self.channel3.output();   
+        }
+        if !self.channel4.debug_disable {
+            combined_output += self.channel4.output();   
+        }
+        if !self.channel5.debug_disable {
+            combined_output += self.channel5.output();   
+        }
+        if !self.channel6.debug_disable {
+            combined_output += self.channel6.output();   
+        }
         return combined_output;
     }
 
@@ -878,5 +937,79 @@ impl Vrc7Audio {
             },
             _ => {}
         }
+    }
+
+    pub fn record_output(&mut self) {
+        self.channel1.record_current_output();
+        self.channel2.record_current_output();
+        self.channel3.record_current_output();
+        self.channel4.record_current_output();
+        self.channel5.record_current_output();
+        self.channel6.record_current_output();
+    }
+}
+
+impl AudioChannelState for Vrc7AudioChannel {
+    fn name(&self) -> String {
+        return format!("FM {}", self.channel_index);
+    }
+
+    fn chip(&self) -> String {
+        return "VRC7".to_string();
+    }
+
+    fn sample_buffer(&self) -> &RingBuffer {
+        return &self.output_buffer;
+    }
+
+    fn edge_buffer(&self) -> &RingBuffer {
+        return &self.edge_buffer;
+    }
+
+    fn record_current_output(&mut self) {
+        self.debug_filter.consume(self.output() as f32);
+        self.output_buffer.push((self.debug_filter.output() * -4.0) as i16);
+        self.edge_buffer.push(self.last_edge as i16);
+        self.last_edge = false;
+    }
+
+    fn min_sample(&self) -> i16 {
+        return -2048;
+    }
+
+    fn max_sample(&self) -> i16 {
+        return 2048;
+    }
+
+    fn muted(&self) -> bool {
+        return self.debug_disable;
+    }
+
+    fn mute(&mut self) {
+        self.debug_disable = true;
+    }
+
+    fn unmute(&mut self) {
+        self.debug_disable = false;
+    }
+
+    fn playing(&self) -> bool {
+        return 
+            self.fnum > 0 && 
+            self.carrier_env_level < 124;
+    }
+
+    fn rate(&self) -> PlaybackRate {
+        let effective_frequency = (49716.0 * self.fnum as f32) / (2.0_f32.powf(19.0 - self.octave as f32));
+        return PlaybackRate::FundamentalFrequency {frequency: effective_frequency};
+    }
+
+    fn volume(&self) -> Option<Volume> {
+        let approximate_volume = self.lookup_exp(self.lookup_logsin(0) + 128 * self.volume + 16 * self.carrier_env_level as u16);
+        return Some(Volume::VolumeIndex{ index: approximate_volume as usize, max: 12 }); //  max chosen arbitrary to get a decent-ish relative scale
+    }
+
+    fn timbre(&self) -> Option<Timbre> {
+        return Some(Timbre::PatchIndex{ index: self.instrument_index as usize, max: 15 });
     }
 }

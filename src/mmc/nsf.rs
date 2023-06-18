@@ -1156,6 +1156,16 @@ impl Mapper for NsfMapper {
             n163_channels.truncate(enabled_channels);
             channels.append(&mut n163_channels);
         }
+        if self.vrc7_enabled {
+            let mut vrc7_channels: Vec<& dyn AudioChannelState> = Vec::new();
+            vrc7_channels.push(&self.vrc7_audio.channel1);
+            vrc7_channels.push(&self.vrc7_audio.channel2);
+            vrc7_channels.push(&self.vrc7_audio.channel3);
+            vrc7_channels.push(&self.vrc7_audio.channel4);
+            vrc7_channels.push(&self.vrc7_audio.channel5);
+            vrc7_channels.push(&self.vrc7_audio.channel6);
+            channels.append(&mut vrc7_channels);
+        }
         return channels;
     }
 
@@ -1190,6 +1200,16 @@ impl Mapper for NsfMapper {
             n163_channels.truncate(enabled_channels);
             channels.append(&mut n163_channels);
         }
+        if self.vrc7_enabled {
+            let mut vrc7_channels: Vec<&mut dyn AudioChannelState> = Vec::new();
+            vrc7_channels.push(&mut self.vrc7_audio.channel1);
+            vrc7_channels.push(&mut self.vrc7_audio.channel2);
+            vrc7_channels.push(&mut self.vrc7_audio.channel3);
+            vrc7_channels.push(&mut self.vrc7_audio.channel4);
+            vrc7_channels.push(&mut self.vrc7_audio.channel5);
+            vrc7_channels.push(&mut self.vrc7_audio.channel6);
+            channels.append(&mut vrc7_channels);
+        }
         return channels;
     }
 
@@ -1209,6 +1229,9 @@ impl Mapper for NsfMapper {
         }
         if self.n163_enabled {
             self.n163_expansion_audio_chip.record_output();
+        }
+        if self.vrc7_enabled {
+            self.vrc7_audio.record_output();
         }
         self.last_sample = self.current_sample;
         self.current_sample = self.mix_expansion_audio(nes_sample);
