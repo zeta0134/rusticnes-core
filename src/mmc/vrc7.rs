@@ -475,14 +475,26 @@ impl Vrc7AudioChannel {
         };
     }
 
-    pub fn lookup_logsin(&self, i: usize) -> u16 {
+    pub fn lookup_logsin(&self, i: usize, wave_rectification: bool) -> u16 {
         let quadrant = (i & 0x300) >> 8;
         let index = i & 0xFF;
         match  quadrant {
             0 => self.logsin_lut[index],
             1 => self.logsin_lut[255 - index],
-            2 => 0x8000 | self.logsin_lut[index],
-            3 => 0x8000 | self.logsin_lut[255 - index],
+            2 => {
+                if wave_rectification {
+                    self.logsin_lut[0]
+                } else {
+                    0x8000 | self.logsin_lut[index]
+                }
+            },
+            3 => {
+                if wave_rectification {
+                    self.logsin_lut[0]
+                } else {
+                    0x8000 | self.logsin_lut[255 - index]
+                }
+            },
             _ => {0} // should be unreachable
         }
     }
@@ -738,10 +750,10 @@ impl Vrc7AudioChannel {
 
     pub fn output(&self) -> i16 {
         let effective_mod_phase = (self.modulator_phase - 1) & 0x7FFFF;
-        let mod_logsin = self.lookup_logsin((effective_mod_phase >> 9) as usize);
+        let mod_logsin = self.lookup_logsin((effective_mod_phase >> 9) as usize, self.modulator_rectified);
         let mod_amount = self.lookup_exp(mod_logsin + 32 * self.modulator_output_level + 16 * self.modulator_env_level as u16) & !0x1; // mask lowest bit
         let effective_carrier_phase = ((((self.carrier_phase >> 9) as i32) + ((mod_amount as i32)) & 0x7FFFF)) as usize;
-        return self.lookup_exp(self.lookup_logsin(effective_carrier_phase) + 128 * self.volume + 16 * self.carrier_env_level as u16) / 16;
+        return self.lookup_exp(self.lookup_logsin(effective_carrier_phase, self.carrier_rectified) + 128 * self.volume + 16 * self.carrier_env_level as u16) / 16;
     }
 }
 
@@ -1023,7 +1035,7 @@ impl AudioChannelState for Vrc7AudioChannel {
     }
 
     fn volume(&self) -> Option<Volume> {
-        let approximate_volume = self.lookup_exp(self.lookup_logsin(0) + 128 * self.volume + 16 * self.carrier_env_level as u16);
+        let approximate_volume = self.lookup_exp(self.lookup_logsin(0, false) + 128 * self.volume + 16 * self.carrier_env_level as u16) + 1; // If we're playing at all, display *something*
         return Some(Volume::VolumeIndex{ index: approximate_volume as usize, max: 12 }); //  max chosen arbitrary to get a decent-ish relative scale
     }
 
