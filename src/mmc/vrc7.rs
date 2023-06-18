@@ -709,7 +709,7 @@ impl Vrc7AudioChannel {
             self.carrier_env_state = EnvState::Sustain;
         }
 
-        let rate = if self.key_on == false {
+        let rate = if self.key_on == false {            
             // release state
             if self.carrier_sustain_enabled {
                 self.carrier_release_rate
@@ -724,7 +724,7 @@ impl Vrc7AudioChannel {
                 EnvState::Attack => {self.carrier_attack_rate },
                 EnvState::Decay => {self.carrier_decay_rate },
                 EnvState::Sustain => {
-                    if self.sustain_mode { 0 } else { self.carrier_release_rate }
+                    if self.carrier_sustain_enabled { 0 } else { self.carrier_release_rate }
                 }
             }
         };
@@ -768,7 +768,7 @@ impl Vrc7AudioChannel {
             EnvState::Attack => {self.modulator_attack_rate },
             EnvState::Decay => {self.modulator_decay_rate },
             EnvState::Sustain => {
-                if self.sustain_mode { 0 } else { self.modulator_release_rate }
+                if self.modulator_sustain_enabled { 0 } else { self.modulator_release_rate }
             }
         };
 
