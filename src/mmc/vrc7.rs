@@ -270,6 +270,10 @@ impl Mapper for Vrc7 {
         channels.push(&mut self.audio.channel6);        
         return channels;
     }
+
+    fn record_expansion_audio_output(&mut self, _nes_sample: f32) {
+        self.audio.record_output();
+    }
 }
 
 // TODO: explore and see if we can't somehow make these constant while keeping them
@@ -559,21 +563,34 @@ impl Vrc7AudioChannel {
         let result = given_rate * 4 + rate_ks;
 
         // I am rather unsure about this!
-        return result & 63;
+        if result > 59 {
+            return 59;
+        }
+        return result;
     }
 
     fn shall_we_advance_the_adsr_today(&self, given_rate: u8, ks_enabled: bool) -> bool {
         let rate = self.effective_rate(given_rate, ks_enabled);
-        let shift_amount = 13 - (rate / 4);
-        let table_index = ((rate & 0x3) * 8) as usize;
 
-        let shifted_toggled_bits = self.global_counter_toggled_bits >> shift_amount;
-        if (shifted_toggled_bits & 0x1) != 0 {
-            let row_index = (shifted_toggled_bits & 0x7) as usize;
+        let table_index = ((rate & 0x3) * 8) as usize;
+        if rate < 56 {
+            let shift_amount = 13 - (rate / 4);
+
+            let shifted_toggled_bits = self.global_counter_toggled_bits >> shift_amount;
+            if (shifted_toggled_bits & 0x1) != 0 {
+                let row_index = (shifted_toggled_bits & 0x7) as usize;
+                if ADSR_RATE_LUT[table_index + row_index] == 1 {
+                    return true;
+                }
+            }
+        } else {
+            // weird 16 sample period
+            let row_index = ((self.global_counter & 0xC >> 1) | (self.global_counter & 1)) as usize;
             if ADSR_RATE_LUT[table_index + row_index] == 1 {
                 return true;
             }
         }
+        
         // Not a chance!
         return false;
     }
@@ -625,7 +642,7 @@ impl Vrc7AudioChannel {
         };
 
         if self.shall_we_advance_the_adsr_today(rate, self.carrier_key_scaling) {
-            if self.carrier_env_state == EnvState::Attack && self.key_on == true {
+            if (self.carrier_env_state == EnvState::Attack) && self.key_on == true {
                 if (rate == 0) || (rate == 15) {
                     // Do absolutely nothing. An attack of 0 produces no effect.
                     // An attack of 15 is usually instantly transitioned to decay before we
@@ -700,7 +717,6 @@ impl Vrc7AudioChannel {
             // Note: carrier will set modulator state when switching from damp -> attack
             self.carrier_env_state = EnvState::Damp;
         }
-
         self.key_on = new_key_on;
     }
 
@@ -754,6 +770,8 @@ impl Vrc7Audio {
             current_channel: 1,
             delay_counter: 0,
         };
+
+        //ugly_debug_thing();
 
         return thing;
     }
@@ -877,61 +895,61 @@ impl Vrc7Audio {
             },
             0x30 => {
                 self.channel1.volume = (data & 0xF) as u16;
-                let instrument_index = ((data & 0xF0) >> 4) as usize;
-                if instrument_index == 0 {
+                self.channel1.instrument_index = (data & 0xF0) >> 4;
+                if self.channel1.instrument_index == 0 {
                     self.channel1.load_patch(&self.custom_patch);
                 } else {
-                    let patch_index = (instrument_index - 1) * 8;
+                    let patch_index = ((self.channel1.instrument_index - 1) * 8) as usize;
                     self.channel1.load_patch(&DEFAULT_PATCH_TABLE[patch_index .. patch_index + 8]);
-                }
+                }                
             },
             0x31 => {
                 self.channel2.volume = (data & 0xF) as u16;
-                let instrument_index = ((data & 0xF0) >> 4) as usize;
-                if instrument_index == 0 {
+                self.channel2.instrument_index = (data & 0xF0) >> 4;
+                if self.channel2.instrument_index == 0 {
                     self.channel2.load_patch(&self.custom_patch);
                 } else {
-                    let patch_index = (instrument_index - 1) * 8;
+                    let patch_index = ((self.channel2.instrument_index - 1) * 8) as usize;
                     self.channel2.load_patch(&DEFAULT_PATCH_TABLE[patch_index .. patch_index + 8]);
                 }
             },
             0x32 => {
                 self.channel3.volume = (data & 0xF) as u16;
-                let instrument_index = ((data & 0xF0) >> 4) as usize;
-                if instrument_index == 0 {
+                self.channel3.instrument_index = (data & 0xF0) >> 4;
+                if self.channel3.instrument_index == 0 {
                     self.channel3.load_patch(&self.custom_patch);
                 } else {
-                    let patch_index = (instrument_index - 1) * 8;
+                    let patch_index = ((self.channel3.instrument_index - 1) * 8) as usize;
                     self.channel3.load_patch(&DEFAULT_PATCH_TABLE[patch_index .. patch_index + 8]);
                 }
             },
             0x33 => {
                 self.channel4.volume = (data & 0xF) as u16;
-                let instrument_index = ((data & 0xF0) >> 4) as usize;
-                if instrument_index == 0 {
+                self.channel4.instrument_index = (data & 0xF0) >> 4;
+                if self.channel4.instrument_index == 0 {
                     self.channel4.load_patch(&self.custom_patch);
                 } else {
-                    let patch_index = (instrument_index - 1) * 8;
+                    let patch_index = ((self.channel4.instrument_index - 1) * 8) as usize;
                     self.channel4.load_patch(&DEFAULT_PATCH_TABLE[patch_index .. patch_index + 8]);
                 }
             },
             0x34 => {
                 self.channel5.volume = (data & 0xF) as u16;
-                let instrument_index = ((data & 0xF0) >> 4) as usize;
-                if instrument_index == 0 {
+                self.channel5.instrument_index = (data & 0xF0) >> 4;
+                if self.channel5.instrument_index == 0 {
                     self.channel5.load_patch(&self.custom_patch);
                 } else {
-                    let patch_index = (instrument_index - 1) * 8;
+                    let patch_index = ((self.channel5.instrument_index - 1) * 8) as usize;
                     self.channel5.load_patch(&DEFAULT_PATCH_TABLE[patch_index .. patch_index + 8]);
                 }
             },
             0x35 => {
                 self.channel6.volume = (data & 0xF) as u16;
-                let instrument_index = ((data & 0xF0) >> 4) as usize;
-                if instrument_index == 0 {
+                self.channel6.instrument_index = (data & 0xF0) >> 4;
+                if self.channel6.instrument_index == 0 {
                     self.channel6.load_patch(&self.custom_patch);
                 } else {
-                    let patch_index = (instrument_index - 1) * 8;
+                    let patch_index = ((self.channel6.instrument_index - 1) * 8) as usize;
                     self.channel6.load_patch(&DEFAULT_PATCH_TABLE[patch_index .. patch_index + 8]);
                 }
             },
@@ -1013,3 +1031,4 @@ impl AudioChannelState for Vrc7AudioChannel {
         return Some(Timbre::PatchIndex{ index: self.instrument_index as usize, max: 15 });
     }
 }
+
