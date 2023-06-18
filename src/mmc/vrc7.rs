@@ -106,7 +106,9 @@ impl Mapper for Vrc7 {
     }
 
     fn mix_expansion_audio(&self, nes_sample: f32) -> f32 {
-        let combined_vrc7_audio = self.audio.output() as f32 / 256.0 / 6.0;
+        let combined_vrc7_audio = self.audio.output() as f32 
+            / 256.0 // to go from +256/-256 to +1/-1
+            / 6.0;  // number of vrc7 channels
         return combined_vrc7_audio + nes_sample;
     }
 
@@ -320,6 +322,35 @@ fn generate_ksl_lut() -> Vec<u16> {
     return ksl_lut;
 }
 
+fn generate_am_lut() -> Vec<u16> {
+    let mut am_lut = Vec::new();
+    for i in 0 .. 14 {
+        match i {
+            0 => am_lut.append(&mut vec!(i; 11)),
+            13 => am_lut.append(&mut vec!(i; 3)),
+            _ => am_lut.append(&mut vec!(i; 8)),
+        }
+    }
+    for i in (0 .. 13).rev() {
+        match i {
+            0 => am_lut.append(&mut vec!(i; 4)),
+            _ => am_lut.append(&mut vec!(i; 8)),
+        }
+    }    
+    return am_lut;   
+}
+
+pub const FM_LFO_LUT: [i16; 8 * 8] = [
+    0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 1, 0, 0, 0,-1, 0,
+    0, 1, 2, 1, 0,-1,-2,-1,
+    0, 1, 3, 1, 0,-1,-3,-1,
+    0, 2, 4, 2, 0,-2,-4,-2,
+    0, 2, 5, 2, 0,-2,-5,-2,
+    0, 3, 6, 3, 0,-3,-6,-3,
+    0, 3, 7, 3, 0,-3,-7,-3,
+];
+
 pub const DEFAULT_PATCH_TABLE: [u8; 8 * 15] = [
     0x03, 0x21, 0x05, 0x06, 0xE8, 0x81, 0x42, 0x27, // Buzzy Bell
     0x13, 0x41, 0x14, 0x0D, 0xD8, 0xF6, 0x23, 0x12, // Guitar
@@ -359,6 +390,7 @@ pub struct Vrc7AudioChannel {
     logsin_lut: Vec<u16>,
     exp_lut: Vec<u16>,
     ksl_lut: Vec<u16>,
+    am_lut: Vec<u16>,
     
     fnum: u32,
     octave: u32,
@@ -427,6 +459,10 @@ pub struct Vrc7AudioChannel {
     last_edge: bool,
     debug_filter: filters::HighPassIIR,
     debug_disable: bool,
+    am_pos: usize,
+    am_counter: u8,
+    fm_pos: usize,
+    fm_counter: u16,
 
     current_output: i16,
 }
@@ -437,6 +473,7 @@ impl Vrc7AudioChannel {
             logsin_lut: generate_logsin_lut(),
             exp_lut: generate_exp_table(),
             ksl_lut: generate_ksl_lut(),
+            am_lut: generate_am_lut(),
 
             fnum: 0,
             octave: 0,
@@ -504,6 +541,11 @@ impl Vrc7AudioChannel {
             last_edge: false,
             debug_filter: filters::HighPassIIR::new(44100.0, 300.0),
             debug_disable: false,
+
+            am_pos: 0,
+            am_counter: 0,
+            fm_pos: 0,
+            fm_counter: 0,
 
             current_output: 0,
         };
@@ -767,20 +809,51 @@ impl Vrc7AudioChannel {
     }
 
     pub fn update(&mut self) {
-        let carrier_step_size = ((self.fnum * MT_LUT[self.carrier_multiplier]) << self.octave) >> 1;
+        let carrier_vibrato = if self.carrier_vibrato { 
+            let upper_fnum = (self.fnum >> 6) as usize;
+            FM_LFO_LUT[8 * upper_fnum + self.fm_pos]
+        } else {
+            0
+        };
+        let carrier_step_size = (((2 * (self.fnum as i16) + carrier_vibrato) as u32 * MT_LUT[self.carrier_multiplier]) << self.octave) >> 2;
         if self.carrier_phase + carrier_step_size > 0x7FFFF {
             self.last_edge = true;
         }
         self.carrier_phase = (self.carrier_phase + carrier_step_size) & 0x7FFFF;
 
-        let modulator_step_size = ((self.fnum * MT_LUT[self.modulator_multiplier]) << self.octave) >> 1;
+        let modulator_vibrato = if self.modulator_vibrato { 
+            let upper_fnum = (self.fnum >> 6) as usize;
+            FM_LFO_LUT[8 * upper_fnum + self.fm_pos]
+        } else {
+            0
+        };
+        let modulator_step_size = (((2 * (self.fnum as i16) + modulator_vibrato) as u32 * MT_LUT[self.modulator_multiplier]) << self.octave) >> 2;        
         self.modulator_phase = (self.modulator_phase + modulator_step_size) & 0x7FFFF;        
+
+        if self.am_counter == 0 {
+            self.am_pos += 1;
+            if self.am_pos >= 210 {
+                self.am_pos = 0;
+            }
+            self.am_counter = 63;
+        } else {
+            self.am_counter -= 1;
+        }
+
+        if self.fm_counter == 0 {
+            self.fm_pos += 1;
+            if self.fm_pos >= 8 {
+                self.fm_pos = 0;
+            }
+            self.fm_counter = 1023;
+        } else {
+            self.fm_counter -= 1;
+        }
 
         self.update_carrier_adsr();
         self.update_modulator_adsr();
 
         self.clock_global_counter();
-
         self.compute_output();
     }
 
@@ -795,7 +868,8 @@ impl Vrc7AudioChannel {
         let mod_output_attenuation = 32 * self.modulator_output_level;
         let mod_env_attenuation = 16 * self.modulator_env_level as u16;
         let mod_ksl_attenuation = 16 * self.ksl_lut[(self.modulator_key_level_scaling * 8 * 16) + (self.octave as usize * 16) + (self.fnum >> 5) as usize];
-        let mod_amount = self.lookup_exp(mod_logsin + mod_output_attenuation + mod_env_attenuation + mod_ksl_attenuation) >> 1; // drop lowest bit
+        let mod_am_attenuation = if self.modulator_tremolo { 16 * self.am_lut[self.am_pos] } else {0};
+        let mod_amount = self.lookup_exp(mod_logsin + mod_output_attenuation + mod_env_attenuation + mod_ksl_attenuation + mod_am_attenuation) >> 1; // drop lowest bit
         self.modulator_previous_0 = self.modulator_previous_1;
         self.modulator_previous_1 = mod_amount;
 
@@ -804,7 +878,8 @@ impl Vrc7AudioChannel {
         let carrier_vol_attenuation = 128 * self.volume;
         let carrier_env_attenuation = 16 * self.carrier_env_level as u16;
         let carrier_ksl_attenuation = 16 * self.ksl_lut[(self.carrier_key_level_scaling * 8 * 16) + (self.octave as usize * 16) + (self.fnum >> 5) as usize];
-        self.current_output = self.lookup_exp(carrier_logsin + carrier_vol_attenuation + carrier_env_attenuation + carrier_ksl_attenuation) / 16;
+        let carrier_am_attenuation = if self.carrier_tremolo { 16 * self.am_lut[self.am_pos] } else {0};
+        self.current_output = self.lookup_exp(carrier_logsin + carrier_vol_attenuation + carrier_env_attenuation + carrier_ksl_attenuation + carrier_am_attenuation) / 16;
     }
 
     pub fn output(&self) -> i16 {
