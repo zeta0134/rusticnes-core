@@ -87,6 +87,10 @@ impl Vrc7 {
     }
 }
 
+pub fn amplitude_from_db(db: f32) -> f32 {
+    return f32::powf(10.0, db / 20.0);
+}
+
 impl Mapper for Vrc7 {
     fn print_debug_status(&self) {
         println!("======= VRC7 =======");
@@ -109,7 +113,20 @@ impl Mapper for Vrc7 {
         let combined_vrc7_audio = self.audio.output() as f32 
             / 256.0 // to go from +256/-256 to +1/-1
             / 6.0;  // number of vrc7 channels
-        return combined_vrc7_audio + nes_sample;
+
+        // I measured the above mix with the db_vrc7.nes test from rainwarrior's 
+        // audio survey, found here https://forums.nesdev.org/viewtopic.php?t=17741
+        // and found that the VRC7 is 6.23 dB louder than the APU. 
+
+        // The NSFe defaults the VRC7 to +11 dB relative to the APU:
+        // https://www.nesdev.org/wiki/NSFe#mixe
+        // This also aligns neatly with several tests in that forum thread, so it's what
+        // I'll run with here.
+        let stock_vrc7_db = 6.23;
+        let desired_vrc7_db = 11.00;
+        let mixed_vrc7_audio = combined_vrc7_audio * amplitude_from_db(desired_vrc7_db - stock_vrc7_db);
+
+        return mixed_vrc7_audio + nes_sample;
     }
 
     fn irq_flag(&self) -> bool {

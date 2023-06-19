@@ -68,6 +68,10 @@ const BUTTON_DOWN: u8   = 1 << 2;
 const BUTTON_LEFT: u8   = 1 << 1;
 const BUTTON_RIGHT: u8  = 1 << 0;
 
+pub fn amplitude_from_db(db: f32) -> f32 {
+    return f32::powf(10.0, db / 20.0);
+}
+
 fn wait_for_ppu_ready() -> Opcode {
     return List(vec![
         Label(String::from("vwait1")),
@@ -1031,9 +1035,13 @@ impl NsfMapper {
         if !self.vrc7_enabled {
             return 0.0;
         }
-        // TODO: This mix is extremely not final
         let combined_vrc7_audio = self.vrc7_audio.output() as f32 / 256.0 / 6.0;
-        return combined_vrc7_audio;
+
+        let stock_vrc7_db = 6.23;
+        let desired_vrc7_db = 11.00;
+        let mixed_vrc7_audio = combined_vrc7_audio * amplitude_from_db(desired_vrc7_db - stock_vrc7_db);
+
+        return mixed_vrc7_audio;
     }
 
     pub fn clock_vrc7(&mut self) {
