@@ -1182,7 +1182,8 @@ impl AudioChannelState for Vrc7AudioChannel {
     fn playing(&self) -> bool {
         return 
             self.fnum > 0 && 
-            self.carrier_env_level < 124;
+            self.carrier_env_level < 120 &&
+            self.volume < 0xF;
     }
 
     fn rate(&self) -> PlaybackRate {
