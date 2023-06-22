@@ -674,7 +674,33 @@ impl Vrc7AudioChannel {
         return result;
     }
 
-    fn shall_we_advance_the_adsr_today(&self, given_rate: u8, ks_enabled: bool) -> bool {
+    fn advance_attack(&self, given_rate: u8, ks_enabled: bool, current_env_level: u8) -> u8  {
+        let rate = self.effective_rate(given_rate, ks_enabled);
+        match rate / 4 {
+            0 | 15 => {}, // Do nothing
+            1 ..= 11 => {
+                let shift = 13 - (rate / 4);
+                let mask = ((1 << shift) - 1) & !3; // ignore lower 2 bits!
+                if (self.global_counter & mask) == 0 {
+                    let table_index = ((rate & 0x3) * 8) as usize;
+                    let row_index = ((self.global_counter >> shift) & 7) as usize;
+                    if ADSR_RATE_LUT[table_index + row_index] == 1 {
+                        return current_env_level - (current_env_level >> 4) - 1;
+                    }
+                }
+            },
+            12 ..= 14 => {
+                let table_index = ((rate & 0x3) * 8) as usize;
+                let row_index = ((self.global_counter & 0xC) >> 1) as usize;
+                let m = 16 - (rate / 4) - ADSR_RATE_LUT[table_index + row_index];
+                return current_env_level - (current_env_level >> m) - 1;
+            }
+            _ => {} // Should be unreachable
+        }
+        return current_env_level;
+    }
+
+    fn shall_we_advance_the_decay_today(&self, given_rate: u8, ks_enabled: bool) -> bool {
         let rate = self.effective_rate(given_rate, ks_enabled);
 
         let table_index = ((rate & 0x3) * 8) as usize;
@@ -699,6 +725,7 @@ impl Vrc7AudioChannel {
         // Not a chance!
         return false;
     }
+
 
     fn update_carrier_adsr(&mut self) {
         let max_env = (self.carrier_env_level >> 2) ==  0x1F;
@@ -746,29 +773,20 @@ impl Vrc7AudioChannel {
             }
         };
 
-        if self.shall_we_advance_the_adsr_today(rate, self.carrier_key_scaling) {
-            if (self.carrier_env_state == EnvState::Attack) && self.key_on == true {
-                if (rate == 0) || (rate == 15) {
-                    // Do absolutely nothing. An attack of 0 produces no effect.
-                    // An attack of 15 is usually instantly transitioned to decay before we
-                    // get here, but if the custom patch is changed after a key_on event, this
-                    // is the behavior to apply.
-                } else {
-                    self.carrier_env_level = self.carrier_env_level - (self.carrier_env_level >> 4) - 1;
+        if (self.carrier_env_state == EnvState::Attack) && self.key_on == true {
+            self.carrier_env_level = self.advance_attack(rate, self.carrier_key_scaling, self.carrier_env_level);
+        } else if self.shall_we_advance_the_decay_today(rate, self.carrier_key_scaling) {
+            if rate == 0 {
+                // Do absolutely nothing
+            } else if rate == 15 {
+                // Increase the envelope two times (capping at 127)
+                self.carrier_env_level += 2;
+                if self.carrier_env_level > 127 {
+                    self.carrier_env_level = 127;
                 }
-            } else {
-                if rate == 0 {
-                    // Do absolutely nothing
-                } else if rate == 15 {
-                    // Increase the envelope two times (capping at 127)
-                    self.carrier_env_level += 2;
-                    if self.carrier_env_level > 127 {
-                        self.carrier_env_level = 127;
-                    }
-                } else if self.carrier_env_level < 127 {
-                    // Increase the envelope just once (usual case)
-                    self.carrier_env_level += 1;
-                }
+            } else if self.carrier_env_level < 127 {
+                // Increase the envelope just once (usual case)
+                self.carrier_env_level += 1;
             }
         }
     }
@@ -789,29 +807,20 @@ impl Vrc7AudioChannel {
             }
         };
 
-        if self.shall_we_advance_the_adsr_today(rate, self.modulator_key_scaling) {
-            if self.modulator_env_state == EnvState::Attack {
-                if (rate == 0) || (rate == 15) {
-                    // Do absolutely nothing. An attack of 0 produces no effect.
-                    // An attack of 15 is usually instantly transitioned to decay before we
-                    // get here, but if the custom patch is changed after a key_on event, this
-                    // is the behavior to apply.
-                } else {
-                    self.modulator_env_level = self.modulator_env_level - (self.modulator_env_level >> 4) - 1;
+        if (self.modulator_env_state == EnvState::Attack) && self.key_on == true {
+            self.modulator_env_level = self.advance_attack(rate, self.modulator_key_scaling, self.modulator_env_level);
+        } else if self.shall_we_advance_the_decay_today(rate, self.modulator_key_scaling) {
+            if rate == 0 {
+                // Do absolutely nothing
+            } else if rate == 15 {
+                // Increase the envelope two times (capping at 127)
+                self.modulator_env_level += 2;
+                if self.modulator_env_level > 127 {
+                    self.modulator_env_level = 127;
                 }
-            } else {
-                if rate == 0 {
-                    // Do absolutely nothing
-                } else if rate == 15 {
-                    // Increase the envelope two times (capping at 127)
-                    self.modulator_env_level += 2;
-                    if self.modulator_env_level > 127 {
-                        self.modulator_env_level = 127;
-                    }
-                } else if self.modulator_env_level < 127 {
-                    // Increase the envelope just once (usual case)
-                    self.modulator_env_level += 1;
-                }
+            } else if self.modulator_env_level < 127 {
+                // Increase the envelope just once (usual case)
+                self.modulator_env_level += 1;
             }
         }
     }
