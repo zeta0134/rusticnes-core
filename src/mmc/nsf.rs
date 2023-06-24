@@ -327,6 +327,7 @@ enum TrackAdvanceMode {
 
 pub struct NsfMapper {
     prg: MemoryBlock,
+    prg_ram: Vec<u8>,
     chr: Vec<u8>,
     nsf_player: Vec<u8>,
     header: NsfHeader,
@@ -472,6 +473,7 @@ impl NsfMapper {
 
             mirroring: Mirroring::FourScreen,
             vram: vec![0u8; 0x1000],
+            prg_ram: vec![0u8; 0x2000],
         };
 
         mapper.vrc6_write(0x9003, 0x00); // some NSF files expect VRC6 to already be enabled, so do that
@@ -1267,6 +1269,7 @@ impl Mapper for NsfMapper {
             PLAYER_PLAYBACK_COUNTER => Some(self.playback_counter),
             PLAYER_TRACK_SELECT => Some(self.current_track - 1),
             PLAYER_ORIGIN ..= PLAYER_END => Some(self.nsf_player[(address - PLAYER_ORIGIN) as usize]),
+            0x6000 ..= 0x7FFF => Some(self.prg_ram[(address - 0x6000) as usize]),
             0x8000 ..= 0x8FFF => self.prg.banked_read(0x1000, self.prg_rom_banks[0], (address - 0x8000) as usize),
             0x9000 ..= 0x9FFF => self.prg.banked_read(0x1000, self.prg_rom_banks[1], (address - 0x9000) as usize),
             0xA000 ..= 0xAFFF => self.prg.banked_read(0x1000, self.prg_rom_banks[2], (address - 0xA000) as usize),
@@ -1302,6 +1305,7 @@ impl Mapper for NsfMapper {
             0x5FFD => {self.prg_rom_banks[5] = data as usize},
             0x5FFE => {self.prg_rom_banks[6] = data as usize},
             0x5FFF => {self.prg_rom_banks[7] = data as usize},
+            0x6000 ..= 0x7FFF => {self.prg_ram[(address - 0x6000) as usize] = data},
             _ => {}
         }
         if self.vrc6_enabled {
