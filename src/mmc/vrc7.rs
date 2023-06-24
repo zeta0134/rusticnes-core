@@ -199,7 +199,7 @@ impl Mapper for Vrc7 {
                         // do nothing (we may already have one in flight)
                         if self.irq_enable {
                             self.irq_counter = self.irq_latch;
-                            self.irq_scanline_prescaler = 341;                    
+                            self.irq_scanline_prescaler = 344; // we are also clocked on this cycle, so +3 here to undo that for timing
                         }
 
                     },
