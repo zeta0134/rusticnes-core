@@ -459,7 +459,6 @@ pub struct Vrc7AudioChannel {
 
     // Internal State
     global_counter: u32,
-    global_counter_toggled_bits: u32,
     carrier_env_level: u8,
     carrier_env_state: EnvState,
     modulator_env_level: u8,
@@ -539,7 +538,6 @@ impl Vrc7AudioChannel {
 
             // Internal state
             global_counter: 0,
-            global_counter_toggled_bits: 0,
 
             carrier_env_level: 127,
             carrier_env_state: EnvState::Sustain,
@@ -610,9 +608,7 @@ impl Vrc7AudioChannel {
     }
 
     pub fn clock_global_counter(&mut self) {
-        let old_value = self.global_counter;
         self.global_counter += 1;
-        self.global_counter_toggled_bits = old_value ^ self.global_counter;
     }
 
     pub fn load_patch(&mut self, patch: &[u8]) {
@@ -707,9 +703,9 @@ impl Vrc7AudioChannel {
         if rate < 56 {
             let shift_amount = 13 - (rate / 4);
 
-            let shifted_toggled_bits = self.global_counter_toggled_bits >> shift_amount;
-            if (shifted_toggled_bits & 0x1) != 0 {
-                let row_index = (shifted_toggled_bits & 0x7) as usize;
+            let mask = (1 << shift_amount) - 1;
+            if (self.global_counter & mask) == 0 {
+                let row_index = ((self.global_counter >> shift_amount) & 0x7) as usize;
                 if ADSR_RATE_LUT[table_index + row_index] == 1 {
                     return true;
                 }
@@ -755,10 +751,10 @@ impl Vrc7AudioChannel {
 
         let rate = if self.key_on == false {            
             // release state
-            if self.carrier_sustain_enabled {
-                self.carrier_release_rate
-            } else if self.sustain_mode  {
+            if self.sustain_mode  {
                 5
+            } else  if self.carrier_sustain_enabled {
+                self.carrier_release_rate
             } else {
                 7
             }
@@ -798,12 +794,16 @@ impl Vrc7AudioChannel {
             self.modulator_env_state = EnvState::Sustain;
         }
 
-        let rate = match self.modulator_env_state {
-            EnvState::Damp => {12},
-            EnvState::Attack => {self.modulator_attack_rate },
-            EnvState::Decay => {self.modulator_decay_rate },
-            EnvState::Sustain => {
-                if self.modulator_sustain_enabled { 0 } else { self.modulator_release_rate }
+        let rate = if self.key_on == false {
+            0
+        } else {
+            match self.modulator_env_state {
+                EnvState::Damp => {12},
+                EnvState::Attack => {self.modulator_attack_rate },
+                EnvState::Decay => {self.modulator_decay_rate },
+                EnvState::Sustain => {
+                    if self.modulator_sustain_enabled { 0 } else { self.modulator_release_rate }
+                }
             }
         };
 
