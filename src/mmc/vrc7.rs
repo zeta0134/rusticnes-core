@@ -200,6 +200,8 @@ impl Mapper for Vrc7 {
                         if self.irq_enable {
                             self.irq_counter = self.irq_latch;
                             self.irq_scanline_prescaler = 344; // we are also clocked on this cycle, so +3 here to undo that for timing
+                            // TODO: After we emulate the delay on PPUADDR writes, see if the above hack is still necessary. It feels
+                            // gross.
                         }
 
                     },
