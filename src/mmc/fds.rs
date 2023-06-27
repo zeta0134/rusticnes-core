@@ -87,7 +87,11 @@ impl Mapper for FdsMapper {
     }
 
     fn load_bios(&mut self, bios_rom: Vec<u8>) {
-        self.bios_rom = bios_rom.clone();
-        self.bios_loaded = true;
+        if bios_rom.len() >= 8192 {
+            self.bios_rom = bios_rom.clone();
+            self.bios_loaded = true;
+        } else {
+            println!("FDS bios provided is less than 8k in length! Bad dump?")
+        }
     }
 }
