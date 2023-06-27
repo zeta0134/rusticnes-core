@@ -15,6 +15,14 @@ pub struct FdsMapper {
 
     mirroring: Mirroring,
     vram: Vec<u8>,
+
+    timer_reload_value: u16,
+    timer_current_value: u16,
+    timer_enabled: bool,
+    timer_repeat: bool,
+    timer_pending: bool,
+    enable_disk_registers: bool,
+    enable_sound_registers: bool,
 }
 
 impl FdsMapper {
@@ -23,11 +31,17 @@ impl FdsMapper {
             bios_rom: vec![0u8; 0x2000],
             prg_ram: vec![0u8; 0x8000],
             chr: vec![0u8; 0x2000],
-
             bios_loaded: false,
-
             mirroring: Mirroring::Horizontal,
             vram: vec![0u8; 0x1000],
+
+            timer_reload_value: 0,
+            timer_current_value: 0,
+            timer_enabled: false,
+            timer_repeat: false,
+            timer_pending: false,
+            enable_disk_registers: true,
+            enable_sound_registers: true,
         });
     }
 }
@@ -42,6 +56,35 @@ impl Mapper for FdsMapper {
     fn mirroring(&self) -> Mirroring {
         return self.mirroring;
     }
+
+    fn clock_cpu(&mut self) {
+        if self.timer_enabled {
+            if self.timer_current_value == 0 {
+                self.timer_pending = true;
+                self.timer_current_value = self.timer_reload_value;
+                if !self.timer_repeat {
+                    self.timer_enabled = false;
+                }
+            } else {
+                self.timer_current_value -= 1;
+            }
+        }
+    }
+
+    fn irq_flag(&self) -> bool {
+        return self.timer_pending;
+    }
+
+    fn read_cpu(&mut self, address: u16) -> Option<u8> {
+        match address {
+            0x4030 => {
+                // TODO - Incomplete!
+                self.timer_pending = false;
+                Some(0x00)
+            },
+            _ => {self.debug_read_cpu(address)}
+        }
+    }
     
     fn debug_read_cpu(&self, address: u16) -> Option<u8> {
         match address {
@@ -52,8 +95,30 @@ impl Mapper for FdsMapper {
     }
 
     fn write_cpu(&mut self, address: u16, data: u8) {
+        if address & 0xFF00 == 0x4000 {
+            println!("Wrote 0x{:02X} to ${:04X}", data, address);
+        }
         match address {
             0x6000 ..= 0xDFFF => {self.prg_ram[address as usize - 0x6000] = data;},
+            0x4020 => {self.timer_reload_value = (self.timer_reload_value & 0xFF00) | (data as u16)},
+            0x4021 => {self.timer_reload_value = (self.timer_reload_value & 0x00FF) | ((data as u16) << 8)},
+            0x4022 => {
+                if self.enable_disk_registers {
+                    self.timer_repeat =  (data & 0b0000_0001) != 0;
+                    self.timer_enabled = (data & 0b0000_0010) != 0;
+                    if !self.timer_enabled {
+                        self.timer_pending = false;
+                    }
+                }
+            },
+            0x4023 => {
+                self.enable_disk_registers = (data & 0b0000_0001) != 0;
+                self.enable_sound_registers = (data & 0b0000_0010) != 0;
+                if !self.enable_disk_registers {
+                    self.timer_pending = false;
+                    self.timer_enabled = false;
+                }
+            },
             _ => {}
         }
     }
