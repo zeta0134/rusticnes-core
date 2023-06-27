@@ -5,6 +5,7 @@ pub mod action53;
 pub mod axrom;
 pub mod bnrom;
 pub mod cnrom;
+pub mod fds;
 pub mod fme7;
 pub mod gxrom;
 pub mod ines31;

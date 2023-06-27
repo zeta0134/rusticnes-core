@@ -4,6 +4,7 @@ use mmc::axrom::AxRom;
 use mmc::bnrom::BnRom;
 use mmc::cnrom::CnRom;
 use mmc::fme7::Fme7;
+use mmc::fds::FdsMapper;
 use mmc::gxrom::GxRom;
 use mmc::ines31::INes31;
 use mmc::mmc1::Mmc1;
@@ -19,6 +20,7 @@ use mmc::vrc7::Vrc7;
 
 use ines::INesCartridge;
 use nsf::NsfFile;
+use fds::FdsFile;
 
 use std::io::Read;
 
@@ -71,6 +73,11 @@ pub fn mapper_from_reader(file_reader: &mut dyn Read) -> Result<Box<dyn Mapper>,
     match NsfFile::from_reader(&mut entire_file.as_slice()) {
         Ok(nsf) => {return Ok(Box::new(NsfMapper::from_nsf(nsf)?));},
         Err(e) => {errors += format!("nsf: {}\n", e).as_str()}
+    }
+
+    match FdsFile::from_reader(&mut entire_file.as_slice()) {
+        Ok(nsf) => {return Ok(Box::new(FdsMapper::from_fds(nsf)?));},
+        Err(e) => {errors += format!("fds: {}\n", e).as_str()}
     }
 
     return Err(format!("Unable to open file as any known type, giving up.\n{}", errors));
