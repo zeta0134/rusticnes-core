@@ -28,7 +28,11 @@ pub struct FdsMapper {
     read_buffer: u8,
     expansion_port_buffer: u8,
 
-    disk_image: Vec<u8>,
+    disk_images: Vec<Vec<u8>>,
+    current_side: usize,
+    desired_side: usize,
+    disk_change_cooldown: u32,
+
     head_position: usize,
     rewinding: bool,
     motor_on: bool,
@@ -52,7 +56,10 @@ pub struct FdsMapper {
 impl FdsMapper {
     pub fn from_fds(fds: FdsFile) -> Result<FdsMapper, String> {
         // FOR NOW, use just the first disk and ignore the rest
-        let expanded_disk = expand_disk_image(&fds.disk_sides[0]);
+        let mut expanded_disks = Vec::new();
+        for i in 0 .. fds.disk_sides.len() {
+            expanded_disks.push(expand_disk_image(&fds.disk_sides[i]));
+        }
 
         return Ok(FdsMapper {
             bios_rom: vec![0u8; 0x2000],
@@ -74,7 +81,11 @@ impl FdsMapper {
             read_buffer: 0,
             expansion_port_buffer: 0,
 
-            disk_image: expanded_disk,
+            disk_images: expanded_disks,
+            current_side: 0,
+            desired_side: 0,
+            disk_change_cooldown: 0,
+
             head_position: 0,
             rewinding: false,
             motor_on: false,
@@ -110,7 +121,26 @@ impl FdsMapper {
         }
     }
 
+    fn update_disk_sides(&mut self) {
+        if self.desired_side != self.current_side {
+            self.disk_change_cooldown = 100000; // CPU cycles before the disk becomes available again
+            println!("Ejected disk #{}", self.current_side);
+            self.current_side = self.desired_side;
+        }
+        if self.disk_change_cooldown > 0 {
+            self.disk_change_cooldown -= 1;
+            if self.disk_change_cooldown == 0 {
+                println!("Inserted disk {}", self.current_side);
+            }
+        }
+    }
+
     fn update_disk_motor(&mut self) {
+        if self.disk_change_cooldown > 0 {
+            // Presumably the motor at least pauses when a disk is ejected
+            return;
+        }
+
         // The disk ready flag is set if the program has requested a transfer AND
         // the drive head has made it to the beginning of the disk. Two conditions
         // will un-set this flag:
@@ -167,7 +197,7 @@ impl FdsMapper {
     }
 
     fn handle_read_mode_byte(&mut self) {
-        let current_data_byte = self.disk_image[self.head_position];
+        let current_data_byte = self.disk_images[self.current_side][self.head_position];
 
         // Try to cheat the checksum!
         // TODO: compute a real checksum here
@@ -198,16 +228,16 @@ impl FdsMapper {
             if self.crc_control {
                 let crc_byte = (self.checksum & 0x00FF) as u8;
                 self.checksum = self.checksum >> 8;
-                self.disk_image[self.head_position] = crc_byte;
+                self.disk_images[self.current_side][self.head_position] = crc_byte;
             } else {
-                self.disk_image[self.head_position] = self.write_buffer;
+                self.disk_images[self.current_side][self.head_position] = self.write_buffer;
             }
             self.byte_transfer_flag = true;
             if self.disk_irq_enabled {
                 self.disk_irq_pending = true;
             }
         } else {
-            self.disk_image[self.head_position] = 0x00;
+            self.disk_images[self.current_side][self.head_position] = 0x00;
         }
     }
 
@@ -250,6 +280,7 @@ impl Mapper for FdsMapper {
 
     fn clock_cpu(&mut self) {
         self.clock_timer_irq();
+        self.update_disk_sides();
         self.update_disk_motor();
     }
 
@@ -295,8 +326,17 @@ impl Mapper for FdsMapper {
             0x4032 => {
                 // We always have a disk in the drive, so for now leave this at 0
                 let mut data = 0b0000_0000;
-                if !self.disk_ready_flag {
+                // Disk inserted (1 == ejected)
+                if self.disk_change_cooldown > 0 {
+                    data |= 0b0000_0001;
+                }
+                // Transfer ready flag (0 == ready)
+                if (self.disk_change_cooldown > 0) || (!self.disk_ready_flag) {
                     data |= 0b0000_0010;
+                }
+                // Writable (1 == read-only or ejected) (all emulated disks are r/w)
+                if self.disk_change_cooldown > 0 {
+                    data |= 0b0000_0100;
                 }
                 // should we set bit 6 here? I think it's technically open bus
                 Some(data)
@@ -417,6 +457,14 @@ impl Mapper for FdsMapper {
             println!("FDS bios provided is less than 8k in length! Bad dump?")
         }
     }
+
+    fn switch_disk(&mut self, side: usize) {
+        if side <= self.disk_images.len()  {
+            self.desired_side = side;
+        } else {
+            println!("No disk with side {} present, refusing to switch.", side);
+        }
+    }
 }
 
 pub fn expand_disk_image(compact_disk_image: &Vec<u8>) -> Vec<u8> {
@@ -428,8 +476,6 @@ pub fn expand_disk_image(compact_disk_image: &Vec<u8>) -> Vec<u8> {
     const LEADING_ZEROES: usize = 3537; // about 28300 bits
     const GAP_SIZE: usize = 122; // about 976 bits
     const FINAL_SIZE: usize = 81920; // a total guess! (~80k)
-
-    println!("=== Beginning quickdisk expansion... ===");
 
     let block_one = &compact_disk_image[0 .. BLOCK_1_SIZE];
     let block_two = &compact_disk_image[BLOCK_1_SIZE .. BLOCK_1_SIZE + BLOCK_2_SIZE];

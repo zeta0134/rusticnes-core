@@ -43,4 +43,5 @@ pub trait Mapper: Send {
     fn audio_multiplexing(&mut self, _emulate: bool) {}
     fn needs_bios(&self) -> bool {return false;}
     fn load_bios(&mut self, _: Vec<u8>) {}
+    fn switch_disk(&mut self, _: usize) {}
 }
