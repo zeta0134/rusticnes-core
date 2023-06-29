@@ -123,7 +123,7 @@ impl FdsMapper {
 
     fn update_disk_sides(&mut self) {
         if self.desired_side != self.current_side {
-            self.disk_change_cooldown = 100000; // CPU cycles before the disk becomes available again
+            self.disk_change_cooldown = 1000000; // CPU cycles before the disk becomes available again
             println!("Ejected disk #{}", self.current_side);
             self.current_side = self.desired_side;
         }
