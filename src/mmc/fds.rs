@@ -39,9 +39,14 @@ pub struct FdsMapper {
     motor_delay_counter: i16,
     disk_ready_flag: bool,
     transfer_reset_flag: bool,
+    transfer_active_flag: bool,
     checksum: u16,
+    crc_control: bool,
 
     old_4025: u8,
+
+    debug_old_cpuread: u16,
+    debug_mode: bool,
 }
 
 impl FdsMapper {
@@ -80,9 +85,14 @@ impl FdsMapper {
             motor_delay_counter: 448,
             disk_ready_flag: false,
             transfer_reset_flag: false,
+            transfer_active_flag: false,
             checksum: 0,
+            crc_control: false,
 
             old_4025: 0,
+
+            debug_old_cpuread: 0,
+            debug_mode: false,
         });
     }
 
@@ -183,7 +193,47 @@ impl FdsMapper {
     }
 
     fn handle_write_mode_byte(&mut self) {
-        // TODO!
+        // TODO: if CRC control is set, we need to write the computed CRC out here
+        if self.transfer_active_flag {
+            if self.crc_control {
+                let crc_byte = (self.checksum & 0x00FF) as u8;
+                self.checksum = self.checksum >> 8;
+                self.disk_image[self.head_position] = crc_byte;
+            } else {
+                self.disk_image[self.head_position] = self.write_buffer;
+            }
+            self.byte_transfer_flag = true;
+            if self.disk_irq_enabled {
+                self.disk_irq_pending = true;
+            }
+        } else {
+            self.disk_image[self.head_position] = 0x00;
+        }
+    }
+
+    fn snoop_bios_calls(&mut self, address: u16) {
+        // Only consider this execution if we got the full opcode preamble
+        if address == self.debug_old_cpuread + 1 {
+            // The first address in the pair should match the 
+            match self.debug_old_cpuread {
+                0xE1F8 => println!("=== BIOS: LoadFiles ==="),
+                0xE237 => println!("=== BIOS: AppendFile ==="),
+                0xE239 => println!("=== BIOS: WriteFile ==="),
+                0xE2B7 => println!("=== BIOS: CheckFileCount ==="),
+                0xE2BB => println!("=== BIOS: AdjustFileCount ==="),
+                0xE301 => println!("=== BIOS: SetFileCount1 ==="),
+                0xE305 => println!("=== BIOS: SetFileCount ==="),
+                0xE32A => println!("=== BIOS: GetDiskInfo ==="),
+
+                0xE445 => println!("=== BIOS: CheckDiskHeader ==="),
+                0xE484 => println!("=== BIOS: GetNumFiles ==="),
+                0xE492 => println!("=== BIOS: SetNumFiles ==="),
+                0xE4A0 => println!("=== BIOS: FileMatchTest ==="),
+                0xE4DA => println!("=== BIOS: SkipFiles ==="),
+                _ => {}
+            }
+        }
+        self.debug_old_cpuread = address;
     }
 }
 
@@ -208,6 +258,9 @@ impl Mapper for FdsMapper {
     }
 
     fn read_cpu(&mut self, address: u16) -> Option<u8> {
+        if self.debug_mode {
+            self.snoop_bios_calls(address);
+        }
         let data = match address {
             0x4030 => {
                 let mut data = 0x00;
@@ -306,10 +359,14 @@ impl Mapper for FdsMapper {
                     true => Mirroring::Vertical,
                     false => Mirroring::Horizontal,
                 };
-                // TODO: CRC control bit
+                self.crc_control = (data & 0b0001_0000) != 0;
+                if self.crc_control {
+                    self.checksum = 0x624D;
+                }
 
+                self.transfer_active_flag = (data & 0b0100_0000) != 0;
                 if (self.old_4025 & 0b0100_0000) == 0 {
-                    self.transfer_reset_flag = (data & 0b0100_0000) != 0;
+                    self.transfer_reset_flag = self.transfer_active_flag;
                 }
 
                 self.disk_irq_enabled = (data & 0b1000_0000) != 0;
