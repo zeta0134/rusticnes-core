@@ -465,6 +465,37 @@ impl Mapper for FdsMapper {
             println!("No disk with side {} present, refusing to switch.", side);
         }
     }
+
+    fn has_sram(&self) -> bool {
+        // There is no header flag to tell us otherwise, so we assume all disks are writeable and therefore saveable
+        return true;
+    }
+
+    fn get_sram(&self) -> Vec<u8> {
+        let mut combined_disk_images = Vec::new();
+        for i in 0 .. self.disk_images.len() {
+            combined_disk_images.extend(self.disk_images[i].clone());
+        }
+        return combined_disk_images;
+    }
+
+    fn load_sram(&mut self, raw_data: Vec<u8>) {
+        if raw_data.len() != self.disk_images.len() * 81920 {
+            println!("Wrong .sav file size for currently loaded FDS image! Refusing to load.");
+            return;
+        }
+
+        let mut expanded_disk_images = Vec::new();
+        for i in 0 .. self.disk_images.len() {
+            let start = i * 81920;
+            let end = start + 81920;
+            let mut disk = Vec::new();
+            disk.extend_from_slice(&raw_data[start .. end]);
+            expanded_disk_images.push(disk);
+        }
+
+        self.disk_images = expanded_disk_images;
+    }
 }
 
 pub fn expand_disk_image(compact_disk_image: &Vec<u8>) -> Vec<u8> {
@@ -518,3 +549,4 @@ pub fn expand_disk_image(compact_disk_image: &Vec<u8>) -> Vec<u8> {
     expanded_image.resize(FINAL_SIZE, 0);
     return expanded_image;
 }
+
