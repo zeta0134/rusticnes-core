@@ -22,7 +22,6 @@ pub struct FdsMapper {
     timer_repeat: bool,
     timer_pending: bool,
     enable_disk_registers: bool,
-    enable_sound_registers: bool,
 
     write_buffer: u8,
     read_buffer: u8,
@@ -51,6 +50,8 @@ pub struct FdsMapper {
 
     debug_old_cpuread: u16,
     debug_mode: bool,
+
+    audio: FdsAudio,
 }
 
 impl FdsMapper {
@@ -75,7 +76,6 @@ impl FdsMapper {
             timer_repeat: false,
             timer_pending: false,
             enable_disk_registers: true,
-            enable_sound_registers: true,
 
             write_buffer: 0,
             read_buffer: 0,
@@ -104,6 +104,8 @@ impl FdsMapper {
 
             debug_old_cpuread: 0,
             debug_mode: false,
+
+            audio: FdsAudio::new(),
         });
     }
 
@@ -282,6 +284,19 @@ impl Mapper for FdsMapper {
         self.clock_timer_irq();
         self.update_disk_sides();
         self.update_disk_motor();
+        self.audio.clock_cpu();
+    }
+
+    fn mix_expansion_audio(&self, nes_sample: f32) -> f32 {
+        let fds_sample = self.audio.output();
+        
+        // The maximum volume of the FDS signal on a Famicom is roughly 2.4x the maximum volume of the APU square
+        let nes_pulse_full_volume = 95.88 / ((8128.0 / 15.0) + 100.0);
+        let fds_weight = nes_pulse_full_volume * 2.4;
+
+        return 
+            (fds_sample * fds_weight) + 
+            nes_sample;
     }
 
     fn irq_flag(&self) -> bool {
@@ -374,7 +389,6 @@ impl Mapper for FdsMapper {
             },
             0x4023 => {
                 self.enable_disk_registers = (data & 0b0000_0001) != 0;
-                self.enable_sound_registers = (data & 0b0000_0010) != 0;
                 if !self.enable_disk_registers {
                     self.timer_pending = false;
                     self.timer_enabled = false;
@@ -419,6 +433,7 @@ impl Mapper for FdsMapper {
             }
             _ => {}
         }
+        self.audio.write_cpu(address, data);
     }
 
     fn debug_read_ppu(&self, address: u16) -> Option<u8> {
@@ -548,5 +563,322 @@ pub fn expand_disk_image(compact_disk_image: &Vec<u8>) -> Vec<u8> {
 
     expanded_image.resize(FINAL_SIZE, 0);
     return expanded_image;
+}
+
+
+pub struct FdsAudio {
+    enable_sound_registers: bool,
+    wavetable_ram: [u8; 64],
+
+    volume_envelope_output: u8,
+    volume_envelope_value: u8,
+    volume_envelope_positive: bool,
+    volume_envelope_disabled: bool,
+
+    volume_envelope_counter_current: usize,
+    volume_envelope_counter_initial: usize,
+
+    frequency: usize,
+    frequency_envelope_disable: bool,
+    frequency_halt: bool,
+
+    frequency_accumulator: usize,
+
+    mod_envelope_output: u8,
+    mod_envelope_value: u8,
+    mod_envelope_positive: bool,
+    mod_envelope_disabled: bool,
+
+    mod_accumulator: usize,
+
+    mod_envelope_counter_current: usize,
+    mod_envelope_counter_initial: usize,
+
+    mod_counter: i8,
+
+    mod_frequency: usize,
+    mod_always_carry: bool,
+    mod_table_halt: bool,
+
+    mod_table: [u8; 32],
+    master_volume: u8,
+    wave_write_enabled: bool,
+
+    master_envelope_speed: u8,
+
+    mod_position: usize,
+    wave_position: usize,
+    
+    current_output: f32,
+}
+
+impl FdsAudio {
+    pub fn new() -> FdsAudio {
+        return FdsAudio {
+            enable_sound_registers: true,
+            wavetable_ram: [0u8; 64],
+
+            volume_envelope_output: 0,
+            volume_envelope_value: 0,
+            volume_envelope_positive: false,
+            volume_envelope_disabled: true,
+
+            volume_envelope_counter_current: 0,
+            volume_envelope_counter_initial: 0,
+
+            frequency: 0,
+            frequency_envelope_disable: false,
+            frequency_halt: false,
+
+            frequency_accumulator: 0,
+
+            mod_envelope_output: 0,
+            mod_envelope_value: 0,
+            mod_envelope_positive: false,
+            mod_envelope_disabled: true,
+
+            mod_accumulator: 0,
+
+            mod_envelope_counter_current: 0,
+            mod_envelope_counter_initial: 0,
+
+            mod_counter: 0,
+
+            mod_frequency: 0,
+            mod_always_carry: false,
+            mod_table_halt: false,
+
+            mod_table: [0u8; 32],
+            master_volume: 0,
+            wave_write_enabled: true,
+
+            master_envelope_speed: 0xE8,
+
+            mod_position: 0,
+            wave_position: 0,
+
+            current_output: 0.0,
+        }
+    }
+
+    pub fn envelope_ticks(&self, envelope_value: u8) -> usize {
+        let base_rate = if self.frequency_halt {2} else {8};
+        return base_rate * (envelope_value as usize + 1) * (self.master_envelope_speed as usize + 1);
+    }
+
+    pub fn tick_volume_envelope(&mut self) {
+        if self.volume_envelope_disabled {
+            self.volume_envelope_output = self.volume_envelope_value;
+        } else {
+            if self.volume_envelope_counter_current == 0 {
+                if self.volume_envelope_positive && self.volume_envelope_output < 32 {
+                    self.volume_envelope_output += 1;
+                } else if (!self.volume_envelope_positive) && (self.volume_envelope_output > 0) {
+                    self.volume_envelope_output -= 1;
+                }
+                self.volume_envelope_counter_current = self.volume_envelope_counter_initial;
+            } else {
+                self.volume_envelope_counter_current -= 1;
+            }
+        }
+    }
+
+    pub fn tick_mod_envelope(&mut self) {
+        if self.mod_envelope_disabled {
+            self.mod_envelope_output = self.mod_envelope_value;
+        } else {
+            if self.mod_envelope_counter_current == 0 {
+                if self.mod_envelope_positive && self.mod_envelope_output < 63 {
+                    self.mod_envelope_output += 1;
+                } else if (!self.mod_envelope_positive) && (self.mod_envelope_output > 0) {
+                    self.mod_envelope_output -= 1;
+                }
+                self.mod_envelope_counter_current = self.mod_envelope_counter_initial;
+            } else {
+                self.mod_envelope_counter_current -= 1;
+            }
+        }
+    }
+
+    pub fn tick_mod_unit(&mut self) {
+        if self.mod_table_halt {
+            return; // do nothing!
+        }
+
+        let shifted_mod_position = self.mod_position >> 1;
+        let mod_behavior_index = self.mod_table[shifted_mod_position];
+        self.mod_position = (self.mod_position + 1) & 63;
+        // Note: the mod counter is a signed 7-bit value. Here we simulate this behavior
+        // by doubling all of the modifications we would make to it, and then shifting the
+        // result to put it in the proper range.
+        match mod_behavior_index {
+            0b000 => {},
+            0b001 => {self.mod_counter += 2},
+            0b010 => {self.mod_counter += 4},
+            0b011 => {self.mod_counter += 8},
+            0b100 => {self.mod_counter  = 0},
+            0b101 => {self.mod_counter -= 8},
+            0b110 => {self.mod_counter -= 4},
+            0b111 => {self.mod_counter -= 2},
+            _ => {} // shouldn't be reachable
+        }
+    }
+
+    pub fn mod_pitch(&self) -> i32 {
+        let shifted_counter = self.mod_counter >> 1;
+
+        // 1. multiply counter by gain, lose lowest 4 bits of result but "round" in a strange way
+        let mut temp = shifted_counter as i32 * (self.mod_envelope_output as i32);
+        let mut remainder = temp & 0xF;
+        temp = temp >> 4;
+        if (remainder > 0) && ((temp & 0x80) == 0) {
+            if shifted_counter < 0 {
+                temp -= 1;
+            } else {
+                temp += 2;
+            }
+        }
+
+        // 2. wrap if a certain range is exceeded
+        if temp >= 192 {
+            temp -= 256;
+        } else if temp < -64 {
+            temp += 256;
+        }
+
+        // 3. multiply result by pitch, then round to nearest while dropping 6 bits
+        temp = self.frequency as i32 * temp;
+        remainder = temp & 0x3F;
+        temp = temp >> 6;
+        if remainder >= 32 {
+            temp += 1;
+        }
+
+        return temp;
+    }
+
+    pub fn tick_wave_unit(&mut self) {
+        self.wave_position = (self.wave_position + 1) & 63;
+    }
+
+    pub fn update_mod(&mut self) {
+        self.mod_accumulator += self.mod_frequency;
+        //if self.mod_accumulator >= 4096 {
+        //    self.mod_accumulator -= 4096;
+        if self.mod_accumulator >= 65536 {
+            self.mod_accumulator -= 65536;
+            self.tick_mod_unit();
+        } else if self.mod_always_carry {
+            self.tick_mod_unit();
+        }
+    }
+
+    pub fn update_wave(&mut self) {
+        if self.frequency_halt {
+            return;
+        }
+        self.frequency_accumulator += std::cmp::max((self.frequency as i32) + self.mod_pitch(), 0) as usize;
+        if self.frequency_accumulator >= 65536 {
+            self.frequency_accumulator -= 65536;
+            self.tick_wave_unit();
+        }
+    }
+
+    pub fn clock_cpu(&mut self) {
+        if self.frequency_envelope_disable {
+            self.volume_envelope_counter_current = self.volume_envelope_counter_initial;
+            self.mod_envelope_counter_current = self.mod_envelope_counter_initial;
+        } else {
+            self.tick_volume_envelope();
+            self.tick_mod_envelope();
+        }
+        self.update_mod();
+        self.update_wave();
+        self.compute_output();
+    }
+
+    pub fn compute_output(&mut self) {
+        if !self.wave_write_enabled {
+            let current_sample = self.wavetable_ram[self.wave_position] as f32 / 63.0;
+            let volume_attenuated_sample = (current_sample * std::cmp::min(self.volume_envelope_output, 32) as f32) / 32.0;
+            let master_attenuated_sample = match self.master_volume {
+                0 => volume_attenuated_sample,
+                1 => volume_attenuated_sample * 2.0 / 3.0,
+                2 => volume_attenuated_sample * 2.0 / 4.0,
+                3 => volume_attenuated_sample * 2.0 / 5.0,
+                _ => {0.0} // unreachable
+            };
+            self.current_output = master_attenuated_sample;
+        }
+    }
+
+    pub fn output(&self) -> f32 {
+        return self.current_output;
+    }
+
+    pub fn write_cpu(&mut self, address: u16, data: u8) {
+        match address {
+            0x4023 => {
+                self.enable_sound_registers = (data & 0b0000_0010) != 0;
+            },
+            0x4040 ..= 0x407F => {
+                if self.wave_write_enabled {
+                    let wave_pos = (address - 0x4040) as usize;
+                    self.wavetable_ram[wave_pos] = data & 63;
+                }
+            },
+            0x4080 => {
+                self.volume_envelope_disabled = (data & 0b1000_0000) != 0;
+                self.volume_envelope_positive = (data & 0b0100_0000) != 0;
+                self.volume_envelope_value = data & 0b0011_1111;
+                self.volume_envelope_counter_initial = self.envelope_ticks(self.volume_envelope_value);
+                self.volume_envelope_counter_current = self.volume_envelope_counter_initial;
+            },
+            0x4082 => {
+                self.frequency = (self.frequency & 0xFF00) | (data as usize);
+            },
+            0x4083 => {
+                self.frequency = (self.frequency & 0x00FF) | (((data & 0b0000_1111) as usize) << 8);
+                self.frequency_envelope_disable = (data & 0b0100_0000) != 0;
+                self.frequency_halt = (data & 0b1000_0000) != 0;
+                if self.frequency_halt {
+                    self.wave_position = 0;
+                }
+            },
+            0x4084 => {
+                self.mod_envelope_disabled = (data & 0b1000_0000) != 0;
+                self.mod_envelope_positive = (data & 0b0100_0000) != 0;
+                self.mod_envelope_value = data & 0b0011_1111;
+                self.mod_envelope_counter_initial = self.envelope_ticks(self.mod_envelope_value);
+                self.mod_envelope_counter_current = self.mod_envelope_counter_initial;
+            },
+            0x4085 => {
+                self.mod_counter = ((data & 0b0111_1111) << 1) as i8;
+            },
+            0x4086 => {
+                self.mod_frequency = (self.mod_frequency & 0xFF00) | (data as usize);
+            },
+            0x4087 => {
+                self.mod_frequency = (self.mod_frequency & 0x00FF) | (((data & 0b0000_1111) as usize) << 8);
+                self.mod_always_carry = (data & 0b0100_0000) != 0;
+                self.mod_table_halt = (data & 0b1000_0000) != 0;
+                if self.mod_table_halt {
+                    self.mod_accumulator = 0;
+                }
+            },
+            0x4088 => {
+                self.mod_table[self.mod_position >> 1] = data & 0b0000_0111;
+                self.mod_position = (self.mod_position + 2) & 63;
+            },
+            0x4089 => {
+                self.master_volume = data & 0b0000_0011;
+                self.wave_write_enabled = (data & 0b1000_0000) != 0;
+            },
+            0x408A => {
+                self.master_envelope_speed = data;
+            },
+            _ => {}
+        }
+    }
 }
 
