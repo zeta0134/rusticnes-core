@@ -27,6 +27,8 @@ use mmc::n163::n163_mixing_level;
 
 use mmc::vrc7::Vrc7Audio;
 
+use mmc::fds::FdsAudio;
+
 const PPUCTRL: u16 = 0x2000;
 const PPUMASK: u16 = 0x2001;
 const PPUSTATUS: u16 = 0x2002;
@@ -383,6 +385,9 @@ pub struct NsfMapper {
     vrc7_enabled: bool,
     vrc7_audio: Vrc7Audio,
     vrc7_audio_register: u8,
+
+    fds_enabled: bool,
+    fds_audio: FdsAudio,
 }
 
 impl NsfMapper {
@@ -468,6 +473,9 @@ impl NsfMapper {
             vrc7_enabled: nsf.header.vrc7(),
             vrc7_audio: Vrc7Audio::new(),
             vrc7_audio_register: 0,
+
+            fds_enabled: nsf.header.fds(),
+            fds_audio: FdsAudio::new(),
 
             prg_rom_banks: prg_rom_banks,
 
@@ -1068,6 +1076,33 @@ impl NsfMapper {
         }
     }
 
+    fn fds_write(&mut self, address: u16, data: u8) {
+        if !self.fds_enabled {
+            return;
+        }
+        self.fds_audio.write_cpu(address, data);
+    }
+
+    fn fds_output(&self) -> f32 {
+        if !self.fds_enabled {
+            return 0.0;
+        }
+        let fds_sample = self.fds_audio.output();
+        
+        // The maximum volume of the FDS signal on a Famicom is roughly 2.4x the maximum volume of the APU square
+        let nes_pulse_full_volume = 95.88 / ((8128.0 / 15.0) + 100.0);
+        let fds_weight = nes_pulse_full_volume * 2.4;
+
+        return fds_sample * fds_weight;
+    }
+
+    fn clock_fds(&mut self) {
+        if !self.fds_enabled {
+            return;
+        }
+        self.fds_audio.clock_cpu();
+    }
+
     fn fade_weight(&self) -> f32 {
         match self.advance_mode {
             TrackAdvanceMode::Timer => {
@@ -1115,6 +1150,7 @@ impl Mapper for NsfMapper {
         self.clock_s5b();
         self.clock_n163();
         self.clock_vrc7();
+        self.clock_fds();
         self.current_cycles += 1;
 
         if self.detect_silence() {
@@ -1131,6 +1167,7 @@ impl Mapper for NsfMapper {
             self.s5b_output() +
             self.n163_output() + 
             self.vrc7_output() + 
+            self.fds_output() + 
             nes_sample;
         return mixed_sample * self.fade_weight();
     }
@@ -1176,6 +1213,9 @@ impl Mapper for NsfMapper {
             vrc7_channels.push(&self.vrc7_audio.channel6);
             channels.append(&mut vrc7_channels);
         }
+        if self.fds_enabled {
+            channels.push(&self.fds_audio);
+        }
         return channels;
     }
 
@@ -1220,6 +1260,9 @@ impl Mapper for NsfMapper {
             vrc7_channels.push(&mut self.vrc7_audio.channel6);
             channels.append(&mut vrc7_channels);
         }
+        if self.fds_enabled {
+            channels.push(&mut self.fds_audio);
+        }
         return channels;
     }
 
@@ -1242,6 +1285,9 @@ impl Mapper for NsfMapper {
         }
         if self.vrc7_enabled {
             self.vrc7_audio.record_output();
+        }
+        if self.fds_enabled {
+            self.fds_audio.record_current_output();
         }
         self.last_sample = self.current_sample;
         self.current_sample = self.mix_expansion_audio(nes_sample);
@@ -1322,6 +1368,9 @@ impl Mapper for NsfMapper {
         }
         if self.vrc7_enabled {
             self.vrc7_write(address, data);
+        }
+        if self.fds_enabled {
+            self.fds_write(address, data);
         }
     }
 
