@@ -6,6 +6,14 @@ use fds::FdsFile;
 use mmc::mapper::*;
 use mmc::mirroring;
 
+use apu::AudioChannelState;
+use apu::PlaybackRate;
+use apu::Volume;
+use apu::Timbre;
+use apu::RingBuffer;
+use apu::filters;
+use apu::filters::DspFilter;
+
 pub struct FdsMapper {
     bios_rom: Vec<u8>,
     prg_ram: Vec<u8>,
@@ -511,6 +519,22 @@ impl Mapper for FdsMapper {
 
         self.disk_images = expanded_disk_images;
     }
+
+    fn channels(&self) ->  Vec<& dyn AudioChannelState> {
+        let mut channels: Vec<& dyn AudioChannelState> = Vec::new();
+        channels.push(&self.audio);
+        return channels;
+    }
+
+    fn channels_mut(&mut self) ->  Vec<&mut dyn AudioChannelState> {
+        let mut channels: Vec<&mut dyn AudioChannelState> = Vec::new();
+        channels.push(&mut self.audio);
+        return channels;
+    }
+
+    fn record_expansion_audio_output(&mut self, _nes_sample: f32) {
+        self.audio.record_current_output();
+    }
 }
 
 pub fn expand_disk_image(compact_disk_image: &Vec<u8>) -> Vec<u8> {
@@ -610,6 +634,12 @@ pub struct FdsAudio {
     wave_position: usize,
     
     current_output: f32,
+
+    debug_disable: bool,
+    output_buffer: RingBuffer,
+    edge_buffer: RingBuffer,
+    last_edge: bool,
+    debug_filter: filters::HighPassIIR,
 }
 
 impl FdsAudio {
@@ -658,6 +688,12 @@ impl FdsAudio {
             wave_position: 0,
 
             current_output: 0.0,
+
+            debug_disable: false,
+            output_buffer: RingBuffer::new(32768),
+            edge_buffer: RingBuffer::new(32768),
+            last_edge: false,
+            debug_filter: filters::HighPassIIR::new(44100.0, 300.0),
         }
     }
 
@@ -759,6 +795,9 @@ impl FdsAudio {
 
     pub fn tick_wave_unit(&mut self) {
         self.wave_position = (self.wave_position + 1) & 63;
+        if self.wave_position == 0 {
+            self.last_edge = true;
+        }
     }
 
     pub fn update_mod(&mut self) {
@@ -882,3 +921,77 @@ impl FdsAudio {
     }
 }
 
+impl AudioChannelState for FdsAudio {
+    fn name(&self) -> String {
+        return "Wavetable".to_string();
+    }
+
+    fn chip(&self) -> String {
+        return "FDS".to_string();
+    }
+
+    fn sample_buffer(&self) -> &RingBuffer {
+        return &self.output_buffer;
+    }
+
+    fn edge_buffer(&self) -> &RingBuffer {
+        return &self.edge_buffer;
+    }
+
+    fn record_current_output(&mut self) {
+        self.debug_filter.consume(self.output() as f32);
+        self.output_buffer.push((self.debug_filter.output() * -4096.0) as i16);
+        self.edge_buffer.push(self.last_edge as i16);
+        self.last_edge = false;
+    }
+
+    fn min_sample(&self) -> i16 {
+        return -2048;
+    }
+
+    fn max_sample(&self) -> i16 {
+        return 2048;
+    }
+
+    fn muted(&self) -> bool {
+        return self.debug_disable;
+    }
+
+    fn mute(&mut self) {
+        self.debug_disable = true;
+    }
+
+    fn unmute(&mut self) {
+        self.debug_disable = false;
+    }
+
+    fn playing(&self) -> bool {
+        return 
+            !self.frequency_halt &&
+            self.frequency > 0 &&
+            self.volume_envelope_output > 0;
+    }
+
+    fn rate(&self) -> PlaybackRate {
+        let p = (self.frequency as i32 + self.mod_pitch()) as f32;
+        let n = 1789773.0;
+        let f = (n * p / 65536.0) / 64.0;
+        return PlaybackRate::FundamentalFrequency {frequency: f};
+    }
+
+    fn volume(&self) -> Option<Volume> {
+        let env_volume = std::cmp::min(self.volume_envelope_output, 32) as f32;
+        let effective_volume = match self.master_volume {
+            0 => env_volume * 100.0,
+            1 => env_volume * 200.0 / 3.0,
+            2 => env_volume * 200.0 / 4.0,
+            3 => env_volume * 200.0 / 5.0,
+            _ => {0.0} // unreachable
+        };
+        return Some(Volume::VolumeIndex{ index: effective_volume as usize, max: 3200 });
+    }
+
+    fn timbre(&self) -> Option<Timbre> {
+        return Some(Timbre::DutyIndex{ index: 0 as usize, max: 1 });
+    }
+}
