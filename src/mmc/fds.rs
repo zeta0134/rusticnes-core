@@ -14,6 +14,9 @@ use apu::RingBuffer;
 use apu::filters;
 use apu::filters::DspFilter;
 
+use std::collections::hash_map::DefaultHasher;
+use std::hash::Hasher;
+
 pub struct FdsMapper {
     bios_rom: Vec<u8>,
     prg_ram: Vec<u8>,
@@ -946,11 +949,11 @@ impl AudioChannelState for FdsAudio {
     }
 
     fn min_sample(&self) -> i16 {
-        return -2048;
+        return -4096;
     }
 
     fn max_sample(&self) -> i16 {
-        return 2048;
+        return 4096;
     }
 
     fn muted(&self) -> bool {
@@ -992,6 +995,12 @@ impl AudioChannelState for FdsAudio {
     }
 
     fn timbre(&self) -> Option<Timbre> {
-        return Some(Timbre::DutyIndex{ index: 0 as usize, max: 1 });
+        let mut hasher = DefaultHasher::new();
+        let audio_data = &self.wavetable_ram[0 .. 64];
+        hasher.write(audio_data);
+        let full_result = hasher.finish();
+        let truncated_result = (full_result & 0xFF) as usize;
+
+        return Some(Timbre::PatchIndex{ index: truncated_result, max: 255 });
     }
 }
