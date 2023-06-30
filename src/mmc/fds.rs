@@ -855,6 +855,9 @@ impl FdsAudio {
     }
 
     pub fn output(&self) -> f32 {
+        if self.debug_disable {
+            return 0.0;
+        }
         return self.current_output;
     }
 
@@ -976,9 +979,24 @@ impl AudioChannelState for FdsAudio {
     }
 
     fn rate(&self) -> PlaybackRate {
-        let p = (self.frequency as i32 + self.mod_pitch()) as f32;
-        let n = 1789773.0;
-        let f = (n * p / 65536.0) / 64.0;
+        let ntsc_clockrate = 1789773.0;
+
+        // as a sanity check, first compute the mod frequency
+        let m_p = self.mod_frequency as f32;
+        let m_f = (ntsc_clockrate * m_p / 65536.0) / 64.0;
+
+        // If the modulator frequency is lower than 60 Hz, then we
+        // are probably using it as a LFO, for vibrato or something.
+        // If it's much faster, it's being used for tone and we should
+        // not try to visualize it. (crazy FM effects devolve into noise)
+        let mod_pitch = if m_f < 30.0 {
+            self.mod_pitch()
+        } else {
+            0
+        };
+
+        let p = (self.frequency as i32 + mod_pitch) as f32;
+        let f = (ntsc_clockrate * p / 65536.0) / 64.0;
         return PlaybackRate::FundamentalFrequency {frequency: f};
     }
 
