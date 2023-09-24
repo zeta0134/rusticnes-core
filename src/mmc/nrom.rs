@@ -22,6 +22,8 @@ impl Nrom {
         let prg_ram_block = ines.prg_ram_block()?;
         let chr_block = ines.chr_block()?;
 
+        println!("NROM Mirroring Mode: {}", mirroring_mode_name(ines.header.mirroring()));
+
         return Ok(Nrom {
             prg_rom: prg_rom_block.clone(),
             prg_ram: prg_ram_block.clone(),
@@ -64,6 +66,10 @@ impl Mapper for Nrom {
             0x2000 ..= 0x3FFF => return match self.mirroring {
                 Mirroring::Horizontal => Some(self.vram[mirroring::horizontal_mirroring(address) as usize]),
                 Mirroring::Vertical   => Some(self.vram[mirroring::vertical_mirroring(address) as usize]),
+                // Note: no licensed NROM boards support four-screen mirroring, but it is possible
+                // to build a board that does. Since iNes allows this, some homebrew requires it, and
+                // so we support it in the interest of compatibility.
+                Mirroring::FourScreen => Some(self.vram[mirroring::four_banks(address) as usize]),
                 _ => None
             },
             _ => return None
@@ -76,6 +82,7 @@ impl Mapper for Nrom {
             0x2000 ..= 0x3FFF => match self.mirroring {
                 Mirroring::Horizontal => self.vram[mirroring::horizontal_mirroring(address) as usize] = data,
                 Mirroring::Vertical   => self.vram[mirroring::vertical_mirroring(address) as usize] = data,
+                Mirroring::FourScreen => self.vram[mirroring::four_banks(address) as usize] = data,
                 _ => {}
             },
             _ => {}
