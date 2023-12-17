@@ -143,7 +143,7 @@ fn construct_hq_filter_chain(clock_rate: f32, target_sample_rate: f32, filter_ty
     // Finally, perform a high-quality low pass, the result of which will be decimated to become the final output
     // TODO: 160 is huge! That was needed when going from 1.7 MHz -> 44.1 kHz; is it still needed when the source
     // is more like 88.2 kHz? Figure out if we can lower this, it's very expensive.
-    let window_size = 16;
+    let window_size = 160;
     let cutoff_frequency = target_sample_rate * 0.45;
     chain.add(Box::new(filters::LowPassFIR::new(intermediate_samplerate, cutoff_frequency, window_size)), intermediate_samplerate);
 
