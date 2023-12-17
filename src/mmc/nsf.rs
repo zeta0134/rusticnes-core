@@ -1048,7 +1048,7 @@ impl NsfMapper {
         let combined_vrc7_audio = self.vrc7_audio.output() as f32 / 256.0 / 6.0;
 
         let stock_vrc7_db = 6.23;
-        let desired_vrc7_db = 11.00;
+        let desired_vrc7_db = 11.00 - 3.50; // -3.5dB to match FamiTracker
         let mixed_vrc7_audio = combined_vrc7_audio * amplitude_from_db(desired_vrc7_db - stock_vrc7_db);
 
         return mixed_vrc7_audio;

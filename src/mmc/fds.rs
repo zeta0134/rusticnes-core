@@ -592,6 +592,73 @@ pub fn expand_disk_image(compact_disk_image: &Vec<u8>) -> Vec<u8> {
     return expanded_image;
 }
 
+// credit Persune and plgDavid for reverse engineering the hardware behavior
+const FDS_DAC_LUT: [f32; 64] = [
+                     0.0,
+    0.011465572752058506,
+      0.0233255997300148,
+     0.03682375326752663,
+     0.04673049971461296,
+       0.061058409512043,
+     0.07386837154626846,
+     0.09098339825868607,
+     0.09331251680850983,
+     0.10951442271471024,
+     0.12239760905504227,
+      0.1415075808763504,
+      0.1483096331357956,
+     0.16800136864185333,
+     0.18295270204544067,
+     0.20666064321994781,
+     0.18730713427066803,
+     0.20707780122756958,
+      0.2199448049068451,
+      0.2434738427400589,
+     0.24558208882808685,
+     0.26910510659217834,
+     0.28437408804893494,
+       0.312602698802948,
+     0.29783013463020325,
+     0.32291364669799805,
+     0.33768296241760254,
+      0.3677976429462433,
+     0.36768317222595215,
+      0.3981393277645111,
+      0.4163309335708618,
+      0.4529191851615906,
+      0.3774969279766083,
+     0.40523025393486023,
+     0.41825342178344727,
+     0.45081785321235657,
+     0.44415655732154846,
+      0.4759543240070343,
+      0.4921776056289673,
+      0.5303648114204407,
+      0.4969009757041931,
+      0.5296915769577026,
+      0.5450936555862427,
+      0.5845786333084106,
+       0.576058030128479,
+      0.6141541004180908,
+      0.6341322660446167,
+      0.6813235282897949,
+      0.6059473752975464,
+      0.6424090266227722,
+      0.6577944159507751,
+      0.7020274996757507,
+      0.6884633898735046,
+      0.7309963703155518,
+      0.7510766983032227,
+       0.802958607673645,
+      0.7523477077484131,
+      0.7961556911468506,
+      0.8153874278068542,
+       0.869225800037384,
+      0.8552623987197876,
+      0.9073793292045593,
+      0.9342948198318481,
+                     1.0
+];
 
 pub struct FdsAudio {
     enable_sound_registers: bool,
@@ -636,6 +703,7 @@ pub struct FdsAudio {
     mod_position: usize,
     wave_position: usize,
     
+    output_filter: filters::LowPassIIR,
     current_output: f32,
 
     debug_disable: bool,
@@ -690,6 +758,7 @@ impl FdsAudio {
             mod_position: 0,
             wave_position: 0,
 
+            output_filter: filters::LowPassIIR::new(1_789_773.0, 2000.0),
             current_output: 0.0,
 
             debug_disable: false,
@@ -841,7 +910,12 @@ impl FdsAudio {
 
     pub fn compute_output(&mut self) {
         if !self.wave_write_enabled {
-            let current_sample = self.wavetable_ram[self.wave_position] as f32 / 63.0;
+            // ideal output
+            // let current_sample = self.wavetable_ram[self.wave_position] as f32 / 63.0;
+
+            // output with jagged DAC
+            let current_sample = FDS_DAC_LUT[self.wavetable_ram[self.wave_position] as usize];
+
             let volume_attenuated_sample = (current_sample * std::cmp::min(self.volume_envelope_output, 32) as f32) / 32.0;
             let master_attenuated_sample = match self.master_volume {
                 0 => volume_attenuated_sample,
@@ -850,7 +924,8 @@ impl FdsAudio {
                 3 => volume_attenuated_sample * 2.0 / 5.0,
                 _ => {0.0} // unreachable
             };
-            self.current_output = master_attenuated_sample;
+            self.output_filter.consume(master_attenuated_sample);
+            self.current_output = self.output_filter.output();
         }
     }
 
