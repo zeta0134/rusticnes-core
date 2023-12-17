@@ -14,6 +14,7 @@ use mmc::n163::Namco163;
 use mmc::nrom::Nrom;
 use mmc::nsf::NsfMapper;
 use mmc::pxrom::PxRom;
+use mmc::rainbow::Rainbow;
 use mmc::uxrom::UxRom;
 use mmc::vrc6::Vrc6;
 use mmc::vrc7::Vrc7;
@@ -45,6 +46,7 @@ fn mapper_from_ines(ines: INesCartridge) -> Result<Box<dyn Mapper>, String> {
         66 => Box::new(GxRom::from_ines(ines)?),
         69 => Box::new(Fme7::from_ines(ines)?),
         85 => Box::new(Vrc7::from_ines(ines)?),
+        682 => Box::new(Rainbow::from_ines(ines)?),
         _ => {
             return Err(format!("Unsupported iNES mapper: {}", ines.header.mapper_number()));
         }
