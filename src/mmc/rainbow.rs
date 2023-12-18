@@ -66,7 +66,7 @@ pub struct Rainbow {
 
     mirroring: Mirroring,
     vram: Vec<u8>,
-    fpga_ram: Vec<u8>,
+    fpga_ram: MemoryBlock,
 }
 
 impl Rainbow {
@@ -105,6 +105,10 @@ impl Rainbow {
             MemoryBlock::new(&Vec::new(), MemoryType::Rom)
         };
 
+        let mut fpga_ram: Vec<u8> = Vec::new();
+        fpga_ram.resize(0x2000, 0);
+        let fpga_ram_block = MemoryBlock::new(&fpga_ram, MemoryType::Ram);
+
         return Ok(Rainbow {
             prg_rom: prg_rom_block.clone(),
             prg_ram: prg_ram_block.clone(),
@@ -142,39 +146,395 @@ impl Rainbow {
 
             mirroring: ines.header.mirroring(),
             vram: vec![0u8; 0x1000],
-            fpga_ram: vec![0u8; 0x2000],
+            fpga_ram: fpga_ram_block.clone(),
         });
     }
 }
 
 impl Mapper for Rainbow {
     fn print_debug_status(&self) {
+        // TODO: ... do we even need this?
         println!("======= RAINBOW =======");        
         println!("====================");
     }
 
     fn mirroring(&self) -> Mirroring {
+        // TODO: this is NROM! Fix this!
         return self.mirroring;
     }
     
     fn debug_read_cpu(&self, address: u16) -> Option<u8> {
         match address {
-            0x6000 ..= 0x7FFF => {self.prg_ram.wrapping_read((address - 0x6000) as usize)},
-            0x8000 ..= 0xFFFF => {self.prg_rom.wrapping_read((address - 0x8000) as usize)},
+            // PRG banking modes
+            0x4100 => {
+                let prg_rom_mode_bits = match self.prg_rom_mode {
+                    PrgRomBankingMode::Mode0Bank1x32k       => 0b000,
+                    PrgRomBankingMode::Mode1Bank2x16k       => 0b001,
+                    PrgRomBankingMode::Mode2Bank1x16k2x8k8k => 0b010,
+                    PrgRomBankingMode::Mode3Bank4x8k        => 0b011,
+                    // TODO: Does hardware preserve the low 2 bits written? If so we
+                    // need an alternate approach when reading
+                    PrgRomBankingMode::Mode4Bank8x4k        => 0b100
+                };
+                let prg_ram_mode_bits = match self.prg_ram_mode {
+                    PrgRamBankingMode::Mode0Bank1x8k => 0b0000_0000,
+                    PrgRamBankingMode::Mode1Bank2x4k => 0b1000_0000,
+                };
+                Some(prg_rom_mode_bits | prg_ram_mode_bits)
+            },
+
+            // PRG RAM Area
+            0x6000 ..= 0x7FFF => {
+                match self.prg_ram_mode {
+                    PrgRamBankingMode::Mode0Bank1x8k => {
+                        if self.fpga_ram_at_6000 {
+                            self.fpga_ram.banked_read(0x2000, self.prg_bank_at_6000, address as usize -  0x6000)
+                        } else if self.prg_ram_at_6000 {
+                            self.prg_ram.banked_read(0x2000, self.prg_bank_at_6000, address as usize -  0x6000)
+                        } else {
+                            self.prg_rom.banked_read(0x2000, self.prg_bank_at_6000, address as usize -  0x6000)
+                        }
+                    },
+                    PrgRamBankingMode::Mode1Bank2x4k => {
+                        match address {
+                            0x6000 ..= 0x6FFF => {
+                                if self.fpga_ram_at_6000 {
+                                    self.fpga_ram.banked_read(0x1000, self.prg_bank_at_6000, address as usize -  0x6000)
+                                } else if self.prg_ram_at_6000 {
+                                    self.prg_ram.banked_read(0x1000, self.prg_bank_at_6000, address as usize -  0x6000)
+                                } else {
+                                    self.prg_rom.banked_read(0x1000, self.prg_bank_at_6000, address as usize -  0x6000)
+                                }
+                            },
+                            0x7000 ..= 0x7FFF => {
+                                if self.fpga_ram_at_7000 {
+                                    self.fpga_ram.banked_read(0x1000, self.prg_bank_at_7000, address as usize -  0x7000)
+                                } else if self.prg_ram_at_7000 {
+                                    self.prg_ram.banked_read(0x1000, self.prg_bank_at_7000, address as usize -  0x7000)
+                                } else {
+                                    self.prg_rom.banked_read(0x1000, self.prg_bank_at_7000, address as usize -  0x7000)
+                                }
+                            },
+                            _ => {None}
+                        }
+                    }
+                }
+            }
+
+            // PRG ROM Area
+            0x8000 ..= 0xFFFF => {
+                match self.prg_rom_mode {
+                    PrgRomBankingMode::Mode0Bank1x32k => {
+                        if self.prg_ram_at_8000 {
+                            self.prg_ram.banked_read(0x8000, self.prg_bank_at_8000, address as usize -  0x8000)
+                        } else {
+                            self.prg_rom.banked_read(0x8000, self.prg_bank_at_8000, address as usize -  0x8000)
+                        }
+                    },
+                    PrgRomBankingMode::Mode1Bank2x16k => {
+                        match address {
+                            0x8000 ..= 0xBFFF => {
+                                if self.prg_ram_at_8000 {
+                                    self.prg_ram.banked_read(0x4000, self.prg_bank_at_8000, address as usize -  0x8000)
+                                } else {
+                                    self.prg_rom.banked_read(0x4000, self.prg_bank_at_8000, address as usize -  0x8000)
+                                }
+                            },
+                            0xC000 ..= 0xFFFF => {
+                                if self.prg_ram_at_c000 {
+                                    self.prg_ram.banked_read(0x4000, self.prg_bank_at_c000, address as usize -  0xc000)
+                                } else {
+                                    self.prg_rom.banked_read(0x4000, self.prg_bank_at_c000, address as usize -  0xc000)
+                                }
+                            },
+                            _ => {None}
+                        }
+                    },
+                    PrgRomBankingMode::Mode2Bank1x16k2x8k8k => {
+                        match address {
+                            0x8000 ..= 0xBFFF => {
+                                if self.prg_ram_at_8000 {
+                                    self.prg_ram.banked_read(0x4000, self.prg_bank_at_8000, address as usize -  0x8000)
+                                } else {
+                                    self.prg_rom.banked_read(0x4000, self.prg_bank_at_8000, address as usize -  0x8000)
+                                }
+                            },
+                            0xC000 ..= 0xDFFF => {
+                                if self.prg_ram_at_c000 {
+                                    self.prg_ram.banked_read(0x2000, self.prg_bank_at_c000, address as usize -  0xC000)
+                                } else {
+                                    self.prg_rom.banked_read(0x2000, self.prg_bank_at_c000, address as usize -  0xC000)
+                                }
+                            },
+                            0xE000 ..= 0xFFFF => {
+                                if self.prg_ram_at_c000 {
+                                    self.prg_ram.banked_read(0x2000, self.prg_bank_at_e000, address as usize -  0xE000)
+                                } else {
+                                    self.prg_rom.banked_read(0x2000, self.prg_bank_at_e000, address as usize -  0xE000)
+                                }
+                            },
+                            _ => {None}
+                        }
+                    },
+                    PrgRomBankingMode::Mode3Bank4x8k => {
+                        match address {
+                            0x8000 ..= 0x9FFF => {
+                                if self.prg_ram_at_8000 {
+                                    self.prg_ram.banked_read(0x2000, self.prg_bank_at_8000, address as usize -  0x8000)
+                                } else {
+                                    self.prg_rom.banked_read(0x2000, self.prg_bank_at_8000, address as usize -  0x8000)
+                                }
+                            },
+                            0xA000 ..= 0xBFFF => {
+                                if self.prg_ram_at_a000 {
+                                    self.prg_ram.banked_read(0x2000, self.prg_bank_at_a000, address as usize -  0x8000)
+                                } else {
+                                    self.prg_rom.banked_read(0x2000, self.prg_bank_at_a000, address as usize -  0x8000)
+                                }
+                            },
+                            0xC000 ..= 0xDFFF => {
+                                if self.prg_ram_at_c000 {
+                                    self.prg_ram.banked_read(0x2000, self.prg_bank_at_c000, address as usize -  0xC000)
+                                } else {
+                                    self.prg_rom.banked_read(0x2000, self.prg_bank_at_c000, address as usize -  0xC000)
+                                }
+                            },
+                            0xE000 ..= 0xFFFF => {
+                                if self.prg_ram_at_c000 {
+                                    self.prg_ram.banked_read(0x2000, self.prg_bank_at_e000, address as usize -  0xE000)
+                                } else {
+                                    self.prg_rom.banked_read(0x2000, self.prg_bank_at_e000, address as usize -  0xE000)
+                                }
+                            },
+                            _ => {None}
+                        }
+                    },
+                    PrgRomBankingMode::Mode4Bank8x4k => {
+                        match address {
+                            0x8000 ..= 0x8FFF => {
+                                if self.prg_ram_at_8000 {
+                                    self.prg_ram.banked_read(0x1000, self.prg_bank_at_8000, address as usize -  0x8000)
+                                } else {
+                                    self.prg_rom.banked_read(0x1000, self.prg_bank_at_8000, address as usize -  0x8000)
+                                }
+                            },
+                            0x9000 ..= 0x9FFF => {
+                                if self.prg_ram_at_9000 {
+                                    self.prg_ram.banked_read(0x1000, self.prg_bank_at_9000, address as usize -  0x9000)
+                                } else {
+                                    self.prg_rom.banked_read(0x1000, self.prg_bank_at_9000, address as usize -  0x9000)
+                                }
+                            },
+                            0xA000 ..= 0xAFFF => {
+                                if self.prg_ram_at_a000 {
+                                    self.prg_ram.banked_read(0x1000, self.prg_bank_at_a000, address as usize -  0xA000)
+                                } else {
+                                    self.prg_rom.banked_read(0x1000, self.prg_bank_at_a000, address as usize -  0xA000)
+                                }
+                            },
+                            0xB000 ..= 0xBFFF => {
+                                if self.prg_ram_at_b000 {
+                                    self.prg_ram.banked_read(0x1000, self.prg_bank_at_b000, address as usize -  0xB000)
+                                } else {
+                                    self.prg_rom.banked_read(0x1000, self.prg_bank_at_b000, address as usize -  0xB000)
+                                }
+                            },
+                            0xC000 ..= 0xCFFF => {
+                                if self.prg_ram_at_c000 {
+                                    self.prg_ram.banked_read(0x1000, self.prg_bank_at_c000, address as usize -  0xC000)
+                                } else {
+                                    self.prg_rom.banked_read(0x1000, self.prg_bank_at_c000, address as usize -  0xC000)
+                                }
+                            },
+                            0xD000 ..= 0xDFFF => {
+                                if self.prg_ram_at_d000 {
+                                    self.prg_ram.banked_read(0x1000, self.prg_bank_at_d000, address as usize -  0xD000)
+                                } else {
+                                    self.prg_rom.banked_read(0x1000, self.prg_bank_at_d000, address as usize -  0xD000)
+                                }
+                            },
+                            0xE000 ..= 0xEFFF => {
+                                if self.prg_ram_at_e000 {
+                                    self.prg_ram.banked_read(0x1000, self.prg_bank_at_e000, address as usize -  0xE000)
+                                } else {
+                                    self.prg_rom.banked_read(0x1000, self.prg_bank_at_e000, address as usize -  0xE000)
+                                }
+                            },
+                            0xF000 ..= 0xFFFF => {
+                                if self.prg_ram_at_f000 {
+                                    self.prg_ram.banked_read(0x1000, self.prg_bank_at_f000, address as usize -  0xF000)
+                                } else {
+                                    self.prg_rom.banked_read(0x1000, self.prg_bank_at_f000, address as usize -  0xF000)
+                                }
+                            },
+                            _ => {None}
+                        }
+                    },
+
+
+                }
+            },
             _ => None
         }
     }
 
     fn write_cpu(&mut self, address: u16, data: u8) {
         match address {
-            0x6000 ..= 0x7FFF => {self.prg_ram.wrapping_write((address - 0x6000) as usize, data);},
+            // PRG banking modes
+            0x4100 => {
+                match data & 0b111 {
+                    0b000 => self.prg_rom_mode = PrgRomBankingMode::Mode0Bank1x32k,
+                    0b001 => self.prg_rom_mode = PrgRomBankingMode::Mode1Bank2x16k,
+                    0b010 => self.prg_rom_mode = PrgRomBankingMode::Mode2Bank1x16k2x8k8k,
+                    0b011 => self.prg_rom_mode = PrgRomBankingMode::Mode3Bank4x8k,
+                        _ => self.prg_rom_mode = PrgRomBankingMode::Mode4Bank8x4k
+                };
+                match (data & 0b1000_0000) >> 7 {
+                    0 => self.prg_ram_mode = PrgRamBankingMode::Mode0Bank1x8k,
+                    1 => self.prg_ram_mode = PrgRamBankingMode::Mode1Bank2x4k,
+                    _ => {/*unreachable*/}
+                };
+            }
+            // PRG-RAM banking (upper)
+            0x4106 => {
+                match (data & 0b1100_0000) >> 6 {
+                    0b00 ..= 0b01 => {
+                        self.prg_ram_at_6000 = false;
+                        self.fpga_ram_at_6000 = false;
+                        self.prg_bank_at_6000 &= 0b1000_0000_1111_1111;
+                        self.prg_bank_at_6000 |= ((data as usize) & 0b0111_1111) << 8
+                    },
+                    0b10 => {
+                        self.prg_ram_at_6000 = true;
+                        self.fpga_ram_at_6000 = false;
+                        self.prg_bank_at_6000 &= 0b1100_0000_1111_1111;
+                        self.prg_bank_at_6000 |= ((data as usize) & 0b0011_1111) << 8
+                    },
+                    0b11 => {
+                        self.prg_ram_at_6000 = false;
+                        self.fpga_ram_at_6000 = true;
+                        self.prg_bank_at_6000 &= 0b1100_0000_1111_1111;
+                        self.prg_bank_at_6000 |= ((data as usize) & 0b0011_1111) << 8
+                    },
+                    _ => {/*unreachable*/}
+                }
+            },
+            0x4107 => {
+                match (data & 0b1100_0000) >> 6 {
+                    0b00 ..= 0b01 => {
+                        self.prg_ram_at_7000 = false;
+                        self.fpga_ram_at_7000 = false;
+                        self.prg_bank_at_7000 &= 0b1000_0000_1111_1111;
+                        self.prg_bank_at_7000 |= ((data as usize) & 0b0111_1111) << 8
+                    },
+                    0b10 => {
+                        self.prg_ram_at_7000 = true;
+                        self.fpga_ram_at_7000 = false;
+                        self.prg_bank_at_7000 &= 0b1100_0000_1111_1111;
+                        self.prg_bank_at_7000 |= ((data as usize) & 0b0011_1111) << 8
+                    },
+                    0b11 => {
+                        self.prg_ram_at_7000 = false;
+                        self.fpga_ram_at_7000 = true;
+                        self.prg_bank_at_7000 &= 0b1100_0000_1111_1111;
+                        self.prg_bank_at_7000 |= ((data as usize) & 0b0011_1111) << 8
+                    },
+                    _ => {/*unreachable*/}
+                }
+            },
+            // PRG-ROM banking (upper)
+            0x4108 => {
+                self.prg_ram_at_8000  = (data & 0b1000_0000) != 0;
+                self.prg_bank_at_8000 &= 0b1000_0000_1111_1111;
+                self.prg_bank_at_8000 |= ((data as usize) & 0b0111_1111) << 8
+            },
+            0x4109 => {
+                self.prg_ram_at_9000  = (data & 0b1000_0000) != 0;
+                self.prg_bank_at_9000 &= 0b1000_0000_1111_1111;
+                self.prg_bank_at_9000 |= ((data as usize) & 0b0111_1111) << 8
+            },
+            0x410A => {
+                self.prg_ram_at_a000  = (data & 0b1000_0000) != 0;
+                self.prg_bank_at_a000 &= 0b1000_0000_1111_1111;
+                self.prg_bank_at_a000 |= ((data as usize) & 0b0111_1111) << 8
+            },
+            0x410B => {
+                self.prg_ram_at_b000  = (data & 0b1000_0000) != 0;
+                self.prg_bank_at_b000 &= 0b1000_0000_1111_1111;
+                self.prg_bank_at_b000 |= ((data as usize) & 0b0111_1111) << 8
+            },
+            0x410C => {
+                self.prg_ram_at_c000  = (data & 0b1000_0000) != 0;
+                self.prg_bank_at_c000 &= 0b1000_0000_1111_1111;
+                self.prg_bank_at_c000 |= ((data as usize) & 0b0111_1111) << 8
+            },
+            0x410D => {
+                self.prg_ram_at_d000  = (data & 0b1000_0000) != 0;
+                self.prg_bank_at_d000 &= 0b1000_0000_1111_1111;
+                self.prg_bank_at_d000 |= ((data as usize) & 0b0111_1111) << 8
+            },
+            0x410E => {
+                self.prg_ram_at_e000  = (data & 0b1000_0000) != 0;
+                self.prg_bank_at_e000 &= 0b1000_0000_1111_1111;
+                self.prg_bank_at_e000 |= ((data as usize) & 0b0111_1111) << 8
+            },
+            0x410F => {
+                self.prg_ram_at_f000  = (data & 0b1000_0000) != 0;
+                self.prg_bank_at_f000 &= 0b1000_0000_1111_1111;
+                self.prg_bank_at_f000 |= ((data as usize) & 0b0111_1111) << 8
+            },
+            // PRG-RAM banking (lower)
+            0x4116 => {
+                self.prg_bank_at_6000 &= 0b1111_1111_0000_0000;
+                self.prg_bank_at_6000 |= data as usize;
+            },
+            0x4117 => {
+                self.prg_bank_at_7000 &= 0b1111_1111_0000_0000;
+                self.prg_bank_at_7000 |= data as usize;
+            },
+            // PRG-ROM banking (lower)
+            0x4118 => {
+                self.prg_bank_at_8000 &= 0b1111_1111_0000_0000;
+                self.prg_bank_at_8000 |= data as usize
+            },
+            0x4119 => {
+                self.prg_bank_at_9000 &= 0b1111_1111_0000_0000;
+                self.prg_bank_at_9000 |= data as usize
+            },
+            0x411A => {
+                self.prg_bank_at_a000 &= 0b1111_1111_0000_0000;
+                self.prg_bank_at_a000 |= data as usize
+            },
+            0x411B => {
+                self.prg_bank_at_b000 &= 0b1111_1111_0000_0000;
+                self.prg_bank_at_b000 |= data as usize
+            },
+            0x411C => {
+                self.prg_bank_at_c000 &= 0b1111_1111_0000_0000;
+                self.prg_bank_at_c000 |= data as usize
+            },
+            0x411D => {
+                self.prg_bank_at_d000 &= 0b1111_1111_0000_0000;
+                self.prg_bank_at_d000 |= data as usize
+            },
+            0x411E => {
+                self.prg_bank_at_e000 &= 0b1111_1111_0000_0000;
+                self.prg_bank_at_e000 |= data as usize
+            },
+            0x411F => {
+                self.prg_bank_at_f000 &= 0b1111_1111_0000_0000;
+                self.prg_bank_at_f000 |= data as usize
+            },
+
             _ => {}
         }
     }
 
     fn debug_read_ppu(&self, address: u16) -> Option<u8> {
         match address {
+            // TODO: this is NROM! Fix this!
             0x0000 ..= 0x1FFF => return self.chr_rom.wrapping_read(address as usize),
+            // TODO: this is NROM! Fix this!
             0x2000 ..= 0x3FFF => return match self.mirroring {
                 Mirroring::Horizontal => Some(self.vram[mirroring::horizontal_mirroring(address) as usize]),
                 Mirroring::Vertical   => Some(self.vram[mirroring::vertical_mirroring(address) as usize]),
@@ -190,7 +550,9 @@ impl Mapper for Rainbow {
 
     fn write_ppu(&mut self, address: u16, data: u8) {
         match address {
+            // TODO: this is NROM! Fix this!
             0x0000 ..= 0x1FFF => {self.chr_rom.wrapping_write(address as usize, data);},
+            // TODO: this is NROM! Fix this!
             0x2000 ..= 0x3FFF => match self.mirroring {
                 Mirroring::Horizontal => self.vram[mirroring::horizontal_mirroring(address) as usize] = data,
                 Mirroring::Vertical   => self.vram[mirroring::vertical_mirroring(address) as usize] = data,
