@@ -19,7 +19,7 @@ use mmc::mirroring;
 pub enum PrgRomBankingMode {
     Mode0Bank1x32k,
     Mode1Bank2x16k,
-    Mode2Bank1x16k2x8k8k,
+    Mode2Bank1x16k2x8k,
     Mode3Bank4x8k,
     Mode4Bank8x4k
 }
@@ -63,6 +63,8 @@ pub struct Rainbow {
     prg_ram_at_7000: bool,
     fpga_ram_at_6000: bool,
     fpga_ram_at_7000: bool,
+
+    fpga_bank_at_5000: usize,
 
     mirroring: Mirroring,
     vram: Vec<u8>,
@@ -144,6 +146,8 @@ impl Rainbow {
             fpga_ram_at_6000: false,
             fpga_ram_at_7000: false,
 
+            fpga_bank_at_5000: 0,
+
             mirroring: ines.header.mirroring(),
             vram: vec![0u8; 0x1000],
             fpga_ram: fpga_ram_block.clone(),
@@ -168,6 +172,14 @@ impl Rainbow {
         } else if is_ram {
             self.prg_ram.banked_write(blocksize, bank_number, address, data)
         }
+    }
+
+    fn read_fpga_area(&self, address: usize) -> Option<u8> {
+        self.read_banked_memory(true, false, self.fpga_bank_at_5000, 0x1000, address)
+    }
+
+    fn write_fpga_area(&mut self, address: usize, data: u8) {
+        self.write_banked_memory(true, false, self.fpga_bank_at_5000, 0x1000, address, data)
     }
 
     fn read_prg_ram_area(&self, address: usize) -> Option<u8> {
@@ -206,7 +218,7 @@ impl Rainbow {
                     _ => {None}
                 }
             },
-            PrgRomBankingMode::Mode2Bank1x16k2x8k8k => {
+            PrgRomBankingMode::Mode2Bank1x16k2x8k => {
                 match address {
                     0x8000 ..= 0xBFFF => self.read_banked_memory(false, self.prg_ram_at_8000, self.prg_bank_at_8000, 0x4000, address),
                     0xC000 ..= 0xDFFF => self.read_banked_memory(false, self.prg_ram_at_c000, self.prg_bank_at_c000, 0x2000, address),
@@ -249,7 +261,7 @@ impl Rainbow {
                     _ => {}
                 }
             },
-            PrgRomBankingMode::Mode2Bank1x16k2x8k8k => {
+            PrgRomBankingMode::Mode2Bank1x16k2x8k => {
                 match address {
                     0x8000 ..= 0xBFFF => self.write_banked_memory(false, self.prg_ram_at_8000, self.prg_bank_at_8000, 0x4000, address, data),
                     0xC000 ..= 0xDFFF => self.write_banked_memory(false, self.prg_ram_at_c000, self.prg_bank_at_c000, 0x2000, address, data),
@@ -304,7 +316,7 @@ impl Mapper for Rainbow {
                 let prg_rom_mode_bits = match self.prg_rom_mode {
                     PrgRomBankingMode::Mode0Bank1x32k       => 0b000,
                     PrgRomBankingMode::Mode1Bank2x16k       => 0b001,
-                    PrgRomBankingMode::Mode2Bank1x16k2x8k8k => 0b010,
+                    PrgRomBankingMode::Mode2Bank1x16k2x8k => 0b010,
                     PrgRomBankingMode::Mode3Bank4x8k        => 0b011,
                     // TODO: Does hardware preserve the low 2 bits written? If so we
                     // need an alternate approach when reading
@@ -316,7 +328,8 @@ impl Mapper for Rainbow {
                 };
                 Some(prg_rom_mode_bits | prg_ram_mode_bits)
             },
-
+            0x4800 ..= 0x4FFF => self.fpga_ram.banked_read(0x800, 3, address as usize),
+            0x5000 ..= 0x5FFF => self.read_fpga_area(address as usize),
             0x6000 ..= 0x7FFF => self.read_prg_ram_area(address as usize),
             0x8000 ..= 0xFFFF => self.read_prg_rom_area(address as usize),
             _ => None
@@ -330,7 +343,7 @@ impl Mapper for Rainbow {
                 match data & 0b111 {
                     0b000 => self.prg_rom_mode = PrgRomBankingMode::Mode0Bank1x32k,
                     0b001 => self.prg_rom_mode = PrgRomBankingMode::Mode1Bank2x16k,
-                    0b010 => self.prg_rom_mode = PrgRomBankingMode::Mode2Bank1x16k2x8k8k,
+                    0b010 => self.prg_rom_mode = PrgRomBankingMode::Mode2Bank1x16k2x8k,
                     0b011 => self.prg_rom_mode = PrgRomBankingMode::Mode3Bank4x8k,
                         _ => self.prg_rom_mode = PrgRomBankingMode::Mode4Bank8x4k
                 };
@@ -428,6 +441,9 @@ impl Mapper for Rainbow {
                 self.prg_bank_at_f000 &= 0b1000_0000_1111_1111;
                 self.prg_bank_at_f000 |= ((data as usize) & 0b0111_1111) << 8
             },
+            0x4115 => {
+                self.fpga_bank_at_5000 = (data & 0b1) as usize;
+            }
             // PRG-RAM banking (lower)
             0x4116 => {
                 self.prg_bank_at_6000 &= 0b1111_1111_0000_0000;
@@ -470,6 +486,8 @@ impl Mapper for Rainbow {
                 self.prg_bank_at_f000 &= 0b1111_1111_0000_0000;
                 self.prg_bank_at_f000 |= data as usize
             },
+            0x4800 ..= 0x4FFF => self.fpga_ram.banked_write(0x800, 3, address as usize, data),
+            0x5000 ..= 0x5FFF => self.write_fpga_area(address as usize, data),
             0x6000 ..= 0x7FFF => self.write_prg_ram_area(address as usize, data),
             0x8000 ..= 0xFFFF => self.write_prg_rom_area(address as usize, data),
 
