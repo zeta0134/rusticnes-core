@@ -29,6 +29,20 @@ pub enum PrgRamBankingMode {
     Mode1Bank2x4k
 }
 
+pub enum ChrBankingMode {
+    Mode0Bank1x8k,
+    Mode1Bank2x4k,
+    Mode2Bank4x2k,
+    Mode3Bank8x1k,
+    Mode4Bank16x512b
+}
+
+pub enum ChrChipSelect {
+    ChrRom,
+    ChrRam,
+    FpgaRam
+}
+
 pub struct Rainbow {
     prg_rom: MemoryBlock,
     prg_ram: MemoryBlock,
@@ -37,6 +51,8 @@ pub struct Rainbow {
 
     prg_rom_mode: PrgRomBankingMode,
     prg_ram_mode: PrgRamBankingMode,
+    chr_mode: ChrBankingMode,
+    chr_chip: ChrChipSelect,
 
     prg_bank_at_8000: usize,
     prg_bank_at_9000: usize,
@@ -65,6 +81,10 @@ pub struct Rainbow {
     fpga_ram_at_7000: bool,
 
     fpga_bank_at_5000: usize,
+    chr_banks: Vec<usize>,
+
+    window_split: bool,
+    extended_sprites: bool,
 
     mirroring: Mirroring,
     vram: Vec<u8>,
@@ -119,6 +139,8 @@ impl Rainbow {
 
             prg_rom_mode: PrgRomBankingMode::Mode0Bank1x32k,
             prg_ram_mode: PrgRamBankingMode::Mode0Bank1x8k,
+            chr_mode: ChrBankingMode::Mode0Bank1x8k,
+            chr_chip: ChrChipSelect::ChrRom,
 
             prg_bank_at_8000: 0,
             prg_bank_at_9000: 0,
@@ -147,6 +169,10 @@ impl Rainbow {
             fpga_ram_at_7000: false,
 
             fpga_bank_at_5000: 0,
+            chr_banks: vec![0usize; 16],
+
+            window_split: false,
+            extended_sprites: false,
 
             mirroring: ines.header.mirroring(),
             vram: vec![0u8; 0x1000],
@@ -328,6 +354,43 @@ impl Mapper for Rainbow {
                 };
                 Some(prg_rom_mode_bits | prg_ram_mode_bits)
             },
+
+            // CHR modes
+            0x4120 => {
+                let chr_banking_bits = match self.chr_mode {
+                    ChrBankingMode::Mode0Bank1x8k => 0b000,
+                    ChrBankingMode::Mode1Bank2x4k => 0b001,
+                    ChrBankingMode::Mode2Bank4x2k => 0b010,
+                    ChrBankingMode::Mode3Bank8x1k => 0b011,
+                    ChrBankingMode::Mode4Bank16x512b => 0b100
+                };
+                let window_split_bit     = if self.window_split     {0b0001_0000} else {0};
+                let extended_sprites_bit = if self.extended_sprites {0b0010_0000} else {0};
+                let chip_select_bit = match self.chr_chip {
+                    ChrChipSelect::ChrRom  => 0b0000_0000,
+                    ChrChipSelect::ChrRam  => 0b0100_0000,
+                    ChrChipSelect::FpgaRam => 0b1000_0000,
+                };
+                Some(chr_banking_bits | window_split_bit | extended_sprites_bit | chip_select_bit)
+            },
+
+            // mapper version
+            0x4160 => {
+                // 7  bit  0
+                // ---- ----
+                // PPPV VVVV
+                // |||| ||||
+                // |||+-++++- Version
+                // +++------- Platform
+                // Platform is one of:
+                // 0   PCB
+                // 1   Emulator
+                // 2   Web emulator
+                let platform = 0b001; // emulator
+                let version  = 0;     // v1.0
+                Some((platform << 5) | version)
+            },
+
             0x4800 ..= 0x4FFF => self.fpga_ram.banked_read(0x800, 3, address as usize),
             0x5000 ..= 0x5FFF => self.read_fpga_area(address as usize),
             0x6000 ..= 0x7FFF => self.read_prg_ram_area(address as usize),
@@ -486,6 +549,34 @@ impl Mapper for Rainbow {
                 self.prg_bank_at_f000 &= 0b1111_1111_0000_0000;
                 self.prg_bank_at_f000 |= data as usize
             },
+            0x4120 => {
+                match data & 0b0000_0111 {
+                    0b000 => self.chr_mode = ChrBankingMode::Mode0Bank1x8k,
+                    0b001 => self.chr_mode = ChrBankingMode::Mode1Bank2x4k,
+                    0b010 => self.chr_mode = ChrBankingMode::Mode2Bank4x2k,
+                    0b011 => self.chr_mode = ChrBankingMode::Mode3Bank8x1k,
+                    _ => self.chr_mode = ChrBankingMode::Mode4Bank16x512b,
+                };
+                self.window_split     = (data & 0b0001_0000) != 0;
+                self.extended_sprites = (data & 0b0010_0000) != 0;
+                match (data & 0b1100_0000) >> 6 {
+                    0b00 => self.chr_chip = ChrChipSelect::ChrRom,
+                    0b01 => self.chr_chip = ChrChipSelect::ChrRam,
+                    _    => self.chr_chip = ChrChipSelect::FpgaRam
+                };
+            },
+
+            0x4030 ..= 0x403F => {
+                let bank_number = (address & 0x000F) as usize;
+                self.chr_banks[bank_number] &= 0b0000_0000_1111_1111;
+                self.chr_banks[bank_number] |= (data as usize) << 8;
+            },
+            0x4040 ..= 0x404F => {
+                let bank_number = (address & 0x000F) as usize;
+                self.chr_banks[bank_number] &= 0b1111_1111_0000_0000;
+                self.chr_banks[bank_number] |= data as usize;
+            },
+
             0x4800 ..= 0x4FFF => self.fpga_ram.banked_write(0x800, 3, address as usize, data),
             0x5000 ..= 0x5FFF => self.write_fpga_area(address as usize, data),
             0x6000 ..= 0x7FFF => self.write_prg_ram_area(address as usize, data),
