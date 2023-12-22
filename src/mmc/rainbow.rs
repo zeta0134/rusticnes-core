@@ -16,6 +16,10 @@ use memoryblock::MemoryType;
 use mmc::mapper::*;
 use mmc::mirroring;
 
+use apu::AudioChannelState;
+use mmc::vrc6::Vrc6PulseChannel;
+use mmc::vrc6::Vrc6SawtoothChannel;
+
 #[derive(Debug)]
 pub enum PrgRomBankingMode {
     Mode0Bank1x32k,
@@ -93,6 +97,17 @@ pub struct Rainbow {
     mirroring: Mirroring,
     vram: Vec<u8>,
     fpga_ram: MemoryBlock,
+
+    // Rainbow says it uses VRC6 semantics in its documentation. Until I find
+    // a difference in the hardware, I'm just going to present actual VRC6 channels
+    // for it to drive, similar to NSF, but with a custom output stage.
+    vrc6_pulse1: Vrc6PulseChannel,
+    vrc6_pulse2: Vrc6PulseChannel,
+    vrc6_sawtooth: Vrc6SawtoothChannel,
+
+    vrc6_exp6: bool,
+    vrc6_exp9: bool,
+    vrc6_zpcm: bool,
 }
 
 impl Rainbow {
@@ -142,7 +157,7 @@ impl Rainbow {
         }
         let fpga_ram_block = MemoryBlock::new(&fpga_ram, MemoryType::Ram);
 
-        return Ok(Rainbow {
+        let mut rainbow = Rainbow {
             prg_rom: prg_rom_block.clone(),
             prg_ram: prg_ram_block.clone(),
             chr_rom: chr_rom_block.clone(),
@@ -188,7 +203,20 @@ impl Rainbow {
             mirroring: ines.header.mirroring(),
             vram: vec![0u8; 0x1000],
             fpga_ram: fpga_ram_block.clone(),
-        });
+
+            vrc6_pulse1: Vrc6PulseChannel::new("Pulse 1"),
+            vrc6_pulse2: Vrc6PulseChannel::new("Pulse 2"),
+            vrc6_sawtooth: Vrc6SawtoothChannel::new(),
+
+            vrc6_exp6: true,
+            vrc6_exp9: true,
+            vrc6_zpcm: false,
+        };
+        // enable all VRC6 channels, disable frequency scaling (which Rainbow doesn't support)
+        rainbow.vrc6_pulse1.write_register(3, 0x00);
+        rainbow.vrc6_pulse2.write_register(3, 0x00);
+        rainbow.vrc6_sawtooth.write_register(3, 0x00);
+        return Ok(rainbow);
     }
 
     // helper functions to deal with being able to selectively map ROM/RAM/FPGA into several regions
@@ -481,6 +509,28 @@ impl Mapper for Rainbow {
         // TODO: this is NROM! Fix this!
         return self.mirroring;
     }
+
+    fn clock_cpu(&mut self) {
+        self.vrc6_pulse1.clock();
+        self.vrc6_pulse2.clock();
+        self.vrc6_sawtooth.clock();
+    }
+
+    fn mix_expansion_audio(&self, nes_sample: f32) -> f32 {
+        if self.vrc6_exp6 || self.vrc6_exp9 {
+            let pulse_1_output = if !self.vrc6_pulse1.debug_disable {self.vrc6_pulse1.output() as f32} else {0.0};
+            let pulse_2_output = if !self.vrc6_pulse2.debug_disable {self.vrc6_pulse2.output() as f32} else {0.0};
+            let sawtooth_output = if !self.vrc6_sawtooth.debug_disable {self.vrc6_sawtooth.output() as f32} else {0.0};
+            let vrc6_combined_sample = (pulse_1_output + pulse_2_output + sawtooth_output) / 61.0;
+
+            let nes_pulse_full_volume = 95.88 / ((8128.0 / 15.0) + 100.0);
+            let vrc6_pulse_full_volume = 15.0 / 61.0;
+            let vrc6_weight = nes_pulse_full_volume / vrc6_pulse_full_volume;        
+            return nes_sample + vrc6_combined_sample * vrc6_weight;
+        } else {
+            return nes_sample;
+        }
+    }
     
     fn debug_read_cpu(&self, address: u16) -> Option<u8> {
         match address {
@@ -697,7 +747,6 @@ impl Mapper for Rainbow {
                 self.prg_bank_at_f000 |= data as usize
             },
             0x4120 => {
-                println!("[${:04X}] = ${:02X}", address, data);
                 match data & 0b0000_0111 {
                     0b000 => self.chr_mode = ChrBankingMode::Mode0Bank1x8k,
                     0b001 => self.chr_mode = ChrBankingMode::Mode1Bank2x4k,
@@ -717,21 +766,38 @@ impl Mapper for Rainbow {
             },
 
             0x4130 ..= 0x413F => {
-                println!("[${:04X}] = ${:02X}", address, data);
                 let bank_number = (address & 0x000F) as usize;
                 self.chr_banks[bank_number] &= 0b0000_0000_1111_1111;
                 self.chr_banks[bank_number] |= (data as usize) << 8;
             },
             0x4140 ..= 0x414F => {
-                println!("[${:04X}] = ${:02X}", address, data);
                 let bank_number = (address & 0x000F) as usize;
                 self.chr_banks[bank_number] &= 0b1111_1111_0000_0000;
                 self.chr_banks[bank_number] |= data as usize;
             },
 
-            // FOR DEBUGGING
+            // FOR DEBUGGING (also for unimplemented)
             0x4126 ..= 0x4129 => {println!("UNIMPLEMENTED [${:04X}] = ${:02X}", address, data);},
             0x412A ..= 0x412D => {println!("UNIMPLEMENTED [${:04X}] = ${:02X}", address, data);},
+
+
+            // Audio
+            0x41A0 => self.vrc6_pulse1.write_register(0, data),
+            0x41A1 => self.vrc6_pulse1.write_register(1, data),
+            0x41A2 => self.vrc6_pulse1.write_register(2, data),
+            0x41A3 => self.vrc6_pulse2.write_register(0, data),
+            0x41A4 => self.vrc6_pulse2.write_register(1, data),
+            0x41A5 => self.vrc6_pulse2.write_register(2, data),
+            0x41A6 => self.vrc6_sawtooth.write_register(0, data),
+            0x41A7 => self.vrc6_sawtooth.write_register(1, data),
+            0x41A8 => self.vrc6_sawtooth.write_register(2, data),
+
+            0x41A9 => {
+                println!("AUDIO CONTROL [${:04X}] = ${:02X}", address, data);
+                self.vrc6_exp6 = (data & 0b0000_0001) != 0;
+                self.vrc6_exp9 = (data & 0b0000_0010) != 0;
+                self.vrc6_zpcm = (data & 0b0000_0100) != 0;
+            }
 
             0x4800 ..= 0x4FFF => self.fpga_ram.banked_write(0x800, 3, address as usize, data),
             0x5000 ..= 0x5FFF => self.write_fpga_area(address as usize, data),
@@ -779,6 +845,28 @@ impl Mapper for Rainbow {
             },
             _ => {}
         }
+    }
+
+    fn channels(&self) ->  Vec<& dyn AudioChannelState> {
+        let mut channels: Vec<& dyn AudioChannelState> = Vec::new();
+        channels.push(&self.vrc6_pulse1);
+        channels.push(&self.vrc6_pulse2);
+        channels.push(&self.vrc6_sawtooth);
+        return channels;
+    }
+
+    fn channels_mut(&mut self) ->  Vec<&mut dyn AudioChannelState> {
+        let mut channels: Vec<&mut dyn AudioChannelState> = Vec::new();
+        channels.push(&mut self.vrc6_pulse1);
+        channels.push(&mut self.vrc6_pulse2);
+        channels.push(&mut self.vrc6_sawtooth);
+        return channels;
+    }
+
+    fn record_expansion_audio_output(&mut self, _nes_sample: f32) {
+        self.vrc6_pulse1.record_current_output();
+        self.vrc6_pulse2.record_current_output();
+        self.vrc6_sawtooth.record_current_output();
     }
 }
 
