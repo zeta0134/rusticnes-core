@@ -158,6 +158,9 @@ fn _read_byte(nes: &NesState, address: u16, mapped_byte: u8) -> u8 {
                 _ => return 0
             }
         },
+        0x4011 => {
+            return mapped_byte;
+        },
         0x4016 => {
             let result = 0x40 | (nes.p1_data & 0x1);
             return result;

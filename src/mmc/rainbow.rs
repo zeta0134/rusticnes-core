@@ -108,6 +108,12 @@ pub struct Rainbow {
     vrc6_exp6: bool,
     vrc6_exp9: bool,
     vrc6_zpcm: bool,
+
+    cpu_irq_counter: u16,
+    cpu_irq_latch: u16,
+    cpu_irq_enable: bool,
+    cpu_irq_auto_repeat: bool,
+    cpu_irq_pending: bool,
 }
 
 impl Rainbow {
@@ -211,6 +217,12 @@ impl Rainbow {
             vrc6_exp6: true,
             vrc6_exp9: true,
             vrc6_zpcm: false,
+
+            cpu_irq_counter: 0xFFFF,
+            cpu_irq_latch: 0xFFFF,
+            cpu_irq_enable: false,
+            cpu_irq_auto_repeat: false,
+            cpu_irq_pending: false,
         };
         // enable all VRC6 channels, disable frequency scaling (which Rainbow doesn't support)
         rainbow.vrc6_pulse1.write_register(3, 0x00);
@@ -494,6 +506,17 @@ impl Rainbow {
             }
         }
     }
+
+    fn clock_irq(&mut self) {
+        if self.cpu_irq_enable {
+            if self.cpu_irq_counter == 0 {
+                self.cpu_irq_pending = true;
+                self.cpu_irq_counter = self.cpu_irq_latch;
+            } else {
+                self.cpu_irq_counter -= 1;
+            }
+        }
+    }
 }
 
                                 
@@ -514,6 +537,11 @@ impl Mapper for Rainbow {
         self.vrc6_pulse1.clock();
         self.vrc6_pulse2.clock();
         self.vrc6_sawtooth.clock();
+        self.clock_irq();
+    }
+
+    fn irq_flag(&self) -> bool {
+        return self.cpu_irq_pending;
     }
 
     fn mix_expansion_audio(&self, nes_sample: f32) -> f32 {
@@ -534,6 +562,21 @@ impl Mapper for Rainbow {
     
     fn debug_read_cpu(&self, address: u16) -> Option<u8> {
         match address {
+            // ZPCM
+            0x4011 => {
+                let zpcm_output = if self.vrc6_zpcm {
+                    let pulse_1_output = if !self.vrc6_pulse1.debug_disable {self.vrc6_pulse1.output()} else {0};
+                    let pulse_2_output = if !self.vrc6_pulse2.debug_disable {self.vrc6_pulse2.output()} else {0};
+                    let sawtooth_output = if !self.vrc6_sawtooth.debug_disable {self.vrc6_sawtooth.output()} else {0};
+                    let combined_output = pulse_1_output + pulse_2_output + sawtooth_output;
+                    let shifted_output = combined_output << 1;
+                    shifted_output
+                } else {
+                    0x00
+                };
+                Some(zpcm_output)
+            },
+
             // PRG banking modes
             0x4100 => {
                 let prg_rom_mode_bits = match self.prg_rom_mode {
@@ -586,6 +629,12 @@ impl Mapper for Rainbow {
                 let platform = 0b001; // emulator
                 let version  = 0;     // v1.0
                 Some((platform << 5) | version)
+            },
+
+            0x4161 => {
+                let cpu_irq_pending_bits = if self.cpu_irq_pending {0b0100_0000} else {0};
+                println!("IRQ STATUS [${:04X}] = ${:02X}", address, cpu_irq_pending_bits);
+                Some(cpu_irq_pending_bits)
             },
 
             0x4800 ..= 0x4FFF => self.fpga_ram.banked_read(0x800, 3, address as usize),
@@ -779,7 +828,27 @@ impl Mapper for Rainbow {
             // FOR DEBUGGING (also for unimplemented)
             0x4126 ..= 0x4129 => {println!("UNIMPLEMENTED [${:04X}] = ${:02X}", address, data);},
             0x412A ..= 0x412D => {println!("UNIMPLEMENTED [${:04X}] = ${:02X}", address, data);},
-
+            0x4150 ..= 0x4154 => {println!("UNIMPLEMENTED [${:04X}] = ${:02X}", address, data);},
+            
+            0x4158 => {
+                self.cpu_irq_latch &= 0b1111_1111_0000_0000;
+                self.cpu_irq_latch |= data as u16;
+            },
+            0x4159 => {
+                self.cpu_irq_latch &= 0b0000_0000_1111_1111;
+                self.cpu_irq_latch |= (data as u16) << 8;
+            },
+            0x415A => {
+                self.cpu_irq_auto_repeat = (data & 0b0000_0001) != 0;
+                self.cpu_irq_enable = (data & 0b0000_0010) != 0;
+                if self.cpu_irq_enable {
+                    self.cpu_irq_counter = self.cpu_irq_latch;
+                }
+            },
+            0x415B => {
+                self.cpu_irq_pending = false;
+                self.cpu_irq_enable = self.cpu_irq_auto_repeat;
+            },
 
             // Audio
             0x41A0 => self.vrc6_pulse1.write_register(0, data),
