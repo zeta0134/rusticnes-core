@@ -14,13 +14,12 @@ use memoryblock::MemoryBlock;
 use memoryblock::MemoryType;
 
 use mmc::mapper::*;
-use mmc::mirroring;
 
 use apu::AudioChannelState;
 use mmc::vrc6::Vrc6PulseChannel;
 use mmc::vrc6::Vrc6SawtoothChannel;
 
-#[derive(Debug)]
+#[derive(Debug,Copy,Clone)]
 pub enum PrgRomBankingMode {
     Mode0Bank1x32k,
     Mode1Bank2x16k,
@@ -29,13 +28,13 @@ pub enum PrgRomBankingMode {
     Mode4Bank8x4k
 }
 
-#[derive(Debug)]
+#[derive(Debug,Copy,Clone)]
 pub enum PrgRamBankingMode {
     Mode0Bank1x8k,
     Mode1Bank2x4k
 }
 
-#[derive(Debug)]
+#[derive(Debug,Copy,Clone)]
 pub enum ChrBankingMode {
     Mode0Bank1x8k,
     Mode1Bank2x4k,
@@ -44,11 +43,19 @@ pub enum ChrBankingMode {
     Mode4Bank16x512b
 }
 
-#[derive(Debug)]
+#[derive(Debug,Copy,Clone)]
 pub enum ChrChipSelect {
     ChrRom,
     ChrRam,
     FpgaRam
+}
+
+#[derive(Debug,Copy,Clone)]
+pub enum NametableChipSelect {
+    CiRam,
+    ChrRam,
+    FpgaRam,
+    ChrRom,
 }
 
 pub struct Rainbow {
@@ -95,7 +102,7 @@ pub struct Rainbow {
     extended_sprites: bool,
 
     mirroring: Mirroring,
-    vram: Vec<u8>,
+    ciram: MemoryBlock,
     fpga_ram: MemoryBlock,
 
     // Rainbow says it uses VRC6 semantics in its documentation. Until I find
@@ -114,6 +121,19 @@ pub struct Rainbow {
     cpu_irq_enable: bool,
     cpu_irq_auto_repeat: bool,
     cpu_irq_pending: bool,
+
+    nametable_bank_at_2000: usize,
+    nametable_bank_at_2400: usize,
+    nametable_bank_at_2800: usize,
+    nametable_bank_at_2c00: usize,
+
+    nametable_chip_at_2000: NametableChipSelect,
+    nametable_chip_at_2400: NametableChipSelect,
+    nametable_chip_at_2800: NametableChipSelect,
+    nametable_chip_at_2c00: NametableChipSelect,
+
+    // TODO: extended nametable modes, including: fill, attribute, background
+    // TODO: window split nametable and configuration
 }
 
 impl Rainbow {
@@ -163,6 +183,11 @@ impl Rainbow {
         }
         let fpga_ram_block = MemoryBlock::new(&fpga_ram, MemoryType::Ram);
 
+        // for simplicity, we'll also handle ciram as a banked block
+        let mut ciram: Vec<u8> = Vec::new();
+        ciram.resize(0x800, 0);
+        let ciram_block = MemoryBlock::new(&ciram, MemoryType::Ram);
+
         let mut rainbow = Rainbow {
             prg_rom: prg_rom_block.clone(),
             prg_ram: prg_ram_block.clone(),
@@ -207,7 +232,7 @@ impl Rainbow {
             extended_sprites: false,
 
             mirroring: ines.header.mirroring(),
-            vram: vec![0u8; 0x1000],
+            ciram: ciram_block.clone(),
             fpga_ram: fpga_ram_block.clone(),
 
             vrc6_pulse1: Vrc6PulseChannel::new("Pulse 1"),
@@ -223,6 +248,17 @@ impl Rainbow {
             cpu_irq_enable: false,
             cpu_irq_auto_repeat: false,
             cpu_irq_pending: false,
+
+            // 
+            nametable_bank_at_2000: 0,
+            nametable_bank_at_2400: 0,
+            nametable_bank_at_2800: 1,
+            nametable_bank_at_2c00: 1,
+
+            nametable_chip_at_2000: NametableChipSelect::CiRam,
+            nametable_chip_at_2400: NametableChipSelect::CiRam,
+            nametable_chip_at_2800: NametableChipSelect::CiRam,
+            nametable_chip_at_2c00: NametableChipSelect::CiRam,
         };
         // enable all VRC6 channels, disable frequency scaling (which Rainbow doesn't support)
         rainbow.vrc6_pulse1.write_register(3, 0x00);
@@ -504,6 +540,46 @@ impl Rainbow {
                     _ => {}
                 }
             }
+        }
+    }
+
+    // Aaand a nametable variant, to round out the set
+    fn read_banked_nametable(&self, chip_select: NametableChipSelect, bank_number: usize, address: usize) -> Option<u8> {
+        match chip_select {
+            NametableChipSelect::CiRam   =>    self.ciram.banked_read(0x0400, bank_number, address),
+            NametableChipSelect::ChrRam  =>  self.chr_ram.banked_read(0x0400, bank_number, address),
+            NametableChipSelect::FpgaRam => self.fpga_ram.banked_read(0x0400, bank_number, address),
+            NametableChipSelect::ChrRom  =>  self.chr_rom.banked_read(0x0400, bank_number, address),
+        }
+    }
+
+    fn write_banked_nametable(&mut self, chip_select: NametableChipSelect, bank_number: usize, address: usize, data: u8) {
+        match chip_select {
+            NametableChipSelect::CiRam   =>    self.ciram.banked_write(0x0400, bank_number, address, data),
+            NametableChipSelect::ChrRam  =>  self.chr_ram.banked_write(0x0400, bank_number, address, data),
+            NametableChipSelect::FpgaRam => self.fpga_ram.banked_write(0x0400, bank_number, address, data),
+            //NametableChipSelect::ChrRom  =>  self.chr_rom.banked_write(0x0400, bank_number, address, data), // lol no
+            _ => {}
+        }
+    }
+
+    fn read_banked_nametable_area(&self, address: usize) -> Option<u8> {
+        match address {
+            0x2000 ..= 0x23FF => self.read_banked_nametable(self.nametable_chip_at_2000, self.nametable_bank_at_2000, address),
+            0x2400 ..= 0x27FF => self.read_banked_nametable(self.nametable_chip_at_2400, self.nametable_bank_at_2400, address),
+            0x2800 ..= 0x2BFF => self.read_banked_nametable(self.nametable_chip_at_2800, self.nametable_bank_at_2800, address),
+            0x2C00 ..= 0x2FFF => self.read_banked_nametable(self.nametable_chip_at_2c00, self.nametable_bank_at_2c00, address),
+            _ => {None}
+        }
+    }
+
+    fn write_banked_nametable_area(&mut self, address: usize, data: u8) {
+        match address {
+            0x2000 ..= 0x23FF => self.write_banked_nametable(self.nametable_chip_at_2000, self.nametable_bank_at_2000, address, data),
+            0x2400 ..= 0x27FF => self.write_banked_nametable(self.nametable_chip_at_2400, self.nametable_bank_at_2400, address, data),
+            0x2800 ..= 0x2BFF => self.write_banked_nametable(self.nametable_chip_at_2800, self.nametable_bank_at_2800, address, data),
+            0x2C00 ..= 0x2FFF => self.write_banked_nametable(self.nametable_chip_at_2c00, self.nametable_bank_at_2c00, address, data),
+            _ => {}
         }
     }
 
@@ -814,6 +890,48 @@ impl Mapper for Rainbow {
                     self.chr_mode, self.chr_chip, self.window_split, self.extended_sprites);
             },
 
+            0x4126 => self.nametable_bank_at_2000 = data as usize,
+            0x4127 => self.nametable_bank_at_2400 = data as usize,
+            0x4128 => self.nametable_bank_at_2800 = data as usize,
+            0x4129 => self.nametable_bank_at_2c00 = data as usize,
+
+            0x412A => {
+                match (data & 0b1100_0000) >> 6 {
+                    0b00 => self.nametable_chip_at_2000 = NametableChipSelect::CiRam,
+                    0b01 => self.nametable_chip_at_2000 = NametableChipSelect::ChrRam,
+                    0b10 => self.nametable_chip_at_2000 = NametableChipSelect::FpgaRam,
+                    0b11 => self.nametable_chip_at_2000 = NametableChipSelect::ChrRom,
+                    _ => {}
+                };
+            },
+            0x412B => {
+                match (data & 0b1100_0000) >> 6 {
+                    0b00 => self.nametable_chip_at_2400 = NametableChipSelect::CiRam,
+                    0b01 => self.nametable_chip_at_2400 = NametableChipSelect::ChrRam,
+                    0b10 => self.nametable_chip_at_2400 = NametableChipSelect::FpgaRam,
+                    0b11 => self.nametable_chip_at_2400 = NametableChipSelect::ChrRom,
+                    _ => {}
+                };
+            },
+            0x412C => {
+                match (data & 0b1100_0000) >> 6 {
+                    0b00 => self.nametable_chip_at_2800 = NametableChipSelect::CiRam,
+                    0b01 => self.nametable_chip_at_2800 = NametableChipSelect::ChrRam,
+                    0b10 => self.nametable_chip_at_2800 = NametableChipSelect::FpgaRam,
+                    0b11 => self.nametable_chip_at_2800 = NametableChipSelect::ChrRom,
+                    _ => {}
+                };
+            },
+            0x412D => {
+                match (data & 0b1100_0000) >> 6 {
+                    0b00 => self.nametable_chip_at_2c00 = NametableChipSelect::CiRam,
+                    0b01 => self.nametable_chip_at_2c00 = NametableChipSelect::ChrRam,
+                    0b10 => self.nametable_chip_at_2c00 = NametableChipSelect::FpgaRam,
+                    0b11 => self.nametable_chip_at_2c00 = NametableChipSelect::ChrRom,
+                    _ => {}
+                };
+            },
+
             0x4130 ..= 0x413F => {
                 let bank_number = (address & 0x000F) as usize;
                 self.chr_banks[bank_number] &= 0b0000_0000_1111_1111;
@@ -826,8 +944,6 @@ impl Mapper for Rainbow {
             },
 
             // FOR DEBUGGING (also for unimplemented)
-            0x4126 ..= 0x4129 => {println!("UNIMPLEMENTED [${:04X}] = ${:02X}", address, data);},
-            0x412A ..= 0x412D => {println!("UNIMPLEMENTED [${:04X}] = ${:02X}", address, data);},
             0x4150 ..= 0x4154 => {println!("UNIMPLEMENTED [${:04X}] = ${:02X}", address, data);},
             
             0x4158 => {
@@ -883,17 +999,8 @@ impl Mapper for Rainbow {
             // base behavior with both of those disabled:
             0x0000 ..= 0x1FFF => self.read_banked_chr_area(address as usize),
             
-
-            // TODO: this is NROM! Fix this!
-            0x2000 ..= 0x3FFF => return match self.mirroring {
-                Mirroring::Horizontal => Some(self.vram[mirroring::horizontal_mirroring(address) as usize]),
-                Mirroring::Vertical   => Some(self.vram[mirroring::vertical_mirroring(address) as usize]),
-                // Note: no licensed NROM boards support four-screen mirroring, but it is possible
-                // to build a board that does. Since iNes allows this, some homebrew requires it, and
-                // so we support it in the interest of compatibility.
-                Mirroring::FourScreen => Some(self.vram[mirroring::four_banks(address) as usize]),
-                _ => None
-            },
+            // TODO: window splits, extended attributes, other fancy features
+            0x2000 ..= 0x2FFF => self.read_banked_nametable_area(address as usize),
             _ => return None
         }
     }
@@ -902,16 +1009,12 @@ impl Mapper for Rainbow {
         match address {
             // TODO: investigate whether this goes through extended modes while rendering is
             // enabled. If it does, we should try to emulate the corrupted target address. We
-            // might insted need to suppress writes during rendering.
+            // might instead need to suppress writes during rendering.
             0x0000 ..= 0x1FFF => self.write_banked_chr_area(address as usize, data),
 
-            // TODO: this is NROM! Fix this!
-            0x2000 ..= 0x3FFF => match self.mirroring {
-                Mirroring::Horizontal => self.vram[mirroring::horizontal_mirroring(address) as usize] = data,
-                Mirroring::Vertical   => self.vram[mirroring::vertical_mirroring(address) as usize] = data,
-                Mirroring::FourScreen => self.vram[mirroring::four_banks(address) as usize] = data,
-                _ => {}
-            },
+            // TODO: do any fancy features affect NT writes? what happens if writes occur during
+            // rendering?
+            0x2000 ..= 0x2FFF => self.write_banked_nametable_area(address as usize, data),
             _ => {}
         }
     }
