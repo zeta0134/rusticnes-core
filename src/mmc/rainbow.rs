@@ -58,6 +58,13 @@ pub enum NametableChipSelect {
     ChrRom,
 }
 
+#[derive(Copy, Clone, PartialEq)]
+pub enum PpuMode {
+    Backgrounds,
+    Sprites,
+    PpuData
+}
+
 pub struct Rainbow {
     prg_rom: MemoryBlock,
     prg_ram: MemoryBlock,
@@ -131,6 +138,24 @@ pub struct Rainbow {
     nametable_chip_at_2400: NametableChipSelect,
     nametable_chip_at_2800: NametableChipSelect,
     nametable_chip_at_2c00: NametableChipSelect,
+
+    // snooping PPU behavior and state
+    scanline_irq_pending: bool,
+    scanline_irq_enabled: bool,
+    scanline_irq_compare: u8,
+    scanline_irq_offset: u8,
+    scanline_jitter_counter: u8,
+
+    ppu_read_mode: PpuMode,
+    in_frame: bool,
+    in_hblank: bool,
+    current_scanline: u8,
+    consecutive_nametable_count: u8,
+    cpu_cycles_since_last_ppu_read: u8,
+    ppu_fetches_this_scanline: u8,
+    last_ppu_fetch: u16,
+    last_bg_tile_fetch: u16,
+
 
     // TODO: extended nametable modes, including: fill, attribute, background
     // TODO: window split nametable and configuration
@@ -248,6 +273,22 @@ impl Rainbow {
             cpu_irq_enable: false,
             cpu_irq_auto_repeat: false,
             cpu_irq_pending: false,
+
+            scanline_irq_enabled: false,
+            scanline_irq_pending: false,
+            scanline_irq_compare: 0xFF,
+            scanline_irq_offset: 0x87,
+            scanline_jitter_counter: 0,
+
+            ppu_read_mode: PpuMode::PpuData,
+            in_frame: false,
+            in_hblank: false,
+            current_scanline: 0,
+            consecutive_nametable_count: 0,
+            cpu_cycles_since_last_ppu_read: 0,
+            ppu_fetches_this_scanline: 0,
+            last_ppu_fetch: 0,
+            last_bg_tile_fetch: 0,
 
             // 
             nametable_bank_at_2000: 0,
@@ -593,9 +634,81 @@ impl Rainbow {
             }
         }
     }
-}
 
-                                
+    fn detect_scanline(&mut self) {
+        // Note: we are *currently* processing fetch #1, so we will not yet consider
+        // it to have passed.
+        self.ppu_fetches_this_scanline = 0;
+        self.ppu_read_mode = PpuMode::Backgrounds;
+        if self.in_frame {
+            self.current_scanline += 1;
+        } else {
+            self.in_frame = true;
+            self.current_scanline = 0;
+            self.scanline_irq_pending = false;
+        }
+        if self.current_scanline == 241 {
+            self.in_frame = false;
+            self.in_hblank = false;
+            self.scanline_irq_pending = false;
+            self.current_scanline = 0;
+            self.ppu_read_mode = PpuMode::PpuData;
+        }
+    }
+
+    fn snoop_ppu_read(&mut self, address: u16) {
+        self.cpu_cycles_since_last_ppu_read = 0;
+        self.ppu_fetches_this_scanline += 1;
+        if self.in_frame && self.ppu_fetches_this_scanline >= 127 {
+            self.ppu_read_mode = PpuMode::Sprites;
+            self.in_hblank = true;
+        }
+        if self.in_frame && self.ppu_fetches_this_scanline >= 159 {
+            self.ppu_read_mode = PpuMode::Backgrounds;
+            self.in_hblank = false;
+        }
+        if self.consecutive_nametable_count == 2 {
+            self.detect_scanline();
+        }
+        if (self.current_scanline == self.scanline_irq_compare) && (self.ppu_fetches_this_scanline == self.scanline_irq_offset) {
+            self.scanline_irq_pending = true;
+            self.scanline_jitter_counter = 0;
+        }
+        if address == self.last_ppu_fetch && address >= 0x2000 && address <= 0x2FFF {
+            self.consecutive_nametable_count += 1;
+        } else {
+            self.consecutive_nametable_count = 0;
+        }
+        if self.ppu_fetches_this_scanline % 4 == 0 {
+            // The LAST byte we fetched was the nametable byte. Hold onto that address,
+            // we need to keep track of it for ExRAM attributes.
+            self.last_bg_tile_fetch = self.last_ppu_fetch;
+        }
+        self.last_ppu_fetch = address;
+    }
+
+    fn snoop_cpu_read(&mut self, address: u16) {
+        if self.cpu_cycles_since_last_ppu_read < 255 {
+            self.cpu_cycles_since_last_ppu_read += 1;
+        }
+        // If we go 3 CPU reads without any PPU access, assume rendering has stopped
+        if self.cpu_cycles_since_last_ppu_read == 4 {
+            self.in_frame = false;
+            self.in_hblank = false;
+            self.ppu_read_mode = PpuMode::PpuData;
+        }
+        // If we are reading the NMI vector, assume rendering has stopped AND clear
+        // the scanline IRQ, if it is still pending
+        if address == 0xFFFA || address == 0xFFFB {
+            self.in_frame = false;
+            self.in_hblank = false;
+            self.scanline_irq_pending = false;
+            self.current_scanline = 0;
+            self.ppu_read_mode = PpuMode::PpuData;
+        }
+        self.scanline_jitter_counter = self.scanline_jitter_counter.wrapping_add(1);
+    }
+}
 
 impl Mapper for Rainbow {
     fn print_debug_status(&self) {
@@ -617,7 +730,7 @@ impl Mapper for Rainbow {
     }
 
     fn irq_flag(&self) -> bool {
-        return self.cpu_irq_pending;
+        return (self.cpu_irq_pending) || (self.scanline_irq_enabled && self.scanline_irq_pending);
     }
 
     fn mix_expansion_audio(&self, nes_sample: f32) -> f32 {
@@ -634,6 +747,19 @@ impl Mapper for Rainbow {
         } else {
             return nes_sample;
         }
+    }
+
+    fn read_cpu(&mut self, address: u16) -> Option<u8> {
+        self.snoop_cpu_read(address);
+        let data = self.debug_read_cpu(address);
+        // side effects
+        match address {
+            0x4151 => {
+                self.scanline_irq_pending = false
+            },
+            _ => {}
+        }
+        return data;
     }
     
     fn debug_read_cpu(&self, address: u16) -> Option<u8> {
@@ -690,6 +816,16 @@ impl Mapper for Rainbow {
                 Some(chr_banking_bits | window_split_bit | extended_sprites_bit | chip_select_bit)
             },
 
+            0x4151 => {
+                let hblank_flag = if self.in_hblank {0b1000_0000} else {0};
+                let inframe_flag = if self.in_frame {0b0100_0000} else {0};
+                let scanline_pending_flag = if self.scanline_irq_pending {0b0000_0001} else {0};
+                Some(hblank_flag | inframe_flag | scanline_pending_flag)
+            },
+            0x4154 => {
+                Some(self.scanline_jitter_counter)
+            },
+
             // mapper version
             0x4160 => {
                 // 7  bit  0
@@ -709,7 +845,6 @@ impl Mapper for Rainbow {
 
             0x4161 => {
                 let cpu_irq_pending_bits = if self.cpu_irq_pending {0b0100_0000} else {0};
-                println!("IRQ STATUS [${:04X}] = ${:02X}", address, cpu_irq_pending_bits);
                 Some(cpu_irq_pending_bits)
             },
 
@@ -943,8 +1078,19 @@ impl Mapper for Rainbow {
                 self.chr_banks[bank_number] |= data as usize;
             },
 
-            // FOR DEBUGGING (also for unimplemented)
-            0x4150 ..= 0x4154 => {println!("UNIMPLEMENTED [${:04X}] = ${:02X}", address, data);},
+            0x4150 => {
+                self.scanline_irq_compare = data;
+            },
+            0x4151 => {
+                self.scanline_irq_enabled = true;
+            },
+            0x4152 => {
+                self.scanline_irq_enabled = false;
+                self.scanline_irq_pending = false;
+            },
+            0x4153 => {
+                self.scanline_irq_offset = data;
+            },
             
             0x4158 => {
                 self.cpu_irq_latch &= 0b1111_1111_0000_0000;
@@ -991,6 +1137,11 @@ impl Mapper for Rainbow {
 
             _ => {}
         }
+    }
+
+    fn read_ppu(&mut self, address: u16) -> Option<u8> {
+        self.snoop_ppu_read(address);
+        return self.debug_read_ppu(address);
     }
 
     fn debug_read_ppu(&self, address: u16) -> Option<u8> {
