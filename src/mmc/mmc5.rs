@@ -468,7 +468,7 @@ impl Mmc5 {
         return self.chr.banked_read(chr_bank_size as usize, chr_bank as usize, address as usize).unwrap_or(0);
     }
 
-        pub fn read_extended_attribute(&self) -> u8 {
+    pub fn read_extended_attribute(&self) -> u8 {
         let nametable_index = self.last_bg_tile_fetch & 0x3FF;
         let extended_tile_attributes = self.extram[nametable_index as usize];
         let palette_index = (extended_tile_attributes & 0b1100_0000) >> 6;

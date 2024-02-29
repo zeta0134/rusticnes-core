@@ -104,6 +104,7 @@ pub struct Rainbow {
 
     fpga_bank_at_5000: usize,
     chr_banks: Vec<usize>,
+    chr_bank_high_bits: usize,
 
     window_split: bool,
     extended_sprites: bool,
@@ -138,6 +139,21 @@ pub struct Rainbow {
     nametable_chip_at_2400: NametableChipSelect,
     nametable_chip_at_2800: NametableChipSelect,
     nametable_chip_at_2c00: NametableChipSelect,
+
+    extended_attributes_2000: bool,
+    extended_attributes_2400: bool,
+    extended_attributes_2800: bool,
+    extended_attributes_2c00: bool,
+
+    extended_backgrounds_2000: bool,
+    extended_backgrounds_2400: bool,
+    extended_backgrounds_2800: bool,
+    extended_backgrounds_2c00: bool,
+
+    exram_bank_2000: usize,
+    exram_bank_2400: usize,
+    exram_bank_2800: usize,
+    exram_bank_2c00: usize,
 
     // snooping PPU behavior and state
     scanline_irq_pending: bool,
@@ -252,6 +268,7 @@ impl Rainbow {
 
             fpga_bank_at_5000: 0,
             chr_banks: vec![0usize; 16],
+            chr_bank_high_bits: 0,
 
             window_split: false,
             extended_sprites: false,
@@ -300,6 +317,21 @@ impl Rainbow {
             nametable_chip_at_2400: NametableChipSelect::CiRam,
             nametable_chip_at_2800: NametableChipSelect::CiRam,
             nametable_chip_at_2c00: NametableChipSelect::CiRam,
+
+            extended_attributes_2000: false,
+            extended_attributes_2400: false,
+            extended_attributes_2800: false,
+            extended_attributes_2c00: false,
+
+            extended_backgrounds_2000: false,
+            extended_backgrounds_2400: false,
+            extended_backgrounds_2800: false,
+            extended_backgrounds_2c00: false,
+
+            exram_bank_2000: 0,
+            exram_bank_2400: 0,
+            exram_bank_2800: 0,
+            exram_bank_2c00: 0,
         };
         // enable all VRC6 channels, disable frequency scaling (which Rainbow doesn't support)
         rainbow.vrc6_pulse1.write_register(3, 0x00);
@@ -633,6 +665,68 @@ impl Rainbow {
                 self.cpu_irq_counter -= 1;
             }
         }
+    }
+
+    pub fn extended_tile_attributes(&self) -> u8 {
+        let current_nametable = self.last_bg_tile_fetch & 0xC00;
+        let nametable_address = self.last_bg_tile_fetch & 0x3FF;
+        let attribute_byte = match current_nametable {
+            0x000 => self.fpga_ram.banked_read(1024, self.exram_bank_2000, nametable_address as usize).unwrap_or(0),
+            0x400 => self.fpga_ram.banked_read(1024, self.exram_bank_2400, nametable_address as usize).unwrap_or(0),
+            0x800 => self.fpga_ram.banked_read(1024, self.exram_bank_2800, nametable_address as usize).unwrap_or(0),
+            0xC00 => self.fpga_ram.banked_read(1024, self.exram_bank_2c00, nametable_address as usize).unwrap_or(0),
+            _ => 0 // unreachable
+        };
+        return attribute_byte;
+    }
+
+    pub fn read_extended_chr(&self, address: usize) -> u8 {
+        let chr_bank_size = 4096;
+        let exattr_byte = self.extended_tile_attributes();
+        let chr_bank = (self.chr_bank_high_bits << 6) | ((exattr_byte as usize) & 0b0011_1111);
+        return self.read_banked_chr(chr_bank as usize, chr_bank_size, address).unwrap_or(0);
+    }
+
+    pub fn read_extended_attribute(&self) -> u8 {
+        let exattr_byte = self.extended_tile_attributes();
+        let palette_index = (exattr_byte & 0b1100_0000) >> 6;
+        // Duplicate the palette four times; this is easier than working out which sub-index the PPU is going to
+        // read here. We're overriding every fetch anyway.
+        let combined_attribute = palette_index << 6 | palette_index << 4 | palette_index << 2 | palette_index;
+        return combined_attribute as u8;
+    }
+
+    fn is_extended_attribute(&self) -> bool {
+        let ppu_rendering_backgrounds = self.ppu_read_mode == PpuMode::Backgrounds;
+        let reading_attribute_byte = (self.ppu_fetches_this_scanline % 4) == 0;
+
+        let current_nametable = self.last_bg_tile_fetch & 0xC00;
+        let extended_attributes_enabled = match current_nametable {
+            0x000 => self.extended_attributes_2000,
+            0x400 => self.extended_attributes_2400,
+            0x800 => self.extended_attributes_2800,
+            0xC00 => self.extended_attributes_2c00,
+            _ => false // unreachable
+        };
+
+        return ppu_rendering_backgrounds & extended_attributes_enabled & reading_attribute_byte;
+    }
+
+    fn is_extended_pattern(&self) -> bool {
+        let ppu_rendering_backgrounds = self.ppu_read_mode == PpuMode::Backgrounds;
+        let tile_sub_cycle = self.ppu_fetches_this_scanline % 4;
+        let reading_pattern_byte = (tile_sub_cycle == 1) || (tile_sub_cycle == 2);
+
+        let current_nametable = self.last_bg_tile_fetch & 0xC00;
+        let extended_patterns_enabled = match current_nametable {
+            0x000 => self.extended_backgrounds_2000,
+            0x400 => self.extended_backgrounds_2400,
+            0x800 => self.extended_backgrounds_2800,
+            0xC00 => self.extended_backgrounds_2c00,
+            _ => false // unreachable
+        };
+
+        return ppu_rendering_backgrounds & extended_patterns_enabled & reading_pattern_byte;
     }
 
     fn detect_scanline(&mut self) {
@@ -1025,12 +1119,17 @@ impl Mapper for Rainbow {
                     self.chr_mode, self.chr_chip, self.window_split, self.extended_sprites);
             },
 
+            0x4121 => {self.chr_bank_high_bits = (data & 0b0001_1111) as usize;},
+
             0x4126 => self.nametable_bank_at_2000 = data as usize,
             0x4127 => self.nametable_bank_at_2400 = data as usize,
             0x4128 => self.nametable_bank_at_2800 = data as usize,
             0x4129 => self.nametable_bank_at_2c00 = data as usize,
 
             0x412A => {
+                self.extended_attributes_2000  = (data & 0b0000_0001) != 0;
+                self.extended_backgrounds_2000 = (data & 0b0000_0010) != 0;
+                self.exram_bank_2000 =          ((data & 0b0000_1100) >> 2) as usize;
                 match (data & 0b1100_0000) >> 6 {
                     0b00 => self.nametable_chip_at_2000 = NametableChipSelect::CiRam,
                     0b01 => self.nametable_chip_at_2000 = NametableChipSelect::ChrRam,
@@ -1040,6 +1139,9 @@ impl Mapper for Rainbow {
                 };
             },
             0x412B => {
+                self.extended_attributes_2400  = (data & 0b0000_0001) != 0;
+                self.extended_backgrounds_2400 = (data & 0b0000_0010) != 0;
+                self.exram_bank_2400 =          ((data & 0b0000_1100) >> 2) as usize;
                 match (data & 0b1100_0000) >> 6 {
                     0b00 => self.nametable_chip_at_2400 = NametableChipSelect::CiRam,
                     0b01 => self.nametable_chip_at_2400 = NametableChipSelect::ChrRam,
@@ -1049,6 +1151,9 @@ impl Mapper for Rainbow {
                 };
             },
             0x412C => {
+                self.extended_attributes_2800  = (data & 0b0000_0001) != 0;
+                self.extended_backgrounds_2800 = (data & 0b0000_0010) != 0;
+                self.exram_bank_2800 =          ((data & 0b0000_1100) >> 2) as usize;
                 match (data & 0b1100_0000) >> 6 {
                     0b00 => self.nametable_chip_at_2800 = NametableChipSelect::CiRam,
                     0b01 => self.nametable_chip_at_2800 = NametableChipSelect::ChrRam,
@@ -1058,6 +1163,9 @@ impl Mapper for Rainbow {
                 };
             },
             0x412D => {
+                self.extended_attributes_2c00  = (data & 0b0000_0001) != 0;
+                self.extended_backgrounds_2c00 = (data & 0b0000_0010) != 0;
+                self.exram_bank_2c00 =          ((data & 0b0000_1100) >> 2) as usize;
                 match (data & 0b1100_0000) >> 6 {
                     0b00 => self.nametable_chip_at_2c00 = NametableChipSelect::CiRam,
                     0b01 => self.nametable_chip_at_2c00 = NametableChipSelect::ChrRam,
@@ -1124,7 +1232,6 @@ impl Mapper for Rainbow {
             0x41A8 => self.vrc6_sawtooth.write_register(2, data),
 
             0x41A9 => {
-                println!("AUDIO CONTROL [${:04X}] = ${:02X}", address, data);
                 self.vrc6_exp6 = (data & 0b0000_0001) != 0;
                 self.vrc6_exp9 = (data & 0b0000_0010) != 0;
                 self.vrc6_zpcm = (data & 0b0000_0100) != 0;
@@ -1148,10 +1255,22 @@ impl Mapper for Rainbow {
         match address {
             // TODO: need to handle extended backgrounds and sprites. This is the
             // base behavior with both of those disabled:
-            0x0000 ..= 0x1FFF => self.read_banked_chr_area(address as usize),
+            0x0000 ..= 0x1FFF => {
+                if self.is_extended_pattern() {
+                    Some(self.read_extended_chr(address as usize))
+                } else {
+                    self.read_banked_chr_area(address as usize)
+                }
+            },
             
             // TODO: window splits, extended attributes, other fancy features
-            0x2000 ..= 0x2FFF => self.read_banked_nametable_area(address as usize),
+            0x2000 ..= 0x2FFF => {
+                if self.is_extended_attribute() {
+                    Some(self.read_extended_attribute())
+                } else {
+                    self.read_banked_nametable_area(address as usize)
+                }
+            },
             _ => return None
         }
     }
