@@ -937,7 +937,7 @@ pub fn clamp(v: f32) -> u32 {
 pub fn yuv_to_argb(y: f32, u: f32, v: f32) -> u32 {
     let rgb = 
       0x10000 * clamp(gammafix(y +  (1.14*v)))
-    + 0x00100 * clamp(gammafix(y + -(0.394242*u) + -(0.580681*v)))
+    + 0x00100 * clamp(gammafix(y + -(0.394642*u) + -(0.580681*v)))
     + 0x00001 * clamp(gammafix(y +  (2.03*u)));
     return 0xFF000000 + rgb; // set alpha exlicitly to full
 }
