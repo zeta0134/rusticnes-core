@@ -811,7 +811,7 @@ impl PpuState {
                 let dot_phase = (self.frame_starting_cycle + (scanline*341) + dot) *8;
                 for sample_phase in  0 .. 8 {
                     let pixel = self.screen[scanline*256+dot];
-                    self.scanline_ntsc_samples[dot*8+sample_phase] = render_ntsc_sample(pixel, dot_phase + sample_phase);
+                    self.scanline_ntsc_samples[dot*8+sample_phase] = ntsc_signal(pixel, dot_phase + sample_phase);
                 }
             }
 
@@ -841,52 +841,52 @@ impl PpuState {
 // https://www.nesdev.org/wiki/NTSC_video#Decoding_chroma_information_(UV)
 const PHASED_SIN: [f32; 12] = [
     // =SIN(PI() * (PHASE + 3 - 0.5) / 6) * 2
-	1.9318516,
-	1.9318516,
-	1.4142135,
-	0.5176381,
-	-0.5176381,
-	-1.4142135,
-	-1.9318516,
-	-1.9318516,
-	-1.4142135,
-	-0.5176381,
-	0.5176381,
-	1.4142135,
+    1.9318516525781366,
+    1.9318516525781366,
+    1.4142135623730951,
+    0.517638090205042,
+   -0.5176380902050416,
+   -1.4142135623730943,
+   -1.9318516525781366,
+   -1.9318516525781368,
+   -1.4142135623730954,
+   -0.5176380902050431,
+    0.5176380902050421,
+    1.4142135623730947,
 ];
 
 const PHASED_COS: [f32; 12] = [
     // =COS(PI() * (PHASE + 3 - 0.5) / 6) * 2
-	0.5176381,
-	-0.5176381,
-	-1.4142135,
-	-1.9318516,
-	-1.9318516,
-	-1.4142135,
-	-0.5176381,
-	0.5176381,
-	1.4142135,
-	1.9318516,
-	1.9318516,
-	1.4142135,
+    0.5176380902050415,
+   -0.5176380902050413,
+   -1.414213562373095,
+   -1.9318516525781364,
+   -1.9318516525781366,
+   -1.4142135623730958,
+   -0.5176380902050413,
+    0.5176380902050406,
+    1.4142135623730947,
+    1.9318516525781362,
+    1.9318516525781364,
+    1.4142135623730954,
 ];
-
 
 // Translated from https://www.nesdev.org/wiki/NTSC_video#Emulating_in_C++_code
 // Modified by Persune to use current terminated voltages and YUV decoding
 // Voltage levels, relative to synch voltage
-const NTSC_BLACK: f32 = 0.312;
-const NTSC_WHITE: f32 = 1.100;
 //const NTSC_GAMMA: f32 = 2.0;
 
-pub fn ntsc_signal(pixel: u16, phase: usize) -> f32 {
-    let levels = [
-        0.228, 0.312, 0.552, 0.880,     // Signal low
-        0.616, 0.840, 1.100, 1.100,     // Signal high
-        0.192, 0.256, 0.448, 0.712,     // Signal low, attenuated
-        0.500, 0.676, 0.896, 0.896,     // Signal high, attenuated
-    ];
+// terminated composite levels, from https://forums.nesdev.org/viewtopic.php?p=159266#p159266
+// normalized via the equation:
+// (COMPOSITE_LEVELS - NTSC_BLACK) / (NTSC_WHITE - NTSC_BLACK);
+const COMPOSITE_LEVELS_NORMALIZED: [f32; 16] = [
+   -0.10659898477157359,  0.00000000000000000, 0.30456852791878175, 0.72081218274111680,  // Signal low
+    0.38578680203045684,  0.67005076142131981, 1.00000000000000000, 1.00000000000000000,  // Signal high
+   -0.15228426395939085, -0.07106598984771573, 0.17258883248730966, 0.50761421319796951,  // Signal low, attenuated
+    0.23857868020304568,  0.46192893401015234, 0.74111675126903565, 0.74111675126903565,  // Signal high, attenuated
+];
 
+pub fn ntsc_signal(pixel: u16, phase: usize) -> f32 {
     // Decode the NES color.
     let color = pixel & 0b1111;                  // 0..15 "cccc"
     let emphasis = (pixel >> 6) & 0b111;         // 0..7 "eee"
@@ -902,8 +902,8 @@ pub fn ntsc_signal(pixel: u16, phase: usize) -> f32 {
 
     // The square wave for this color alternates between these two voltages
     // For color 0, only high level is emitted
-    let low_base = levels[0 + attenuate + level as usize];
-    let high_base = levels[4 + attenuate + level as usize];
+    let low_base = COMPOSITE_LEVELS_NORMALIZED[0 + attenuate + level as usize];
+    let high_base = COMPOSITE_LEVELS_NORMALIZED[4 + attenuate + level as usize];
     let low = if color == 0 {high_base} else {low_base};
     // For colors 13..15, only low level is emitted
     let high = if color > 12 {low_base} else {high_base};
@@ -916,10 +916,6 @@ pub fn ntsc_signal(pixel: u16, phase: usize) -> f32 {
 
 pub fn in_color_phase(color: u16, phase: usize)  -> bool {
     return ((color as usize + phase) % 12) < 6;
-}
-
-pub fn render_ntsc_sample(pixel: u16, phase: usize) -> f32 {
-    return (ntsc_signal(pixel, phase) - NTSC_BLACK) / (NTSC_WHITE - NTSC_BLACK);
 }
 
 pub fn gammafix(f: f32) -> f32 {
@@ -936,8 +932,8 @@ pub fn clamp(v: f32) -> u32 {
 
 pub fn yuv_to_argb(y: f32, u: f32, v: f32) -> u32 {
     let rgb = 
-      0x10000 * clamp(gammafix(y +  (1.14*v)))
-    + 0x00100 * clamp(gammafix(y + -(0.394642*u) + -(0.580681*v)))
-    + 0x00001 * clamp(gammafix(y +  (2.03*u)));
+      0x10000 * clamp(gammafix(y + (1.139883*v)))
+    + 0x00100 * clamp(gammafix(y - (0.394642*u) - (0.580622*v)))
+    + 0x00001 * clamp(gammafix(y + (2.032062*u)));
     return 0xFF000000 + rgb; // set alpha exlicitly to full
 }
