@@ -811,7 +811,7 @@ impl PpuState {
                 let dot_phase = (self.frame_starting_cycle + (scanline*341) + dot) *8;
                 for sample_phase in  0 .. 8 {
                     let pixel = self.screen[scanline*256+dot];
-                    self.scanline_ntsc_samples[dot*8+sample_phase] = render_ntsc_sample(pixel, dot_phase + sample_phase);
+                    self.scanline_ntsc_samples[dot*8+sample_phase] = ntsc_signal(pixel, dot_phase + sample_phase);
                 }
             }
 
@@ -822,76 +822,88 @@ impl PpuState {
                 let begin = if center >= 6 {center - 6} else {0};
                 let end = if (center + 6) < (256 * 8) {center + 6} else {256*8};
                 let mut y = 0.0;
-                let mut i = 0.0;
-                let mut q = 0.0;
+                let mut u = 0.0;
+                let mut v = 0.0;
                 for p in begin .. end {
                     let level = self.scanline_ntsc_samples[p] / 12.0;
                     y = y + level;
-                    i = i + level * PHASED_COS[(phase + p) % 12];
-                    q = q + level * PHASED_SIN[(phase + p) % 12];
+                    u = u + level * PHASED_SIN[(phase + p) % 12];
+                    v = v + level * PHASED_COS[(phase + p) % 12];
                 }
-                self.filtered_screen[scanline * width + x] = yiq_to_argb(y, i, q);
+                self.filtered_screen[scanline * width + x] = yuv_to_argb(y, u, v);
             }
         }
     }
 }
 
+// sine LUTs specifically made for QAM demodulation
+// factor of 2 is applied to the LUTs for correct saturation
+// https://www.nesdev.org/wiki/NTSC_video#Decoding_chroma_information_(UV)
 const PHASED_SIN: [f32; 12] = [
-    // =SIN(PI() * (PHASE+3.9) / 6)
-    0.89100652418836800000,
-    0.54463903501502700000,
-    0.05233595624294380000,
-    -0.45399049973954700000,
-    -0.83867056794542400000,
-    -0.99862953475457400000,
-    -0.89100652418836800000,
-    -0.54463903501502700000,
-    -0.05233595624294440000,
-    0.45399049973954700000,
-    0.83867056794542400000,
-    0.99862953475457400000,
+    // =SIN(PI() * (PHASE + 3 - 0.5) / 6) * 2
+    1.9318516525781366,
+    1.9318516525781366,
+    1.4142135623730951,
+    0.517638090205042,
+   -0.5176380902050416,
+   -1.4142135623730943,
+   -1.9318516525781366,
+   -1.9318516525781368,
+   -1.4142135623730954,
+   -0.5176380902050431,
+    0.5176380902050421,
+    1.4142135623730947,
 ];
 
 const PHASED_COS: [f32; 12] = [
-    // =COS(PI() * (PHASE+3.9) / 6)
-    -0.45399049973954700000,
-    -0.83867056794542400000,
-    -0.99862953475457400000,
-    -0.89100652418836800000,
-    -0.54463903501502700000,
-    -0.05233595624294340000,
-    0.45399049973954700000,
-    0.83867056794542400000,
-    0.99862953475457400000,
-    0.89100652418836800000,
-    0.54463903501502800000,
-    0.05233595624294350000,
+    // =COS(PI() * (PHASE + 3 - 0.5) / 6) * 2
+    0.5176380902050415,
+   -0.5176380902050413,
+   -1.414213562373095,
+   -1.9318516525781364,
+   -1.9318516525781366,
+   -1.4142135623730958,
+   -0.5176380902050413,
+    0.5176380902050406,
+    1.4142135623730947,
+    1.9318516525781362,
+    1.9318516525781364,
+    1.4142135623730954,
 ];
 
-
 // Translated from https://www.nesdev.org/wiki/NTSC_video#Emulating_in_C++_code
+// Modified by Persune to use current terminated voltages and YUV decoding
 // Voltage levels, relative to synch voltage
-const NTSC_BLACK: f32 = 0.518;
-const NTSC_WHITE: f32 = 1.962;
-const NTSC_ATTENUATION: f32 = 0.746;
 //const NTSC_GAMMA: f32 = 2.0;
 
-pub fn ntsc_signal(pixel: u16, phase: usize) -> f32 {
-    let levels = [
-        0.350, 0.518, 0.962, 1.550,  // Signal low
-        1.094, 1.506, 1.962, 1.962   // Signal high
-    ];
+// terminated composite levels, from https://forums.nesdev.org/viewtopic.php?p=159266#p159266
+// normalized via the equation:
+// (COMPOSITE_LEVELS - NTSC_BLACK) / (NTSC_WHITE - NTSC_BLACK);
+const COMPOSITE_LEVELS_NORMALIZED: [f32; 16] = [
+   -0.10659898477157359,  0.00000000000000000, 0.30456852791878175, 0.72081218274111680,  // Signal low
+    0.38578680203045684,  0.67005076142131981, 1.00000000000000000, 1.00000000000000000,  // Signal high
+   -0.15228426395939085, -0.07106598984771573, 0.17258883248730966, 0.50761421319796951,  // Signal low, attenuated
+    0.23857868020304568,  0.46192893401015234, 0.74111675126903565, 0.74111675126903565,  // Signal high, attenuated
+];
 
+pub fn ntsc_signal(pixel: u16, phase: usize) -> f32 {
     // Decode the NES color.
     let color = pixel & 0b1111;                  // 0..15 "cccc"
     let emphasis = (pixel >> 6) & 0b111;         // 0..7 "eee"
     // For colors 14 .. 15, level 1 is forced    // 0..3 "ll"
     let level = if color > 13 {1} else {(pixel >> 4) & 0b11};
 
+    // When de-emphasis bits are set, some parts of the signal are attenuated
+    // colors 14 .. 15 are not affected by de-emphasis
+    let attenuate = if (((emphasis & 0b001) != 0) && in_color_phase(0xC, phase) || 
+       ((emphasis & 0b010) != 0) && in_color_phase(0x4, phase) || 
+       ((emphasis & 0b100) != 0) && in_color_phase(0x8, phase)) && (color < 0xE) {8}
+    else {0};
+
     // The square wave for this color alternates between these two voltages
     // For color 0, only high level is emitted
-    let low_base = levels[0 + level as usize];
-    let high_base = levels[4 + level as usize];
+    let low_base = COMPOSITE_LEVELS_NORMALIZED[0 + attenuate + level as usize];
+    let high_base = COMPOSITE_LEVELS_NORMALIZED[4 + attenuate + level as usize];
     let low = if color == 0 {high_base} else {low_base};
     // For colors 13..15, only low level is emitted
     let high = if color > 12 {low_base} else {high_base};
@@ -899,22 +911,11 @@ pub fn ntsc_signal(pixel: u16, phase: usize) -> f32 {
     // Generate the square wave
     let signal = if in_color_phase(color, phase) {high} else {low};
 
-    // When de-emphasis bits are set, some parts of the signal are attenuated
-    if ((emphasis & 0b001) != 0) && in_color_phase(0, phase) || 
-       ((emphasis & 0b010) != 0) && in_color_phase(4, phase) || 
-       ((emphasis & 0b100) != 0) && in_color_phase(8, phase) {
-        return signal * NTSC_ATTENUATION;
-    }
-
     return signal;
 }
 
 pub fn in_color_phase(color: u16, phase: usize)  -> bool {
     return ((color as usize + phase) % 12) < 6;
-}
-
-pub fn render_ntsc_sample(pixel: u16, phase: usize) -> f32 {
-    return (ntsc_signal(pixel, phase) - NTSC_BLACK) / (NTSC_WHITE - NTSC_BLACK);
 }
 
 pub fn gammafix(f: f32) -> f32 {
@@ -925,13 +926,14 @@ pub fn gammafix(f: f32) -> f32 {
 }
 
 pub fn clamp(v: f32) -> u32 {
-    return if v >= 255.0 {255} else {v as u32}
+    // round instead of floor
+    return std::cmp::min(255, (v*255.0 + 0.5) as u32)
 }
 
-pub fn yiq_to_argb(y: f32, i: f32, q: f32) -> u32 {
+pub fn yuv_to_argb(y: f32, u: f32, v: f32) -> u32 {
     let rgb = 
-      0x10000 * clamp(255.95 * gammafix(y + ( 0.946882*i) +  (0.623557*q)))
-    + 0x00100 * clamp(255.95 * gammafix(y + (-0.274788*i) + -(0.635691*q)))
-    + 0x00001 * clamp(255.95 * gammafix(y + (-1.108545*i) +  (1.709007*q)));
+      0x10000 * clamp(gammafix(y + (1.139883*v)))
+    + 0x00100 * clamp(gammafix(y - (0.394642*u) - (0.580622*v)))
+    + 0x00001 * clamp(gammafix(y + (2.032062*u)));
     return 0xFF000000 + rgb; // set alpha exlicitly to full
 }
