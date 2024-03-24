@@ -1,3 +1,9 @@
+# Archival Notice
+
+This project has been renamed to Rustico, and moved to a shiny new monorepo over here: https://github.com/zeta0134/rustico
+
+Please update your bookmarks!  All new development will proceed in the monorepo, and I'll eventually remove these individual repositories.
+
 # RusticNES-Core
 
 This is an NES emulator written in the Rust programming language. I began this project because I wanted to teach myself Rust, and having already written [another emulator](https://github.com/zeta0134/LuaGB), I figured this was as good a way to introduce myself to the language as any.
